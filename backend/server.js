@@ -31,16 +31,18 @@ const gameState = {
 // Configuration du jeu
 const GAME_CONFIG = {
     MAX_PLAYERS_PER_ROOM: 8,
-    MIN_PLAYERS_TO_START: 1, // Temporaire pour tester les sprites
+    MIN_PLAYERS_TO_START: 1,
     LAPS_TO_WIN: 3,
-    TICK_RATE: 30, // 30 FPS
+    TICK_RATE: 20, // Réduire à 20 FPS au lieu de 30
     TRACK_WIDTH: 800,
     TRACK_HEIGHT: 600,
     KART_SIZE: 20,
     MAX_SPEED: 5,
     ACCELERATION: 0.3,
     FRICTION: 0.95,
-    TURN_SPEED: 0.1
+    TURN_SPEED: 0.1,
+    // OPTIMISATION: Zone de collision pour la grille spatiale
+    COLLISION_GRID_SIZE: 100
 };
 
 // Classes du jeu

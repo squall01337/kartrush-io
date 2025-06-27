@@ -1,8 +1,8 @@
-// Moteur de jeu avec rendu Canvas
+// Moteur de jeu avec rendu Canvas OPTIMISÉ
 class GameEngine {
     constructor(canvas, socket, playerId) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        this.ctx = canvas.getContext('2d', { alpha: false }); // Désactiver la transparence du canvas
         this.socket = socket;
         this.playerId = playerId;
         this.isRunning = false;
@@ -16,18 +16,34 @@ class GameEngine {
         this.camera = { x: 0, y: 0 };
         this.lastFrameTime = 0;
         
+        // OPTIMISATION: Cache pour les sprites traités
+        this.spriteCache = new Map();
+        
+        // OPTIMISATION: Canvas hors-écran pour le double buffering
+        this.offscreenCanvas = document.createElement('canvas');
+        this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+        
+        // OPTIMISATION: Interpolation pour un rendu fluide
+        this.playerInterpolation = new Map();
+        this.interpolationFactor = 0.15;
+        
+        // OPTIMISATION: Limiteur de FPS
+        this.targetFPS = 60;
+        this.fpsInterval = 1000 / this.targetFPS;
+        this.then = Date.now();
+        
         this.setupCanvas();
         this.loadTrack();
+        this.preprocessSprites();
     }
 
     setupCanvas() {
-        // Redimensionner le canvas
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
         
-        // Style du canvas
-        this.canvas.style.border = '2px solid #fff';
-        this.canvas.style.borderRadius = '10px';
+        // OPTIMISATION: Désactiver l'antialiasing pour de meilleures perfs
+        this.ctx.imageSmoothingEnabled = false;
+        this.canvas.style.imageRendering = 'pixelated';
     }
 
     resizeCanvas() {
@@ -35,7 +51,6 @@ class GameEngine {
         const maxWidth = window.innerWidth - 40;
         const maxHeight = window.innerHeight - 100;
         
-        // Ratio 4:3 pour la piste
         const aspectRatio = 4 / 3;
         
         let width = Math.min(maxWidth, 800);
@@ -49,12 +64,62 @@ class GameEngine {
         this.canvas.width = width;
         this.canvas.height = height;
         
-        // Facteur d'échelle pour adapter la piste
+        // Ajuster le canvas hors-écran
+        this.offscreenCanvas.width = width;
+        this.offscreenCanvas.height = height;
+        
         this.scale = width / 800;
     }
 
+    // OPTIMISATION: Pré-traiter tous les sprites une seule fois
+    preprocessSprites() {
+        const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff', '#44ffff'];
+        
+        colors.forEach(color => {
+            const kartSprite = window.assetManager.getKartSprite(color);
+            if (kartSprite) {
+                this.cacheProcessedSprite(color, kartSprite);
+            }
+        });
+    }
+
+    cacheProcessedSprite(color, kartSprite) {
+        const size = 28;
+        const cacheCanvas = document.createElement('canvas');
+        const cacheCtx = cacheCanvas.getContext('2d');
+        cacheCanvas.width = size;
+        cacheCanvas.height = size;
+        
+        // Dessiner et traiter le sprite une seule fois
+        cacheCtx.save();
+        cacheCtx.translate(size/2, size/2);
+        cacheCtx.rotate(Math.PI / 2);
+        cacheCtx.drawImage(
+            kartSprite.image,
+            kartSprite.sx, kartSprite.sy, kartSprite.sw, kartSprite.sh,
+            -size/2, -size/2, size, size
+        );
+        cacheCtx.restore();
+        
+        // Traitement de transparence optimisé
+        const imageData = cacheCtx.getImageData(0, 0, size, size);
+        const data = imageData.data;
+        
+        // Traitement plus rapide avec moins de conditions
+        for (let i = 0; i < data.length; i += 4) {
+            if (data[i + 3] < 50 || 
+                (data[i] > 250 && data[i + 1] > 250 && data[i + 2] > 250)) {
+                data[i + 3] = 0;
+            }
+        }
+        
+        cacheCtx.putImageData(imageData, 0, 0);
+        
+        // Stocker le canvas traité
+        this.spriteCache.set(color, cacheCanvas);
+    }
+
     loadTrack() {
-        // Configuration de la piste ovale (correspond au JSON)
         this.track = {
             width: 800,
             height: 600,
@@ -83,7 +148,7 @@ class GameEngine {
 
     start() {
         this.isRunning = true;
-        this.lastFrameTime = performance.now();
+        this.then = Date.now();
         this.gameLoop();
     }
 
@@ -94,227 +159,223 @@ class GameEngine {
     gameLoop() {
         if (!this.isRunning) return;
         
-        const currentTime = performance.now();
-        const deltaTime = (currentTime - this.lastFrameTime) / 1000;
-        this.lastFrameTime = currentTime;
-        
-        this.update(deltaTime);
-        this.render();
-        
         requestAnimationFrame(() => this.gameLoop());
+        
+        // OPTIMISATION: Limiteur de FPS
+        const now = Date.now();
+        const elapsed = now - this.then;
+        
+        if (elapsed > this.fpsInterval) {
+            this.then = now - (elapsed % this.fpsInterval);
+            
+            const deltaTime = elapsed / 1000;
+            this.update(deltaTime);
+            this.render();
+        }
     }
 
     update(deltaTime) {
-        // Mettre à jour la caméra pour suivre le joueur
-        const player = this.gameState.players.find(p => p.id === this.playerId);
+        // OPTIMISATION: Interpolation des positions pour un mouvement fluide
+        this.interpolatePlayers();
+        
+        // Mettre à jour la caméra
+        const player = this.getInterpolatedPlayer(this.playerId);
         if (player) {
             this.camera.x = player.x - (this.canvas.width / this.scale) / 2;
             this.camera.y = player.y - (this.canvas.height / this.scale) / 2;
             
-            // Limiter la caméra aux bords de la piste
             this.camera.x = Math.max(0, Math.min(this.track.width - this.canvas.width / this.scale, this.camera.x));
             this.camera.y = Math.max(0, Math.min(this.track.height - this.canvas.height / this.scale, this.camera.y));
         }
         
-        // Mettre à jour l'interface
         this.updateUI();
     }
 
+    interpolatePlayers() {
+        this.gameState.players.forEach(player => {
+            let interpolated = this.playerInterpolation.get(player.id);
+            
+            if (!interpolated) {
+                interpolated = { x: player.x, y: player.y, angle: player.angle };
+                this.playerInterpolation.set(player.id, interpolated);
+            }
+            
+            // Interpolation douce
+            interpolated.x += (player.x - interpolated.x) * this.interpolationFactor;
+            interpolated.y += (player.y - interpolated.y) * this.interpolationFactor;
+            
+            // Interpolation d'angle avec gestion du wraparound
+            let angleDiff = player.angle - interpolated.angle;
+            if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            interpolated.angle += angleDiff * this.interpolationFactor;
+        });
+    }
+
+    getInterpolatedPlayer(playerId) {
+        const player = this.gameState.players.find(p => p.id === playerId);
+        if (!player) return null;
+        
+        const interpolated = this.playerInterpolation.get(playerId);
+        return interpolated ? { ...player, ...interpolated } : player;
+    }
+
     render() {
-        // Effacer le canvas
-        this.ctx.fillStyle = this.track.background;
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        // OPTIMISATION: Utiliser le canvas hors-écran pour éviter le flickering
+        const ctx = this.offscreenCtx;
         
-        // Sauvegarder le contexte pour les transformations
-        this.ctx.save();
+        // Effacer avec fillRect (plus rapide que clearRect)
+        ctx.fillStyle = this.track.background;
+        ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
         
-        // Appliquer l'échelle et la caméra
-        this.ctx.scale(this.scale, this.scale);
-        this.ctx.translate(-this.camera.x, -this.camera.y);
+        ctx.save();
+        ctx.scale(this.scale, this.scale);
+        ctx.translate(-this.camera.x, -this.camera.y);
         
-        // Dessiner la piste
-        this.renderTrack();
+        this.renderTrack(ctx);
+        this.renderPlayers(ctx);
         
-        // Dessiner les joueurs
-        this.renderPlayers();
+        ctx.restore();
         
-        // Restaurer le contexte
-        this.ctx.restore();
+        // Copier le rendu final sur le canvas principal
+        this.ctx.drawImage(this.offscreenCanvas, 0, 0);
         
-        // Dessiner l'interface (sans transformation)
         this.renderUI();
     }
 
-    renderTrack() {
-        // Dessiner l'image de fond de la piste si disponible
+    renderTrack(ctx) {
         const trackBg = window.assetManager.getImage('track_background');
         if (trackBg) {
-            this.ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
+            ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
         } else {
-            // Fallback vers le rendu original
-            this.ctx.fillStyle = '#444444';
-            this.ctx.fillRect(70, 170, 660, 260);
+            // Fallback optimisé
+            ctx.fillStyle = '#444444';
+            ctx.fillRect(70, 170, 660, 260);
             
-            // Dessiner les murs
-            this.ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = '#ffffff';
+            // OPTIMISATION: Dessiner tous les murs en une fois
             this.track.walls.forEach(wall => {
-                this.ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
             });
         }
         
-        // Dessiner la ligne de départ
-        this.ctx.strokeStyle = this.track.startLine.color;
-        this.ctx.lineWidth = 3;
-        this.ctx.setLineDash([10, 5]);
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.track.startLine.x1, this.track.startLine.y1);
-        this.ctx.lineTo(this.track.startLine.x2, this.track.startLine.y2);
-        this.ctx.stroke();
-        this.ctx.setLineDash([]);
+        // Lignes avec un seul path
+        ctx.strokeStyle = this.track.startLine.color;
+        ctx.lineWidth = 3;
+        ctx.setLineDash([10, 5]);
+        ctx.beginPath();
+        ctx.moveTo(this.track.startLine.x1, this.track.startLine.y1);
+        ctx.lineTo(this.track.startLine.x2, this.track.startLine.y2);
+        ctx.stroke();
         
-        // Dessiner les checkpoints
+        // Checkpoints
+        ctx.strokeStyle = '#ffff00';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
         this.track.checkpoints.forEach(checkpoint => {
-            this.ctx.strokeStyle = checkpoint.color;
-            this.ctx.lineWidth = 2;
-            this.ctx.setLineDash([5, 5]);
-            this.ctx.beginPath();
-            this.ctx.moveTo(checkpoint.x1, checkpoint.y1);
-            this.ctx.lineTo(checkpoint.x2, checkpoint.y2);
-            this.ctx.stroke();
-            this.ctx.setLineDash([]);
+            ctx.moveTo(checkpoint.x1, checkpoint.y1);
+            ctx.lineTo(checkpoint.x2, checkpoint.y2);
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    renderPlayers(ctx) {
+        // OPTIMISATION: Trier les joueurs une seule fois par distance à la caméra
+        const sortedPlayers = [...this.gameState.players].sort((a, b) => {
+            const distA = Math.abs(a.x - this.camera.x) + Math.abs(a.y - this.camera.y);
+            const distB = Math.abs(b.x - this.camera.x) + Math.abs(b.y - this.camera.y);
+            return distA - distB;
+        });
+        
+        sortedPlayers.forEach(player => {
+            const interpolated = this.playerInterpolation.get(player.id) || player;
+            this.renderPlayer(ctx, { ...player, ...interpolated });
         });
     }
 
-    renderPlayers() {
-        this.gameState.players.forEach(player => {
-            this.renderPlayer(player);
-        });
-    }
-
-    renderPlayer(player) {
-        this.ctx.save();
+    renderPlayer(ctx, player) {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.angle);
         
-        // Se déplacer au centre du joueur
-        this.ctx.translate(player.x, player.y);
-        this.ctx.rotate(player.angle);
+        const size = 28;
         
-        // Synchroniser la taille du sprite avec la hitbox de collision (KART_SIZE = 20 sur le serveur)
-        const size = 28; // Légèrement plus grand que la hitbox pour un rendu visible mais proportionnel
+        // OPTIMISATION: Utiliser le sprite pré-traité du cache
+        const cachedSprite = this.spriteCache.get(player.color);
         
-        // Essayer d'utiliser le sprite du kart
-        const kartSprite = window.assetManager.getKartSprite(player.color);
-        
-        if (kartSprite) {
-            
-            // Créer un canvas temporaire pour traiter la transparence
-            const tempCanvas = document.createElement('canvas');
-            const tempCtx = tempCanvas.getContext('2d');
-            tempCanvas.width = size;
-            tempCanvas.height = size;
-            
-            // Dessiner le sprite sur le canvas temporaire avec la bonne orientation
-            tempCtx.save();
-            tempCtx.translate(size/2, size/2);
-            tempCtx.rotate(Math.PI / 2); // Rotation de 90° pour corriger l'orientation
-            tempCtx.drawImage(
-                kartSprite.image,
-                kartSprite.sx, kartSprite.sy, kartSprite.sw, kartSprite.sh,
-                -size/2, -size/2, size, size
-            );
-            tempCtx.restore();
-            
-            // Traitement de transparence moins agressif pour préserver les détails
-            const imageData = tempCtx.getImageData(0, 0, size, size);
-            const data = imageData.data;
-            
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                const a = data[i + 3];
-                
-                // Détecter uniquement les pixels de fond évidents (plus conservateur)
-                const isBackground = (
-                    // Pixels déjà transparents
-                    a < 50 ||
-                    // Blanc pur uniquement
-                    (r > 250 && g > 250 && b > 250 && a > 200) ||
-                    // Gris très clair avec très peu de saturation
-                    (r > 240 && g > 240 && b > 240 && Math.abs(r - g) < 5 && Math.abs(g - b) < 5)
-                );
-                
-                if (isBackground) {
-                    data[i + 3] = 0; // Rendre transparent
-                }
-            }
-            
-            tempCtx.putImageData(imageData, 0, 0);
-            
-            // Dessiner le canvas traité sur le canvas principal
-            this.ctx.drawImage(tempCanvas, -size/2, -size/2);
+        if (cachedSprite) {
+            ctx.drawImage(cachedSprite, -size/2, -size/2);
         } else {
-            // Fallback vers le rendu original
-            this.ctx.fillStyle = player.color;
-            this.ctx.fillRect(-size/2, -size/2, size, size);
+            // Fallback simple
+            ctx.fillStyle = player.color;
+            ctx.fillRect(-size/2, -size/2, size, size);
             
-            // Bordure
-            this.ctx.strokeStyle = '#000000';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(-size/2, -size/2, size, size);
-            
-            // Direction (petit triangle)
-            this.ctx.fillStyle = '#ffffff';
-            this.ctx.beginPath();
-            this.ctx.moveTo(size/2 - 2, 0);
-            this.ctx.lineTo(size/2 + 4, -3);
-            this.ctx.lineTo(size/2 + 4, 3);
-            this.ctx.closePath();
-            this.ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-size/2, -size/2, size, size);
         }
         
-        this.ctx.restore();
+        ctx.restore();
+        
+        // Texte optimisé avec un seul style
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3;
+        ctx.fillStyle = '#ffffff';
         
         // Nom du joueur
-        this.ctx.fillStyle = '#ffffff';
-        this.ctx.font = '12px Arial';
-        this.ctx.textAlign = 'center';
-        this.ctx.strokeStyle = '#000000';
-        this.ctx.lineWidth = 3;
-        this.ctx.strokeText(player.pseudo, player.x, player.y - 25);
-        this.ctx.fillText(player.pseudo, player.x, player.y - 25);
+        ctx.strokeText(player.pseudo, player.x, player.y - 25);
+        ctx.fillText(player.pseudo, player.x, player.y - 25);
         
-        // Position dans la course
-        this.ctx.fillStyle = player.color;
-        this.ctx.font = 'bold 14px Arial';
-        this.ctx.strokeText(`#${player.position}`, player.x, player.y + 35);
-        this.ctx.fillText(`#${player.position}`, player.x, player.y + 35);
+        // Position
+        ctx.fillStyle = player.color;
+        ctx.font = 'bold 14px Arial';
+        const posText = `#${player.position}`;
+        ctx.strokeText(posText, player.x, player.y + 35);
+        ctx.fillText(posText, player.x, player.y + 35);
     }
 
     renderUI() {
-        // Interface déjà gérée par le HTML, on peut ajouter des éléments Canvas ici si nécessaire
+        // UI déjà optimisée via HTML/CSS
     }
 
     updateUI() {
         const player = this.gameState.players.find(p => p.id === this.playerId);
         if (!player) return;
         
-        // Mettre à jour les informations de course
-        document.getElementById('position').textContent = `Position: ${player.position}/${this.gameState.players.length}`;
-        document.getElementById('lap').textContent = `Tour: ${player.lap + 1}/3`;
+        // OPTIMISATION: Mettre à jour le DOM seulement si nécessaire
+        const positionEl = document.getElementById('position');
+        const newPosition = `Position: ${player.position}/${this.gameState.players.length}`;
+        if (positionEl.textContent !== newPosition) {
+            positionEl.textContent = newPosition;
+        }
         
-        // Temps de course
+        const lapEl = document.getElementById('lap');
+        const newLap = `Tour: ${player.lap + 1}/3`;
+        if (lapEl.textContent !== newLap) {
+            lapEl.textContent = newLap;
+        }
+        
         const minutes = Math.floor(this.gameState.gameTime / 60000);
         const seconds = Math.floor((this.gameState.gameTime % 60000) / 1000);
-        document.getElementById('timer').textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        const timerEl = document.getElementById('timer');
+        const newTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        if (timerEl.textContent !== newTime) {
+            timerEl.textContent = newTime;
+        }
         
-        // Item actuel
         const itemSlot = document.getElementById('itemSlot');
-        if (player.item) {
+        if (player.item && !itemSlot.dataset.item) {
             itemSlot.textContent = this.getItemIcon(player.item);
             itemSlot.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-        } else {
+            itemSlot.dataset.item = player.item;
+        } else if (!player.item && itemSlot.dataset.item) {
             itemSlot.textContent = '';
             itemSlot.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            delete itemSlot.dataset.item;
         }
     }
 
@@ -330,7 +391,14 @@ class GameEngine {
     updateGameState(gameData) {
         this.gameState = gameData;
         
-        // Vérifier si la course est terminée
+        // Nettoyer l'interpolation pour les joueurs qui ont quitté
+        const currentIds = new Set(gameData.players.map(p => p.id));
+        for (const [id] of this.playerInterpolation) {
+            if (!currentIds.has(id)) {
+                this.playerInterpolation.delete(id);
+            }
+        }
+        
         const player = this.gameState.players.find(p => p.id === this.playerId);
         if (player && player.finished) {
             setTimeout(() => {
@@ -342,7 +410,6 @@ class GameEngine {
     showResults() {
         this.stop();
         
-        // Trier les joueurs par position finale
         const sortedPlayers = [...this.gameState.players].sort((a, b) => a.position - b.position);
         
         const ranking = document.getElementById('finalRanking');
@@ -384,9 +451,7 @@ class GameEngine {
             ranking.appendChild(rankDiv);
         });
         
-        // Afficher l'écran des résultats
         document.getElementById('game').classList.add('hidden');
         document.getElementById('results').classList.remove('hidden');
     }
 }
-

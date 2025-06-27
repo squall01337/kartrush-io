@@ -1,0 +1,24 @@
+{
+  "name": "kartrush-backend",
+  "version": "1.0.0",
+  "description": "Backend pour le jeu KartRush.io - Course multijoueur en temps réel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["game", "multiplayer", "racing", "websocket", "realtime"],
+  "author": "Manus AI",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
+

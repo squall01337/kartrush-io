@@ -1,0 +1,67 @@
+{
+  "images": {
+    "track_background": {
+      "path": "assets/track_background.png",
+      "width": 800,
+      "height": 600,
+      "description": "Texture de fond de la piste ovale"
+    },
+    "kart_sprites": {
+      "path": "assets/kart_sprites.png",
+      "spriteWidth": 32,
+      "spriteHeight": 32,
+      "sprites": [
+        {"name": "red", "x": 0, "y": 0, "color": "#ff4444"},
+        {"name": "green", "x": 1, "y": 0, "color": "#44ff44"},
+        {"name": "blue", "x": 2, "y": 0, "color": "#4444ff"},
+        {"name": "yellow", "x": 0, "y": 1, "color": "#ffff44"},
+        {"name": "magenta", "x": 1, "y": 1, "color": "#ff44ff"},
+        {"name": "cyan", "x": 2, "y": 1, "color": "#44ffff"}
+      ],
+      "description": "Sprites des karts de différentes couleurs"
+    },
+    "item_icons": {
+      "path": "assets/item_icons.png",
+      "iconWidth": 64,
+      "iconHeight": 64,
+      "icons": [
+        {"name": "boost", "x": 0, "y": 0, "description": "Icône de boost"},
+        {"name": "slow", "x": 1, "y": 0, "description": "Icône de ralentisseur"},
+        {"name": "missile", "x": 2, "y": 0, "description": "Icône de missile"}
+      ],
+      "description": "Icônes des items du jeu"
+    }
+  },
+  "sounds": {
+    "engine": {
+      "path": "assets/sounds/engine.mp3",
+      "loop": true,
+      "volume": 0.3
+    },
+    "boost": {
+      "path": "assets/sounds/boost.mp3",
+      "loop": false,
+      "volume": 0.5
+    },
+    "collision": {
+      "path": "assets/sounds/collision.mp3",
+      "loop": false,
+      "volume": 0.4
+    }
+  },
+  "effects": {
+    "boost_particles": {
+      "color": "#00ff00",
+      "count": 10,
+      "lifetime": 1000,
+      "speed": 2
+    },
+    "collision_sparks": {
+      "color": "#ffff00",
+      "count": 5,
+      "lifetime": 500,
+      "speed": 3
+    }
+  }
+}
+

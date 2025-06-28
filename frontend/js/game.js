@@ -51,9 +51,9 @@ class GameEngine {
         const maxWidth = window.innerWidth - 40;
         const maxHeight = window.innerHeight - 100;
         
-        const aspectRatio = 4 / 3;
+        const aspectRatio = 16 / 9;
         
-        let width = Math.min(maxWidth, 800);
+        let width = Math.min(maxWidth, 1280);
         let height = width / aspectRatio;
         
         if (height > maxHeight) {
@@ -68,7 +68,7 @@ class GameEngine {
         this.offscreenCanvas.width = width;
         this.offscreenCanvas.height = height;
         
-        this.scale = width / 800;
+        this.scale = width / 1280;
     }
 
     // OPTIMISATION: Pré-traiter tous les sprites une seule fois

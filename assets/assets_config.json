@@ -2,8 +2,8 @@
   "images": {
     "track_background": {
       "path": "assets/track_background.png",
-      "width": 800,
-      "height": 600,
+      "width": 1280,
+      "height": 720,
       "description": "Texture de fond de la piste ovale"
     },
     "kart_sprites": {

@@ -2,6 +2,7 @@
   "name": "lava_track",
   "width": 1280,
   "height": 720,
+  "background": "track_background",
   "spawnPoints": [
     {
       "x": 100,

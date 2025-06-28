@@ -74,6 +74,16 @@ class GameClient {
             this.showScreen('lobby');
         });
 
+        // ✅ Réception des données de la map depuis le serveur
+        this.socket.on('mapData', (mapData) => {
+    console.log('📦 Map reçue :', mapData);
+    this.mapData = mapData;
+    if (this.gameEngine) {
+        this.gameEngine.setMapData(mapData);
+    }
+        });
+
+
         this.socket.on('playersUpdate', (data) => {
             this.updatePlayersList(data.players);
             
@@ -153,30 +163,34 @@ class GameClient {
         document.getElementById('startGame').textContent = 'En attente...';
     }
 
-    startGameCountdown() {
-        this.showScreen('game');
-        this.initializeGame();
-        
-        const countdown = document.getElementById('countdown');
-        countdown.classList.remove('hidden');
-        
-        let count = 3;
-        countdown.textContent = count;
-        
-        const countdownInterval = setInterval(() => {
-            count--;
-            if (count > 0) {
-                countdown.textContent = count;
-            } else if (count === 0) {
-                countdown.textContent = 'GO!';
-            } else {
-                countdown.classList.add('hidden');
-                clearInterval(countdownInterval);
-                this.gameEngine.start();
-            }
-        }, 1000);
+startGameCountdown() {
+    this.showScreen('game');
+    this.initializeGame();
+
+    // ✅ Appliquer les données de la map si elles ont déjà été reçues
+    if (this.mapData && this.gameEngine) {
+        this.gameEngine.setMapData(this.mapData);
     }
 
+    const countdown = document.getElementById('countdown');
+    countdown.classList.remove('hidden');
+
+    let count = 3;
+    countdown.textContent = count;
+
+    const countdownInterval = setInterval(() => {
+        count--;
+        if (count > 0) {
+            countdown.textContent = count;
+        } else if (count === 0) {
+            countdown.textContent = 'GO!';
+        } else {
+            countdown.classList.add('hidden');
+            clearInterval(countdownInterval);
+            this.gameEngine.start();
+        }
+    }, 1000);
+}
     initializeGame() {
         const canvas = document.getElementById('gameCanvas');
         this.gameEngine = new GameEngine(canvas, this.socket, this.playerId);

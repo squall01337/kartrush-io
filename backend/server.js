@@ -1,3 +1,4 @@
+const fs = require('fs');
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -21,6 +22,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/assets', express.static(path.join(__dirname, '../assets')));
+
+// Chargement de la map globale (au démarrage du serveur)
+let trackData = null;
+function loadMapData() {
+    try {
+        const data = fs.readFileSync(path.join(__dirname, '../maps/oval_track.json'), 'utf-8');
+        trackData = JSON.parse(data);
+        console.log('✅ Map chargée :', trackData.name);
+    } catch (error) {
+        console.error('❌ Erreur de chargement de la map :', error);
+        process.exit(1);
+    }
+}
+loadMapData();
 
 // État du jeu
 const gameState = {
@@ -136,23 +151,14 @@ class Room {
         this.gameStartTime = Date.now();
         
         // Positionner les joueurs aux points de départ
-        const startPositions = [
-            { x: 80, y: 280 },
-            { x: 80, y: 320 },
-            { x: 120, y: 280 },
-            { x: 120, y: 320 },
-            { x: 160, y: 280 },
-            { x: 160, y: 320 },
-            { x: 200, y: 280 },
-            { x: 200, y: 320 }
-        ];
-        
+        const spawnPoints = (trackData && trackData.spawnPoints) || [];
+
         let index = 0;
         for (let player of this.players.values()) {
-            const pos = startPositions[index % startPositions.length];
+            const pos = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
             player.x = pos.x;
             player.y = pos.y;
-            player.angle = 0;
+            player.angle = pos.angle || 0;
             player.speed = 0;
             player.lap = 0;
             player.finished = false;
@@ -343,12 +349,17 @@ io.on('connection', (socket) => {
         // Ajouter le joueur à la room
         if (room.addPlayer(player)) {
             socket.join(room.id);
+
+            // Envoyer les infos de la room
             socket.emit('joinedRoom', {
                 roomId: room.id,
                 playerId: player.id,
                 isPrivate: room.isPrivate
             });
-            
+
+            // ✅ Envoyer la map au joueur
+            socket.emit('mapData', trackData);
+
             // Notifier les autres joueurs
             socket.to(room.id).emit('playerJoined', {
                 id: player.id,

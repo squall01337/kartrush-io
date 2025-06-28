@@ -33,7 +33,6 @@ class GameEngine {
         this.then = Date.now();
         
         this.setupCanvas();
-        this.loadTrack();
         this.preprocessSprites();
     }
 
@@ -82,6 +81,10 @@ class GameEngine {
             }
         });
     }
+
+    setMapData(mapData) {
+    this.setTrack(mapData);
+}
 
     cacheProcessedSprite(color, kartSprite) {
     const finalSize = 28;
@@ -154,62 +157,13 @@ class GameEngine {
     this.spriteCache.set(color, cacheCanvas);
 }
 
-    loadTrack() {
+    setTrack(data) {
     this.track = {
-        width: 1280,
-        height: 720,
-        walls: [
-            {
-    "x": 0,
-    "y": 0,
-    "width": 1280,
-    "height": 84
-  },
-  {
-    "x": 0,
-    "y": 633,
-    "width": 1280,
-    "height": 87
-  },
-  {
-    "x": 0,
-    "y": 0,
-    "width": 83,
-    "height": 720
-  },
-  {
-    "x": 1197,
-    "y": 0,
-    "width": 83,
-    "height": 720
-  },
-  {
-    "x": 383,
-    "y": 197,
-    "width": 150,
-    "height": 56
-  },
-  {
-    "x": 750,
-    "y": 225,
-    "width": 100,
-    "height": 63
-  },
-  {
-    "x": 650,
-    "y": 366,
-    "width": 167,
-    "height": 84
-  },
-  {
-    "x": 167,
-    "y": 506,
-    "width": 183,
-    "height": 112
-  }
-        ],
-        startLine: { x1: 0, y1: 0, x2: 0, y2: 0, color: '#ffffff' },
-        checkpoints: []
+        ...data,
+        walls: data.walls || [],
+        checkpoints: data.checkpoints || [],
+        finishLine: data.finishLine || null,
+        spawnPoints: data.spawnPoints || [],
     };
 }
 
@@ -242,6 +196,7 @@ class GameEngine {
     }
 
     update(deltaTime) {
+        if (!this.track) return; // 👈 Sécurité pour éviter l'erreur quand la map n'est pas encore reçue
         // OPTIMISATION: Interpolation des positions pour un mouvement fluide
         this.interpolatePlayers();
         
@@ -288,6 +243,9 @@ class GameEngine {
     }
 
     render() {
+        console.log('🎨 RENDER frame — Track:', this.track?.name);
+        console.log('RENDER'); // 👈 vérifie qu’on l'appelle
+        if (!this.track) return; // 👈 Idem ici, on ne rend rien tant que la map est absente
         // OPTIMISATION: Utiliser le canvas hors-écran pour éviter le flickering
         const ctx = this.offscreenCtx;
         
@@ -310,32 +268,39 @@ class GameEngine {
         this.renderUI();
     }
 
-    renderTrack(ctx) {
-        const trackBg = window.assetManager.getImage('track_background');
-        if (trackBg) {
-            ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
-        } else {
-            // Fallback optimisé
-            ctx.fillStyle = '#444444';
-            ctx.fillRect(70, 170, 660, 260);
-            
-            ctx.fillStyle = '#ffffff';
-            // OPTIMISATION: Dessiner tous les murs en une fois
+renderTrack(ctx) {
+    // Chargement dynamique du fond depuis le JSON
+    const bgName = this.track.background || 'track_background';
+    const trackBg = window.assetManager.getImage(bgName);
+    if (trackBg) {
+        ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
+    } else {
+        // Fallback sans image : on dessine les murs
+        ctx.fillStyle = '#444444';
+        ctx.fillRect(0, 0, this.track.width, this.track.height); // fond uni
+
+        ctx.fillStyle = '#ffffff';
+        if (this.track.walls && this.track.walls.length > 0) {
             this.track.walls.forEach(wall => {
                 ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
             });
         }
-        
-        // Lignes avec un seul path
-        ctx.strokeStyle = this.track.startLine.color;
+    }
+
+    // Ligne de départ (startLine)
+    if (this.track.startLine) {
+        ctx.strokeStyle = this.track.startLine.color || '#00ff00';
         ctx.lineWidth = 3;
         ctx.setLineDash([10, 5]);
         ctx.beginPath();
         ctx.moveTo(this.track.startLine.x1, this.track.startLine.y1);
         ctx.lineTo(this.track.startLine.x2, this.track.startLine.y2);
         ctx.stroke();
-        
-        // Checkpoints
+        ctx.setLineDash([]);
+    }
+
+    // Checkpoints
+    if (this.track.checkpoints && this.track.checkpoints.length > 0) {
         ctx.strokeStyle = '#ffff00';
         ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
@@ -346,9 +311,10 @@ class GameEngine {
         });
         ctx.stroke();
         ctx.setLineDash([]);
-    }
-
+    }   
+}
     renderPlayers(ctx) {
+        console.log('Players to render:', this.gameState.players.length);
         // OPTIMISATION: Trier les joueurs une seule fois par distance à la caméra
         const sortedPlayers = [...this.gameState.players].sort((a, b) => {
             const distA = Math.abs(a.x - this.camera.x) + Math.abs(a.y - this.camera.y);
@@ -456,6 +422,8 @@ class GameEngine {
     }
 
     updateGameState(gameData) {
+        console.log('updateGameState() called ✅');
+console.log('New game state:', gameData);
         this.gameState = gameData;
         
         // Nettoyer l'interpolation pour les joueurs qui ont quitté

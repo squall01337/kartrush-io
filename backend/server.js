@@ -33,9 +33,9 @@ const GAME_CONFIG = {
     MAX_PLAYERS_PER_ROOM: 8,
     MIN_PLAYERS_TO_START: 1,
     LAPS_TO_WIN: 3,
-    TICK_RATE: 20, // Réduire à 20 FPS au lieu de 30
-    TRACK_WIDTH: 800,
-    TRACK_HEIGHT: 600,
+    TICK_RATE: 30, // Réduire à 20 FPS au lieu de 30
+    TRACK_WIDTH: 1280,
+    TRACK_HEIGHT: 720,
     KART_SIZE: 20,
     MAX_SPEED: 14,
     ACCELERATION: 0.8,

@@ -155,31 +155,63 @@ class GameEngine {
 }
 
     loadTrack() {
-        this.track = {
-            width: 800,
-            height: 600,
-            background: '#2a5a2a',
-            walls: [
-                {x: 50, y: 150, width: 700, height: 20},
-                {x: 50, y: 430, width: 700, height: 20},
-                {x: 50, y: 150, width: 20, height: 300},
-                {x: 730, y: 150, width: 20, height: 300},
-                {x: 200, y: 250, width: 400, height: 20},
-                {x: 200, y: 330, width: 400, height: 20},
-                {x: 200, y: 250, width: 20, height: 100},
-                {x: 580, y: 250, width: 20, height: 100}
-            ],
-            startLine: {
-                x1: 70, y1: 280, x2: 70, y2: 320,
-                color: '#ffffff'
-            },
-            checkpoints: [
-                {x1: 400, y1: 170, x2: 400, y2: 210, color: '#ffff00'},
-                {x1: 720, y1: 280, x2: 720, y2: 320, color: '#ffff00'},
-                {x1: 400, y1: 390, x2: 400, y2: 430, color: '#ffff00'}
-            ]
-        };
-    }
+    this.track = {
+        width: 1280,
+        height: 720,
+        walls: [
+            {
+    "x": 0,
+    "y": 0,
+    "width": 1280,
+    "height": 84
+  },
+  {
+    "x": 0,
+    "y": 633,
+    "width": 1280,
+    "height": 87
+  },
+  {
+    "x": 0,
+    "y": 0,
+    "width": 83,
+    "height": 720
+  },
+  {
+    "x": 1197,
+    "y": 0,
+    "width": 83,
+    "height": 720
+  },
+  {
+    "x": 383,
+    "y": 197,
+    "width": 150,
+    "height": 56
+  },
+  {
+    "x": 750,
+    "y": 225,
+    "width": 100,
+    "height": 63
+  },
+  {
+    "x": 650,
+    "y": 366,
+    "width": 167,
+    "height": 84
+  },
+  {
+    "x": 167,
+    "y": 506,
+    "width": 183,
+    "height": 112
+  }
+        ],
+        startLine: { x1: 0, y1: 0, x2: 0, y2: 0, color: '#ffffff' },
+        checkpoints: []
+    };
+}
 
     start() {
         this.isRunning = true;

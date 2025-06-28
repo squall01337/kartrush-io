@@ -84,40 +84,75 @@ class GameEngine {
     }
 
     cacheProcessedSprite(color, kartSprite) {
-        const size = 28;
-        const cacheCanvas = document.createElement('canvas');
-        const cacheCtx = cacheCanvas.getContext('2d');
-        cacheCanvas.width = size;
-        cacheCanvas.height = size;
-        
-        // Dessiner et traiter le sprite une seule fois
-        cacheCtx.save();
-        cacheCtx.translate(size/2, size/2);
-        cacheCtx.rotate(Math.PI / 2);
-        cacheCtx.drawImage(
-            kartSprite.image,
-            kartSprite.sx, kartSprite.sy, kartSprite.sw, kartSprite.sh,
-            -size/2, -size/2, size, size
-        );
-        cacheCtx.restore();
-        
-        // Traitement de transparence optimisé
-        const imageData = cacheCtx.getImageData(0, 0, size, size);
-        const data = imageData.data;
-        
-        // Traitement plus rapide avec moins de conditions
-        for (let i = 0; i < data.length; i += 4) {
-            if (data[i + 3] < 50 || 
-                (data[i] > 250 && data[i + 1] > 250 && data[i + 2] > 250)) {
-                data[i + 3] = 0;
+    const finalSize = 28;
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCanvas.width = kartSprite.sw;
+    tempCanvas.height = kartSprite.sh;
+
+    // Dessiner le sprite d'origine
+    tempCtx.drawImage(
+        kartSprite.image,
+        kartSprite.sx, kartSprite.sy, kartSprite.sw, kartSprite.sh,
+        0, 0, kartSprite.sw, kartSprite.sh
+    );
+
+    // Nettoyer fond blanc (transparence)
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const a = data[i + 3];
+
+        const isWhite = r > 200 && g > 200 && b > 200;
+        if (isWhite || a < 100) {
+            data[i + 3] = 0;
+        }
+    }
+    tempCtx.putImageData(imageData, 0, 0);
+
+    // Trouver les bords utiles (bounding box du kart réel)
+    let minX = tempCanvas.width, maxX = 0, minY = tempCanvas.height, maxY = 0;
+    for (let y = 0; y < tempCanvas.height; y++) {
+        for (let x = 0; x < tempCanvas.width; x++) {
+            const idx = (y * tempCanvas.width + x) * 4 + 3;
+            const alpha = data[idx];
+            if (alpha > 0) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
             }
         }
-        
-        cacheCtx.putImageData(imageData, 0, 0);
-        
-        // Stocker le canvas traité
-        this.spriteCache.set(color, cacheCanvas);
     }
+
+    const trimmedWidth = maxX - minX + 1;
+    const trimmedHeight = maxY - minY + 1;
+
+    // Dessiner le sprite final dans un cache canvas redimensionné
+    const cacheCanvas = document.createElement('canvas');
+    const cacheCtx = cacheCanvas.getContext('2d');
+    cacheCanvas.width = finalSize;
+    cacheCanvas.height = finalSize;
+
+    cacheCtx.save();
+    cacheCtx.translate(finalSize / 2, finalSize / 2);
+    cacheCtx.rotate(Math.PI / 2); // rotation standard
+
+    // Redessiner le kart recentré et agrandi
+    cacheCtx.drawImage(
+        tempCanvas,
+        minX, minY, trimmedWidth, trimmedHeight,
+        -finalSize / 2, -finalSize / 2, finalSize, finalSize
+    );
+
+    cacheCtx.restore();
+
+    this.spriteCache.set(color, cacheCanvas);
+}
 
     loadTrack() {
         this.track = {

@@ -37,10 +37,10 @@ const GAME_CONFIG = {
     TRACK_WIDTH: 800,
     TRACK_HEIGHT: 600,
     KART_SIZE: 20,
-    MAX_SPEED: 5,
-    ACCELERATION: 0.3,
-    FRICTION: 0.95,
-    TURN_SPEED: 0.1,
+    MAX_SPEED: 14,
+    ACCELERATION: 0.8,
+    FRICTION: 0.92,
+    TURN_SPEED: 0.28,
     // OPTIMISATION: Zone de collision pour la grille spatiale
     COLLISION_GRID_SIZE: 100
 };

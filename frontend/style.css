@@ -168,12 +168,16 @@ button:disabled {
 
 /* Jeu */
 #game {
-    background: #000;
+    background: url('assets/ui_background.png') no-repeat center center;
+    background-size: cover;
 }
 
 #gameCanvas {
     display: block;
     background: #2a2a2a;
+    border-radius: 16px; /* Coins arrondis */
+    border: 6px double #00ffff; /* Double ligne cyan */
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.2); /* Effet de glow léger */
 }
 
 #gameUI {
@@ -289,4 +293,3 @@ button:disabled {
         font-size: 4em;
     }
 }
-

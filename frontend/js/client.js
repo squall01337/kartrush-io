@@ -1,3 +1,4 @@
+import soundManager from './soundManager.js';
 // Client WebSocket et gestion de l'interface
 class GameClient {
     constructor() {
@@ -172,22 +173,34 @@ startGameCountdown() {
         this.gameEngine.setMapData(this.mapData);
     }
 
+    this.canControl = false; // 🟡 Bloquer les contrôles
+    this.gameEngine.start(); // 🟢 Lancer le rendu pour éviter l'écran noir
+
     const countdown = document.getElementById('countdown');
     countdown.classList.remove('hidden');
 
     let count = 3;
     countdown.textContent = count;
 
+    soundManager.playCountdown(); // 🔊 Un seul son de décompte
+
     const countdownInterval = setInterval(() => {
         count--;
+
         if (count > 0) {
             countdown.textContent = count;
         } else if (count === 0) {
             countdown.textContent = 'GO!';
-        } else {
-            countdown.classList.add('hidden');
+            
+            // ✅ Débloquer les contrôles dès l'affichage du GO!
+            this.canControl = true;
+
+            // Facultatif : masquer le "GO!" après 800ms
+            setTimeout(() => {
+                countdown.classList.add('hidden');
+            }, 800);
+
             clearInterval(countdownInterval);
-            this.gameEngine.start();
         }
     }, 1000);
 }
@@ -232,89 +245,94 @@ startGameCountdown() {
     }
 
     setupKeyboardControls() {
-        this.keys = {
-            up: false,
-            down: false,
-            left: false,
-            right: false,
-            space: false
-        };
+    this.keys = {
+        up: false,
+        down: false,
+        left: false,
+        right: false,
+        space: false
+    };
 
-        // Boucle d'envoi continu des inputs
-        this.inputInterval = setInterval(() => {
-            if (this.gameEngine && this.gameEngine.isRunning) {
-                this.sendInput();
-            }
-        }, 1000 / 30); // 30 FPS pour les inputs
+    // Boucle d'envoi continu des inputs
+    this.inputInterval = setInterval(() => {
+        if (this.gameEngine && this.gameEngine.isRunning) {
+            this.sendInput();
+        }
+    }, 1000 / 30); // 30 FPS pour les inputs
 
-        document.addEventListener('keydown', (e) => {
-            // Ne pas intercepter les touches si on est dans un champ de saisie
-            if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
-                return;
-            }
-            
-            switch(e.code) {
-                case 'ArrowUp':
-                case 'KeyW':
-                    this.keys.up = true;
-                    e.preventDefault();
-                    break;
-                case 'ArrowDown':
-                case 'KeyS':
-                    this.keys.down = true;
-                    e.preventDefault();
-                    break;
-                case 'ArrowLeft':
-                case 'KeyA':
-                    this.keys.left = true;
-                    e.preventDefault();
-                    break;
-                case 'ArrowRight':
-                case 'KeyD':
-                    this.keys.right = true;
-                    e.preventDefault();
-                    break;
-                case 'Space':
-                    this.keys.space = true;
-                    e.preventDefault();
-                    break;
-            }
-        });
+    document.addEventListener('keydown', (e) => {
+        // Ne pas intercepter les touches si on est dans un champ de saisie
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
 
-        document.addEventListener('keyup', (e) => {
-            switch(e.code) {
-                case 'ArrowUp':
-                case 'KeyW':
-                    this.keys.up = false;
-                    break;
-                case 'ArrowDown':
-                case 'KeyS':
-                    this.keys.down = false;
-                    break;
-                case 'ArrowLeft':
-                case 'KeyA':
-                    this.keys.left = false;
-                    break;
-                case 'ArrowRight':
-                case 'KeyD':
-                    this.keys.right = false;
-                    break;
-                case 'Space':
-                    this.keys.space = false;
-                    break;
-            }
-        });
-    }
+        switch(e.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                if (!this.keys.up) {
+                    soundManager.playEngine(); // 🔁 Démarrer la boucle moteur
+                }
+                this.keys.up = true;
+                e.preventDefault();
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                this.keys.down = true;
+                e.preventDefault();
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                this.keys.left = true;
+                e.preventDefault();
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                this.keys.right = true;
+                e.preventDefault();
+                break;
+            case 'Space':
+                this.keys.space = true;
+                e.preventDefault();
+                break;
+        }
+    });
+
+    document.addEventListener('keyup', (e) => {
+        switch(e.code) {
+            case 'ArrowUp':
+            case 'KeyW':
+                this.keys.up = false;
+                soundManager.stopEngine(); // 🛑 Arrêter la boucle moteur
+                break;
+            case 'ArrowDown':
+            case 'KeyS':
+                this.keys.down = false;
+                break;
+            case 'ArrowLeft':
+            case 'KeyA':
+                this.keys.left = false;
+                break;
+            case 'ArrowRight':
+            case 'KeyD':
+                this.keys.right = false;
+                break;
+            case 'Space':
+                this.keys.space = false;
+                break;
+        }
+    });
+}
 
     sendInput() {
-        this.socket.emit('playerInput', {
-            up: this.keys.up,
-            down: this.keys.down,
-            left: this.keys.left,
-            right: this.keys.right,
-            space: this.keys.space
-        });
-    }
+    if (!this.canControl) return;
+    this.socket.emit('playerInput', {
+        up: this.keys.up,
+        down: this.keys.down,
+        left: this.keys.left,
+        right: this.keys.right,
+        space: this.keys.space
+    });
+}
 
     showScreen(screenName) {
         document.querySelectorAll('.screen').forEach(screen => {

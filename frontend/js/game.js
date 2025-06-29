@@ -84,6 +84,21 @@ class GameEngine {
 
     setMapData(mapData) {
     this.setTrack(mapData);
+
+        // 🎵 Gérer la musique de la map
+    if (this.music) {
+        this.music.pause();
+        this.music = null;
+    }
+
+    if (mapData.music) {
+        this.music = new Audio(mapData.music);
+        this.music.loop = true;
+        this.music.volume = 0.5;
+        this.music.play().catch(e => {
+            console.warn('🔇 Musique bloquée par l’autoplay. L’utilisateur doit interagir avec la page.');
+        });
+    }
 }
 
     cacheProcessedSprite(color, kartSprite) {
@@ -243,8 +258,6 @@ class GameEngine {
     }
 
     render() {
-        console.log('🎨 RENDER frame — Track:', this.track?.name);
-        console.log('RENDER'); // 👈 vérifie qu’on l'appelle
         if (!this.track) return; // 👈 Idem ici, on ne rend rien tant que la map est absente
         // OPTIMISATION: Utiliser le canvas hors-écran pour éviter le flickering
         const ctx = this.offscreenCtx;
@@ -314,7 +327,6 @@ renderTrack(ctx) {
     }   
 }
     renderPlayers(ctx) {
-        console.log('Players to render:', this.gameState.players.length);
         // OPTIMISATION: Trier les joueurs une seule fois par distance à la caméra
         const sortedPlayers = [...this.gameState.players].sort((a, b) => {
             const distA = Math.abs(a.x - this.camera.x) + Math.abs(a.y - this.camera.y);
@@ -422,8 +434,6 @@ renderTrack(ctx) {
     }
 
     updateGameState(gameData) {
-        console.log('updateGameState() called ✅');
-console.log('New game state:', gameData);
         this.gameState = gameData;
         
         // Nettoyer l'interpolation pour les joueurs qui ont quitté

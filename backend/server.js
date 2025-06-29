@@ -183,28 +183,29 @@ class Room {
         this.gameStartTime = null;
     }
 
-    update() {
-        const now = Date.now();
-        const deltaTime = (now - this.lastUpdate) / 1000;
-        this.lastUpdate = now;
+update() {
+    const now = Date.now();
+    const deltaTime = (now - this.lastUpdate) / 1000;
+    this.lastUpdate = now;
 
-        // Mettre à jour tous les joueurs
-        for (let player of this.players.values()) {
-            if (!player.finished) {
-                player.update(deltaTime);
-                player.raceTime = now - this.gameStartTime;
-            }
+    // Mettre à jour tous les joueurs + vérifier collision murs
+    for (let player of this.players.values()) {
+        if (!player.finished) {
+            player.update(deltaTime);
+            player.raceTime = now - this.gameStartTime;
+
+            // ✅ Collision avec murs ou courbes Bézier
+            this.checkWallCollisions(player);
         }
-
-        // Vérifier les collisions entre joueurs
-        this.checkPlayerCollisions();
-
-        // Calculer les positions
-        this.updatePositions();
-
-        // Envoyer l'état du jeu à tous les clients
-        this.broadcastGameState();
     }
+
+    // ✅ Collision entre joueurs
+    this.checkPlayerCollisions();
+
+    // Positions et update client
+    this.updatePositions();
+    this.broadcastGameState();
+}
 
     updatePositions() {
         const activePlayers = Array.from(this.players.values()).filter(p => !p.finished);
@@ -303,6 +304,64 @@ class Room {
         const rotationEffect = 0.1;
         player1.angle += (Math.random() - 0.5) * rotationEffect;
         player2.angle += (Math.random() - 0.5) * rotationEffect;
+    }
+    
+checkWallCollisions(player) {
+    const kx = player.x;
+    const ky = player.y;
+    const radius = GAME_CONFIG.KART_SIZE;
+    const minDist = radius + 4;
+    const minDistSq = minDist * minDist;
+
+    for (const curve of trackData.continuousCurves || []) {
+        const points = curve.points;
+        const len = points.length;
+
+        for (let i = 0; i < len; i++) {
+            const [x1, y1] = points[i];
+            const [x2, y2] = points[(i + 1) % len]; // boucle fermée
+
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const segLenSq = dx * dx + dy * dy;
+            if (segLenSq === 0) continue;
+
+            // Projection du kart sur le segment
+            let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
+            t = Math.max(0, Math.min(1, t));
+
+            const closestX = x1 + t * dx;
+            const closestY = y1 + t * dy;
+
+            const distX = kx - closestX;
+            const distY = ky - closestY;
+            const distSq = distX * distX + distY * distY;
+
+            if (distSq < minDistSq) {
+                const dist = Math.sqrt(distSq) || 0.001;
+                const nx = distX / dist;
+                const ny = distY / dist;
+
+                const vx = Math.cos(player.angle) * player.speed;
+                const vy = Math.sin(player.angle) * player.speed;
+                const dot = vx * nx + vy * ny;
+
+                if (dot < -0.4) {
+                    // 🔁 Collision frontale
+                    player.speed *= 0.5;
+                    player.x += nx * (minDist - dist) * 0.1; // petit rebond
+                    player.y += ny * (minDist - dist) * 0.1;
+                } else {
+                    // ➖ Frottement latéral
+                    player.speed *= 0.998; // frottement plus doux
+                    player.x += nx * (minDist - dist) * 0.15;
+                    player.y += ny * (minDist - dist) * 0.15;
+                }
+
+                break; // collision traitée, on sort de la courbe
+            }
+            }
+        }
     }
 
     broadcastGameState() {

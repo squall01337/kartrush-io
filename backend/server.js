@@ -47,7 +47,6 @@ const gameState = {
 const GAME_CONFIG = {
     MAX_PLAYERS_PER_ROOM: 8,
     MIN_PLAYERS_TO_START: 1,
-    // LAPS_TO_WIN sera maintenant défini par la map
     TICK_RATE: 30,
     TRACK_WIDTH: 1280,
     TRACK_HEIGHT: 720,
@@ -72,8 +71,11 @@ class Player {
         this.lap = 0;
         this.position = 1;
         this.item = null;
-        this.lastCheckpoint = 0;
+        this.checkpointsPassed = new Set(); // Checkpoints passés dans le tour actuel
+        this.lastCheckpoint = -1; // Dernier checkpoint passé
+        this.finishLinePassed = false; // Pour éviter de compter plusieurs fois
         this.raceTime = 0;
+        this.finishTime = null; // Temps de fin
         this.finished = false;
         this.ready = true; // Joueurs prêts par défaut
     }
@@ -261,18 +263,6 @@ class Room {
         this.endRace();
     }
 
-    updatePositions() {
-        const activePlayers = Array.from(this.players.values()).filter(p => !p.finished);
-        activePlayers.sort((a, b) => {
-            if (a.lap !== b.lap) return b.lap - a.lap;
-            return a.raceTime - b.raceTime;
-        });
-
-        activePlayers.forEach((player, index) => {
-            player.position = index + 1;
-        });
-    }
-
     checkRaceProgress(player) {
         if (!trackData || !this.raceSettings) return;
         
@@ -328,6 +318,125 @@ class Room {
             // Réinitialiser le flag quand le joueur n'est plus sur la ligne
             player.finishLinePassed = false;
         }
+    }
+
+    isPlayerCrossingLine(player, line) {
+        if (!line) return false;
+        
+        // Utiliser la représentation rectangle de la ligne
+        const lineRect = {
+            x: line.x,
+            y: line.y,
+            width: line.width,
+            height: line.height,
+            angle: line.angle || 0
+        };
+        
+        // Vérifier si le centre du joueur traverse la ligne
+        return this.isPointInRotatedRect(player.x, player.y, lineRect);
+    }
+
+    isPointInRotatedRect(px, py, rect) {
+        // Transformer le point dans le système de coordonnées du rectangle
+        const cx = rect.x + rect.width / 2;
+        const cy = rect.y + rect.height / 2;
+        
+        const angle = -Math.radians(rect.angle || 0);
+        
+        // Translater le point par rapport au centre
+        const tx = px - cx;
+        const ty = py - cy;
+        
+        // Appliquer la rotation inverse
+        const rx = tx * Math.cos(angle) - ty * Math.sin(angle);
+        const ry = tx * Math.sin(angle) + ty * Math.cos(angle);
+        
+        // Vérifier si le point est dans le rectangle non tourné
+        const halfW = rect.width / 2;
+        const halfH = rect.height / 2;
+        
+        return -halfW <= rx <= halfW && -halfH <= ry <= halfH;
+    }
+
+    getFinishPosition() {
+        // Compter combien de joueurs ont déjà fini
+        let finishedCount = 0;
+        for (let p of this.players.values()) {
+            if (p.finished) finishedCount++;
+        }
+        return finishedCount;
+    }
+
+    checkRaceEnd() {
+        // Vérifier si tous les joueurs ont terminé
+        let allFinished = true;
+        let hasActivePlayer = false;
+        
+        for (let player of this.players.values()) {
+            if (!player.finished) {
+                allFinished = false;
+            }
+            if (player.finished || player.lap > 0) {
+                hasActivePlayer = true;
+            }
+        }
+        
+        // Si tous ont terminé et qu'au moins un a commencé
+        if (allFinished && hasActivePlayer) {
+            this.endRace();
+        }
+    }
+
+    endRace() {
+        console.log('🏁 Course terminée !');
+        
+        // Arrêter la boucle de jeu
+        this.stopGame();
+        
+        // Calculer le classement final
+        const results = this.getFinalResults();
+        
+        // Envoyer les résultats à tous les joueurs
+        io.to(this.id).emit('raceEnded', {
+            results: results,
+            raceTime: Date.now() - this.gameStartTime
+        });
+    }
+
+    formatTime(ms) {
+        const minutes = Math.floor(ms / 60000);
+        const seconds = Math.floor((ms % 60000) / 1000);
+        const milliseconds = Math.floor((ms % 1000) / 10);
+        return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+    }
+
+    updatePositions() {
+        const activePlayers = Array.from(this.players.values()).filter(p => !p.finished);
+        
+        // Trier par tours d'abord, puis par distance parcourue
+        activePlayers.sort((a, b) => {
+            // D'abord par nombre de tours
+            if (a.lap !== b.lap) return b.lap - a.lap;
+            
+            // Ensuite par checkpoints passés
+            if (a.checkpointsPassed.size !== b.checkpointsPassed.size) {
+                return b.checkpointsPassed.size - a.checkpointsPassed.size;
+            }
+            
+            // Enfin par temps de course (plus ancien = devant)
+            return a.raceTime - b.raceTime;
+        });
+
+        activePlayers.forEach((player, index) => {
+            player.position = index + 1;
+        });
+        
+        // Les joueurs finis gardent leur position finale
+        const finishedPlayers = Array.from(this.players.values()).filter(p => p.finished);
+        finishedPlayers.sort((a, b) => a.finishTime - b.finishTime);
+        finishedPlayers.forEach((player, index) => {
+            player.position = index + 1;
+        });
     }
 
     checkPlayerCollisions() {
@@ -417,135 +526,135 @@ class Room {
         player2.angle += (Math.random() - 0.5) * rotationEffect;
     }
     
-checkWallCollisions(player) {
-    const kx = player.x;
-    const ky = player.y;
-    const radius = GAME_CONFIG.KART_SIZE;
-    const minDist = radius + 4;
-    const minDistSq = minDist * minDist;
+    checkWallCollisions(player) {
+        const kx = player.x;
+        const ky = player.y;
+        const radius = GAME_CONFIG.KART_SIZE;
+        const minDist = radius + 4;
+        const minDistSq = minDist * minDist;
 
-    // Stocker la position précédente pour le rollback
-    const prevX = player.x;
-    const prevY = player.y;
+        // Stocker la position précédente pour le rollback
+        const prevX = player.x;
+        const prevY = player.y;
 
-    for (const curve of trackData.continuousCurves || []) {
-        const points = curve.points;
-        const len = points.length;
-        
-        // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
-        const segmentCount = curve.closed ? len : len - 1;
+        for (const curve of trackData.continuousCurves || []) {
+            const points = curve.points;
+            const len = points.length;
+            
+            // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
+            const segmentCount = curve.closed ? len : len - 1;
 
-        for (let i = 0; i < segmentCount; i++) {
-            const [x1, y1] = points[i];
-            // Pour une courbe fermée, le dernier segment connecte au premier point
-            const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
-            const [x2, y2] = points[nextIndex];
+            for (let i = 0; i < segmentCount; i++) {
+                const [x1, y1] = points[i];
+                // Pour une courbe fermée, le dernier segment connecte au premier point
+                const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
+                const [x2, y2] = points[nextIndex];
 
-            const dx = x2 - x1;
-            const dy = y2 - y1;
-            const segLenSq = dx * dx + dy * dy;
-            if (segLenSq === 0) continue;
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const segLenSq = dx * dx + dy * dy;
+                if (segLenSq === 0) continue;
 
-            // Projection du kart sur le segment
-            let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
-            t = Math.max(0, Math.min(1, t));
+                // Projection du kart sur le segment
+                let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
+                t = Math.max(0, Math.min(1, t));
 
-            const closestX = x1 + t * dx;
-            const closestY = y1 + t * dy;
+                const closestX = x1 + t * dx;
+                const closestY = y1 + t * dy;
 
-            const distX = kx - closestX;
-            const distY = ky - closestY;
-            const distSq = distX * distX + distY * distY;
+                const distX = kx - closestX;
+                const distY = ky - closestY;
+                const distSq = distX * distX + distY * distY;
 
-            if (distSq < minDistSq) {
-                const dist = Math.sqrt(distSq) || 0.001;
-                const nx = distX / dist;
-                const ny = distY / dist;
+                if (distSq < minDistSq) {
+                    const dist = Math.sqrt(distSq) || 0.001;
+                    const nx = distX / dist;
+                    const ny = distY / dist;
 
-                // Repousser le joueur hors du mur (PLUS FORT)
-                const penetration = minDist - dist;
-                player.x += nx * (penetration + 2); // +2 pixels supplémentaires
-                player.y += ny * (penetration + 2);
+                    // Repousser le joueur hors du mur (PLUS FORT)
+                    const penetration = minDist - dist;
+                    player.x += nx * (penetration + 2); // +2 pixels supplémentaires
+                    player.y += ny * (penetration + 2);
 
-                // Vecteur de vitesse du joueur
-                const vx = Math.cos(player.angle) * player.speed;
-                const vy = Math.sin(player.angle) * player.speed;
-                
-                // Produit scalaire pour déterminer l'angle d'impact
-                const dot = vx * nx + vy * ny;
-                
-                // Normaliser le vecteur du mur
-                const wallLength = Math.sqrt(dx * dx + dy * dy);
-                const wallDirX = dx / wallLength;
-                const wallDirY = dy / wallLength;
-                
-                // Angle entre la direction du joueur et le mur
-                const playerDirX = Math.cos(player.angle);
-                const playerDirY = Math.sin(player.angle);
-                const wallDot = Math.abs(playerDirX * wallDirX + playerDirY * wallDirY);
-
-                if (dot < -0.5 && wallDot < 0.5) {
-                    // Collision frontale (angle > 60° avec le mur)
-                    player.speed *= -0.2; // Inverser la vitesse (rebond)
+                    // Vecteur de vitesse du joueur
+                    const vx = Math.cos(player.angle) * player.speed;
+                    const vy = Math.sin(player.angle) * player.speed;
                     
-                    // Rebond plus prononcé
-                    player.x += nx * 8; // Rebond de 8 pixels
-                    player.y += ny * 8;
+                    // Produit scalaire pour déterminer l'angle d'impact
+                    const dot = vx * nx + vy * ny;
                     
-                    // Petite variation aléatoire de l'angle pour le réalisme
-                    player.angle += (Math.random() - 0.5) * 0.2;
+                    // Normaliser le vecteur du mur
+                    const wallLength = Math.sqrt(dx * dx + dy * dy);
+                    const wallDirX = dx / wallLength;
+                    const wallDirY = dy / wallLength;
                     
-                } else if (Math.abs(dot) < 0.7) {
-                    // Frottement latéral (glissement le long du mur)
-                    
-                    // Projeter la vitesse sur la direction du mur
-                    const velocityAlongWall = vx * wallDirX + vy * wallDirY;
-                    
-                    // Nouvelle vitesse alignée avec le mur
-                    const newVx = wallDirX * velocityAlongWall * 0.85;
-                    const newVy = wallDirY * velocityAlongWall * 0.85;
-                    
-                    // Mettre à jour la vitesse et l'angle
-                    player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
-                    
-                    // Ajuster légèrement l'angle pour suivre le mur
-                    if (player.speed > 0.1) {
-                        const targetAngle = Math.atan2(newVy, newVx);
-                        const angleDiff = targetAngle - player.angle;
+                    // Angle entre la direction du joueur et le mur
+                    const playerDirX = Math.cos(player.angle);
+                    const playerDirY = Math.sin(player.angle);
+                    const wallDot = Math.abs(playerDirX * wallDirX + playerDirY * wallDirY);
+
+                    if (dot < -0.5 && wallDot < 0.5) {
+                        // Collision frontale (angle > 60° avec le mur)
+                        player.speed *= -0.2; // Inverser la vitesse (rebond)
                         
-                        // Normaliser la différence d'angle entre -PI et PI
-                        let normalizedDiff = angleDiff;
-                        while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
-                        while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
+                        // Rebond plus prononcé
+                        player.x += nx * 8; // Rebond de 8 pixels
+                        player.y += ny * 8;
                         
-                        // Appliquer progressivement le changement d'angle
-                        player.angle += normalizedDiff * 0.3;
+                        // Petite variation aléatoire de l'angle pour le réalisme
+                        player.angle += (Math.random() - 0.5) * 0.2;
+                        
+                    } else if (Math.abs(dot) < 0.7) {
+                        // Frottement latéral (glissement le long du mur)
+                        
+                        // Projeter la vitesse sur la direction du mur
+                        const velocityAlongWall = vx * wallDirX + vy * wallDirY;
+                        
+                        // Nouvelle vitesse alignée avec le mur
+                        const newVx = wallDirX * velocityAlongWall * 0.85;
+                        const newVy = wallDirY * velocityAlongWall * 0.85;
+                        
+                        // Mettre à jour la vitesse et l'angle
+                        player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
+                        
+                        // Ajuster légèrement l'angle pour suivre le mur
+                        if (player.speed > 0.1) {
+                            const targetAngle = Math.atan2(newVy, newVx);
+                            const angleDiff = targetAngle - player.angle;
+                            
+                            // Normaliser la différence d'angle entre -PI et PI
+                            let normalizedDiff = angleDiff;
+                            while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
+                            while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
+                            
+                            // Appliquer progressivement le changement d'angle
+                            player.angle += normalizedDiff * 0.3;
+                        }
+                        
+                    } else {
+                        // Collision à angle rasant
+                        player.speed *= 0.95;
                     }
                     
-                } else {
-                    // Collision à angle rasant
-                    player.speed *= 0.95;
+                    // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
+                    const finalDistX = player.x - closestX;
+                    const finalDistY = player.y - closestY;
+                    const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
+                    
+                    if (finalDistSq < minDistSq) {
+                        // Forcer la sortie du mur
+                        const pushDist = Math.sqrt(minDistSq) + 2;
+                        player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
+                        player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
+                    }
+                    
+                    // Limiter la vitesse minimale
+                    if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
+                        player.speed = 0;
+                    }
+                    
+                    break; // Collision traitée
                 }
-                
-                // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
-                const finalDistX = player.x - closestX;
-                const finalDistY = player.y - closestY;
-                const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
-                
-                if (finalDistSq < minDistSq) {
-                    // Forcer la sortie du mur
-                    const pushDist = Math.sqrt(minDistSq) + 2;
-                    player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
-                    player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
-                }
-                
-                // Limiter la vitesse minimale
-                if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
-                    player.speed = 0;
-                }
-                
-                break; // Collision traitée
-            }
             }
         }
     }
@@ -804,4 +913,3 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`🏁 Serveur KartRush.io démarré sur le port ${PORT}`);
     console.log(`🌐 Accès: http://localhost:${PORT}`);
 });
-

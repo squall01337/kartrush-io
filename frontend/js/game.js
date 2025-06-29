@@ -371,20 +371,30 @@ class GameEngine {
             positionEl.textContent = newPosition;
         }
         
-        // Tours (mis à jour pour utiliser totalLaps)
+        // Tours - CORRECTION ICI
         const lapEl = document.getElementById('lap');
         const totalLaps = this.gameState.totalLaps || 3;
-        const currentLap = Math.min(player.lap + 1, totalLaps);
-        const newLap = `Tour: ${currentLap}/${totalLaps}`;
+        
+        // Si le joueur n'a pas encore franchi la ligne pour la première fois, afficher 0/3
+        // Sinon afficher le tour actuel
+        const displayLap = player.lap === 0 ? 0 : player.lap;
+        const newLap = `Tour: ${displayLap}/${totalLaps}`;
+        
         if (lapEl.textContent !== newLap) {
             lapEl.textContent = newLap;
             
             // Animation flash quand on passe un tour
-            if (player.lap > (this.lastLap || 0) && player.lap < totalLaps) {
+            if (player.lap > 0 && player.lap > (this.lastLap || 0)) {
                 lapEl.style.animation = 'flash 0.5s';
                 setTimeout(() => {
                     lapEl.style.animation = '';
                 }, 500);
+                
+                // Mise à jour spéciale pour le dernier tour
+                if (player.lap === totalLaps - 1) {
+                    this.showFinalLapMessage();
+                    this.finalLapShown = true;
+                }
             }
             this.lastLap = player.lap;
         }
@@ -435,12 +445,6 @@ class GameEngine {
             itemSlot.textContent = '';
             itemSlot.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
             delete itemSlot.dataset.item;
-        }
-        
-        // Afficher "FINAL LAP!" si dernier tour
-        if (player.lap === totalLaps - 1 && !this.finalLapShown) {
-            this.showFinalLapMessage();
-            this.finalLapShown = true;
         }
     }
 

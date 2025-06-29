@@ -107,6 +107,64 @@ class GameClient {
         });
 
         // NOUVEAUX ÉVÉNEMENTS DE COURSE
+        this.socket.on('checkpointPassed', (data) => {
+            console.log(`✅ Checkpoint ${data.checkpoint}/${data.total} passé !`);
+            
+            // Son de checkpoint
+            const checkpointSound = new Audio('assets/audio/checkpoint.mp3');
+            checkpointSound.volume = 0.7;
+            checkpointSound.play().catch(e => {
+                // Fallback : son simple si pas de fichier audio
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 800; // Fréquence haute
+                gainNode.gain.value = 0.3;
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.1); // Son court
+            });
+            
+            // Notification visuelle
+            this.showCheckpointNotification(data);
+        });
+
+        this.socket.on('lapCompleted', (data) => {
+            console.log(`🏁 Tour ${data.lap}/${data.totalLaps} complété !`);
+            
+            // Son de passage de tour
+            const lapSound = new Audio('assets/audio/lap.mp3');
+            lapSound.volume = 0.8;
+            lapSound.play().catch(e => {
+                // Fallback : son plus élaboré pour le tour
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator1 = audioContext.createOscillator();
+                const oscillator2 = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator1.connect(gainNode);
+                oscillator2.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // Double ton pour un effet plus marqué
+                oscillator1.frequency.value = 600;
+                oscillator2.frequency.value = 900;
+                gainNode.gain.value = 0.3;
+                
+                oscillator1.start();
+                oscillator2.start();
+                oscillator1.stop(audioContext.currentTime + 0.2);
+                oscillator2.stop(audioContext.currentTime + 0.2);
+            });
+            
+            // Notification visuelle du tour
+            this.showLapNotification(data);
+        });
+
         this.socket.on('timeWarning', (data) => {
             console.log(`⏱️ ${data.message}`);
             this.showTimeWarning(data);
@@ -149,6 +207,74 @@ class GameClient {
             console.log('Déconnecté du serveur');
             this.showScreen('menu');
         });
+    }
+
+    showCheckpointNotification(data) {
+        const notification = document.createElement('div');
+        notification.className = 'checkpoint-notification';
+        notification.innerHTML = `
+            <div class="checkpoint-icon">✅</div>
+            <div class="checkpoint-text">Checkpoint ${data.checkpoint}/${data.total}</div>
+        `;
+        
+        notification.style.cssText = `
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 0, 0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            z-index: 100;
+            animation: checkpointPulse 0.5s ease-out;
+        `;
+        
+        document.getElementById('game').appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'fadeOut 0.5s ease-out';
+            setTimeout(() => notification.remove(), 500);
+        }, 1500);
+    }
+
+    showLapNotification(data) {
+        const notification = document.createElement('div');
+        const isLastLap = data.lap === data.totalLaps - 1;
+        const isFinalLap = data.lap === data.totalLaps;
+        
+        let message = `Tour ${data.lap}/${data.totalLaps}`;
+        if (isLastLap) message = 'DERNIER TOUR !';
+        if (isFinalLap) message = 'COURSE TERMINÉE !';
+        
+        notification.className = 'lap-notification';
+        notification.innerHTML = `
+            <div class="lap-icon">🏁</div>
+            <div class="lap-text">${message}</div>
+        `;
+        
+        notification.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: ${isLastLap ? 'rgba(255, 165, 0, 0.9)' : 'rgba(0, 100, 255, 0.9)'};
+            padding: 20px 40px;
+            border-radius: 20px;
+            color: white;
+            font-size: 2em;
+            font-weight: bold;
+            z-index: 200;
+            animation: lapZoom 0.8s ease-out;
+        `;
+        
+        document.getElementById('game').appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'fadeOut 0.5s ease-out';
+            setTimeout(() => notification.remove(), 500);
+        }, 2000);
     }
 
     showTimeWarning(data) {
@@ -522,9 +648,6 @@ class GameClient {
                 case 'ArrowRight':
                 case 'KeyD':
                     this.keys.right = false;
-                    break;
-                case 'Space':
-                    this.keys.space = false;
                     break;
             }
         });

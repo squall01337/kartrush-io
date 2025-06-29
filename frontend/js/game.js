@@ -9,12 +9,17 @@ class GameEngine {
         
         this.gameState = {
             players: [],
-            gameTime: 0
+            gameTime: 0,
+            totalLaps: 3,
+            maxTime: null,
+            remainingTime: null
         };
         
         this.track = null;
         this.camera = { x: 0, y: 0 };
         this.lastFrameTime = 0;
+        this.lastLap = 0;
+        this.finalLapShown = false;
         
         // OPTIMISATION: Cache pour les sprites traités
         this.spriteCache = new Map();
@@ -83,104 +88,104 @@ class GameEngine {
     }
 
     setMapData(mapData) {
-    this.setTrack(mapData);
+        this.setTrack(mapData);
 
         // 🎵 Gérer la musique de la map
-    if (this.music) {
-        this.music.pause();
-        this.music = null;
-    }
+        if (this.music) {
+            this.music.pause();
+            this.music = null;
+        }
 
-    if (mapData.music) {
-        this.music = new Audio(mapData.music);
-        this.music.loop = true;
-        this.music.volume = 0.5;
-        this.music.play().catch(e => {
-            console.warn('🔇 Musique bloquée par l’autoplay. L’utilisateur doit interagir avec la page.');
-        });
+        if (mapData.music) {
+            this.music = new Audio(mapData.music);
+            this.music.loop = true;
+            this.music.volume = 0.5;
+            this.music.play().catch(e => {
+                console.warn('🔇 Musique bloquée par lautoplay. Lutilisateur doit interagir avec la page.');
+            });
+        }
     }
-}
 
     cacheProcessedSprite(color, kartSprite) {
-    const finalSize = 28;
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCanvas.width = kartSprite.sw;
-    tempCanvas.height = kartSprite.sh;
+        const finalSize = 28;
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = kartSprite.sw;
+        tempCanvas.height = kartSprite.sh;
 
-    // Dessiner le sprite d'origine
-    tempCtx.drawImage(
-        kartSprite.image,
-        kartSprite.sx, kartSprite.sy, kartSprite.sw, kartSprite.sh,
-        0, 0, kartSprite.sw, kartSprite.sh
-    );
+        // Dessiner le sprite d'origine
+        tempCtx.drawImage(
+            kartSprite.image,
+            kartSprite.sx, kartSprite.sy, kartSprite.sw, kartSprite.sh,
+            0, 0, kartSprite.sw, kartSprite.sh
+        );
 
-    // Nettoyer fond blanc (transparence)
-    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-    const data = imageData.data;
+        // Nettoyer fond blanc (transparence)
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const data = imageData.data;
 
-    for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const a = data[i + 3];
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const a = data[i + 3];
 
-        const isWhite = r > 200 && g > 200 && b > 200;
-        if (isWhite || a < 100) {
-            data[i + 3] = 0;
-        }
-    }
-    tempCtx.putImageData(imageData, 0, 0);
-
-    // Trouver les bords utiles (bounding box du kart réel)
-    let minX = tempCanvas.width, maxX = 0, minY = tempCanvas.height, maxY = 0;
-    for (let y = 0; y < tempCanvas.height; y++) {
-        for (let x = 0; x < tempCanvas.width; x++) {
-            const idx = (y * tempCanvas.width + x) * 4 + 3;
-            const alpha = data[idx];
-            if (alpha > 0) {
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
+            const isWhite = r > 200 && g > 200 && b > 200;
+            if (isWhite || a < 100) {
+                data[i + 3] = 0;
             }
         }
+        tempCtx.putImageData(imageData, 0, 0);
+
+        // Trouver les bords utiles (bounding box du kart réel)
+        let minX = tempCanvas.width, maxX = 0, minY = tempCanvas.height, maxY = 0;
+        for (let y = 0; y < tempCanvas.height; y++) {
+            for (let x = 0; x < tempCanvas.width; x++) {
+                const idx = (y * tempCanvas.width + x) * 4 + 3;
+                const alpha = data[idx];
+                if (alpha > 0) {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        }
+
+        const trimmedWidth = maxX - minX + 1;
+        const trimmedHeight = maxY - minY + 1;
+
+        // Dessiner le sprite final dans un cache canvas redimensionné
+        const cacheCanvas = document.createElement('canvas');
+        const cacheCtx = cacheCanvas.getContext('2d');
+        cacheCanvas.width = finalSize;
+        cacheCanvas.height = finalSize;
+
+        cacheCtx.save();
+        cacheCtx.translate(finalSize / 2, finalSize / 2);
+        cacheCtx.rotate(Math.PI / 2); // rotation standard
+
+        // Redessiner le kart recentré et agrandi
+        cacheCtx.drawImage(
+            tempCanvas,
+            minX, minY, trimmedWidth, trimmedHeight,
+            -finalSize / 2, -finalSize / 2, finalSize, finalSize
+        );
+
+        cacheCtx.restore();
+
+        this.spriteCache.set(color, cacheCanvas);
     }
 
-    const trimmedWidth = maxX - minX + 1;
-    const trimmedHeight = maxY - minY + 1;
-
-    // Dessiner le sprite final dans un cache canvas redimensionné
-    const cacheCanvas = document.createElement('canvas');
-    const cacheCtx = cacheCanvas.getContext('2d');
-    cacheCanvas.width = finalSize;
-    cacheCanvas.height = finalSize;
-
-    cacheCtx.save();
-    cacheCtx.translate(finalSize / 2, finalSize / 2);
-    cacheCtx.rotate(Math.PI / 2); // rotation standard
-
-    // Redessiner le kart recentré et agrandi
-    cacheCtx.drawImage(
-        tempCanvas,
-        minX, minY, trimmedWidth, trimmedHeight,
-        -finalSize / 2, -finalSize / 2, finalSize, finalSize
-    );
-
-    cacheCtx.restore();
-
-    this.spriteCache.set(color, cacheCanvas);
-}
-
     setTrack(data) {
-    this.track = {
-        ...data,
-        walls: data.walls || [],
-        checkpoints: data.checkpoints || [],
-        finishLine: data.finishLine || null,
-        spawnPoints: data.spawnPoints || [],
-    };
-}
+        this.track = {
+            ...data,
+            walls: data.walls || [],
+            checkpoints: data.checkpoints || [],
+            finishLine: data.finishLine || null,
+            spawnPoints: data.spawnPoints || [],
+        };
+    }
 
     start() {
         this.isRunning = true;
@@ -281,18 +286,18 @@ class GameEngine {
         this.renderUI();
     }
 
-renderTrack(ctx) {
-    // Chargement dynamique du fond depuis le JSON
-    const bgName = this.track.background || 'track_background';
-    const trackBg = window.assetManager.getImage(bgName);
-    if (trackBg) {
-        ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
-    } else {
-        // Fallback sans image : fond uni seulement
-        ctx.fillStyle = '#444444';
-        ctx.fillRect(0, 0, this.track.width, this.track.height);
+    renderTrack(ctx) {
+        // Chargement dynamique du fond depuis le JSON
+        const bgName = this.track.background || 'track_background';
+        const trackBg = window.assetManager.getImage(bgName);
+        if (trackBg) {
+            ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
+        } else {
+            // Fallback sans image : fond uni seulement
+            ctx.fillStyle = '#444444';
+            ctx.fillRect(0, 0, this.track.width, this.track.height);
+        }
     }
-}
 
     renderPlayers(ctx) {
         // OPTIMISATION: Trier les joueurs une seule fois par distance à la caméra
@@ -359,27 +364,68 @@ renderTrack(ctx) {
         const player = this.gameState.players.find(p => p.id === this.playerId);
         if (!player) return;
         
-        // OPTIMISATION: Mettre à jour le DOM seulement si nécessaire
+        // Position
         const positionEl = document.getElementById('position');
         const newPosition = `Position: ${player.position}/${this.gameState.players.length}`;
         if (positionEl.textContent !== newPosition) {
             positionEl.textContent = newPosition;
         }
         
+        // Tours (mis à jour pour utiliser totalLaps)
         const lapEl = document.getElementById('lap');
-        const newLap = `Tour: ${player.lap + 1}/3`;
+        const totalLaps = this.gameState.totalLaps || 3;
+        const currentLap = Math.min(player.lap + 1, totalLaps);
+        const newLap = `Tour: ${currentLap}/${totalLaps}`;
         if (lapEl.textContent !== newLap) {
             lapEl.textContent = newLap;
+            
+            // Animation flash quand on passe un tour
+            if (player.lap > (this.lastLap || 0) && player.lap < totalLaps) {
+                lapEl.style.animation = 'flash 0.5s';
+                setTimeout(() => {
+                    lapEl.style.animation = '';
+                }, 500);
+            }
+            this.lastLap = player.lap;
         }
         
-        const minutes = Math.floor(this.gameState.gameTime / 60000);
-        const seconds = Math.floor((this.gameState.gameTime % 60000) / 1000);
+        // Timer avec temps restant
         const timerEl = document.getElementById('timer');
-        const newTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        if (timerEl.textContent !== newTime) {
-            timerEl.textContent = newTime;
+        if (this.gameState.maxTime && this.gameState.remainingTime !== null) {
+            const totalSeconds = Math.floor(this.gameState.gameTime / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            
+            const remainingSeconds = Math.floor(this.gameState.remainingTime / 1000);
+            const remainingMinutes = Math.floor(remainingSeconds / 60);
+            const remainingSecondsOnly = remainingSeconds % 60;
+            
+            // Afficher en rouge si moins de 60 secondes
+            if (remainingSeconds < 60) {
+                timerEl.style.color = '#ff4444';
+                timerEl.style.fontWeight = 'bold';
+            } else if (remainingSeconds < 120) {
+                timerEl.style.color = '#ffaa44';
+            } else {
+                timerEl.style.color = '';
+                timerEl.style.fontWeight = '';
+            }
+            
+            const newTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} (${remainingMinutes}:${remainingSecondsOnly.toString().padStart(2, '0')})`;
+            if (timerEl.textContent !== newTime) {
+                timerEl.textContent = newTime;
+            }
+        } else {
+            // Pas de limite de temps
+            const minutes = Math.floor(this.gameState.gameTime / 60000);
+            const seconds = Math.floor((this.gameState.gameTime % 60000) / 1000);
+            const newTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            if (timerEl.textContent !== newTime) {
+                timerEl.textContent = newTime;
+            }
         }
         
+        // Item slot
         const itemSlot = document.getElementById('itemSlot');
         if (player.item && !itemSlot.dataset.item) {
             itemSlot.textContent = this.getItemIcon(player.item);
@@ -390,6 +436,36 @@ renderTrack(ctx) {
             itemSlot.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
             delete itemSlot.dataset.item;
         }
+        
+        // Afficher "FINAL LAP!" si dernier tour
+        if (player.lap === totalLaps - 1 && !this.finalLapShown) {
+            this.showFinalLapMessage();
+            this.finalLapShown = true;
+        }
+    }
+
+    showFinalLapMessage() {
+        const message = document.createElement('div');
+        message.className = 'final-lap-message';
+        message.textContent = 'FINAL LAP!';
+        message.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 4em;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 200;
+            animation: finalLapPulse 1.5s ease-out;
+        `;
+        
+        document.getElementById('game').appendChild(message);
+        
+        setTimeout(() => {
+            message.remove();
+        }, 1500);
     }
 
     getItemIcon(itemType) {

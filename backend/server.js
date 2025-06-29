@@ -341,7 +341,7 @@ class Room {
         const cx = rect.x + rect.width / 2;
         const cy = rect.y + rect.height / 2;
         
-        const angle = -Math.radians(rect.angle || 0);
+        const angle = -(rect.angle || 0) * Math.PI / 180;
         
         // Translater le point par rapport au centre
         const tx = px - cx;

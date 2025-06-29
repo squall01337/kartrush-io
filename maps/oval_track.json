@@ -4,7 +4,7 @@
   "height": 720,
   "music": "assets/audio/lava_theme.mp3",
   "background": "track_background",
-  "raceSettings": {
+    "raceSettings": {
     "laps": 3,
     "maxTime": 300000,
     "maxTimeWarning": 240000
@@ -16,13 +16,16 @@
       "angle": 0
     }
   ],
-  "walls": [],
+ "walls": [],
   "curves": [],
   "continuousCurves": [
     {"points": [[823,536],[721,530],[618,513],[520,544],[439,565],[397,536],[402,490],[415,453],[397,424],[371,403],[317,400],[267,372],[238,336],[236,269],[271,223],[311,206],[356,194],[416,197],[472,214],[508,245],[555,269],[600,281],[646,287],[698,285],[765,269],[840,267],[908,283],[964,311],[1003,352],[1008,437],[966,481],[915,510],[871,524]], "type": "continuous", "closed": true}
   ],
-  "checkpoints": [],
-  "finishLine": null,
+  "checkpoints": [
+    {"x": 1022, "y": 443, "width": 20, "height": 100, "angle": 320.05477627610395},
+    {"x": 900, "y": 499, "width": 20, "height": 100, "angle": 350.8628489858613}
+  ],
+  "finishLine": {"x": 978, "y": 477, "width": 10, "height": 100, "angle": 336.8014094863518},
   "boosters": [],
   "items": []
 }

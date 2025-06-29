@@ -407,35 +407,37 @@ class Room {
     }
 
     isPlayerCrossingLine(player, line) {
-        if (!line) return false;
-        
-        // Augmenter la taille de détection pour être sûr
-        const margin = 10; // Pixels de marge supplémentaire
-        
-        const lineRect = {
-            x: line.x - margin,
-            y: line.y - margin,
-            width: line.width + (margin * 2),
-            height: line.height + (margin * 2),
-            angle: line.angle || 0
-        };
-        
-        // Vérifier si le centre du joueur traverse la ligne
-        const isInside = this.isPointInRotatedRect(player.x, player.y, lineRect);
-        
-        // DEBUG: Si on est près de la ligne d'arrivée
+    if (!line) return false;
+    
+    // Augmenter la taille de détection pour être sûr
+    const margin = 10; // Pixels de marge supplémentaire
+    
+    const lineRect = {
+        x: line.x - margin,
+        y: line.y - margin,
+        width: line.width + (margin * 2),
+        height: line.height + (margin * 2),
+        angle: line.angle || 0
+    };
+    
+    // Vérifier si le centre du joueur traverse la ligne
+    const isInside = this.isPointInRotatedRect(player.x, player.y, lineRect);
+    
+    // DEBUG: Pour TOUTE ligne (pas seulement la ligne d'arrivée)
+    if (isInside) {
         if (line === trackData.finishLine) {
-            const dist = Math.sqrt(
-                Math.pow(player.x - (line.x + line.width/2), 2) + 
-                Math.pow(player.y - (line.y + line.height/2), 2)
-            );
-            if (dist < 100) { // Si on est à moins de 100 pixels
-                console.log(`🏁 Distance à la ligne: ${dist.toFixed(1)}px, Dans la zone: ${isInside}`);
-            }
+            console.log(`🏁 ${player.pseudo} EST SUR LA LIGNE D'ARRIVÉE !`);
+            console.log(`   Position: (${Math.round(player.x)}, ${Math.round(player.y)})`);
+            console.log(`   wasOnFinishLine: ${player.wasOnFinishLine}`);
+            console.log(`   hasPassedStartLine: ${player.hasPassedStartLine}`);
+            console.log(`   Angle joueur: ${(player.angle * 180 / Math.PI).toFixed(1)}°`);
+        } else {
+            console.log(`📍 ${player.pseudo} est dans une zone de détection`);
         }
-        
-        return isInside;
     }
+    
+    return isInside;
+}
 
     isPointInRotatedRect(px, py, rect) {
         // Transformer le point dans le système de coordonnées du rectangle

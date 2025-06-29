@@ -313,13 +313,22 @@ checkWallCollisions(player) {
     const minDist = radius + 4;
     const minDistSq = minDist * minDist;
 
+    // Stocker la position précédente pour le rollback
+    const prevX = player.x;
+    const prevY = player.y;
+
     for (const curve of trackData.continuousCurves || []) {
         const points = curve.points;
         const len = points.length;
+        
+        // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
+        const segmentCount = curve.closed ? len : len - 1;
 
-        for (let i = 0; i < len; i++) {
+        for (let i = 0; i < segmentCount; i++) {
             const [x1, y1] = points[i];
-            const [x2, y2] = points[(i + 1) % len]; // boucle fermée
+            // Pour une courbe fermée, le dernier segment connecte au premier point
+            const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
+            const [x2, y2] = points[nextIndex];
 
             const dx = x2 - x1;
             const dy = y2 - y1;
@@ -342,23 +351,89 @@ checkWallCollisions(player) {
                 const nx = distX / dist;
                 const ny = distY / dist;
 
+                // Repousser le joueur hors du mur (PLUS FORT)
+                const penetration = minDist - dist;
+                player.x += nx * (penetration + 2); // +2 pixels supplémentaires
+                player.y += ny * (penetration + 2);
+
+                // Vecteur de vitesse du joueur
                 const vx = Math.cos(player.angle) * player.speed;
                 const vy = Math.sin(player.angle) * player.speed;
+                
+                // Produit scalaire pour déterminer l'angle d'impact
                 const dot = vx * nx + vy * ny;
+                
+                // Normaliser le vecteur du mur
+                const wallLength = Math.sqrt(dx * dx + dy * dy);
+                const wallDirX = dx / wallLength;
+                const wallDirY = dy / wallLength;
+                
+                // Angle entre la direction du joueur et le mur
+                const playerDirX = Math.cos(player.angle);
+                const playerDirY = Math.sin(player.angle);
+                const wallDot = Math.abs(playerDirX * wallDirX + playerDirY * wallDirY);
 
-                if (dot < -0.4) {
-                    // 🔁 Collision frontale
-                    player.speed *= 0.5;
-                    player.x += nx * (minDist - dist) * 0.1; // petit rebond
-                    player.y += ny * (minDist - dist) * 0.1;
+                if (dot < -0.5 && wallDot < 0.5) {
+                    // Collision frontale (angle > 60° avec le mur)
+                    player.speed *= -0.2; // Inverser la vitesse (rebond)
+                    
+                    // Rebond plus prononcé
+                    player.x += nx * 8; // Rebond de 8 pixels
+                    player.y += ny * 8;
+                    
+                    // Petite variation aléatoire de l'angle pour le réalisme
+                    player.angle += (Math.random() - 0.5) * 0.2;
+                    
+                } else if (Math.abs(dot) < 0.7) {
+                    // Frottement latéral (glissement le long du mur)
+                    
+                    // Projeter la vitesse sur la direction du mur
+                    const velocityAlongWall = vx * wallDirX + vy * wallDirY;
+                    
+                    // Nouvelle vitesse alignée avec le mur
+                    const newVx = wallDirX * velocityAlongWall * 0.85;
+                    const newVy = wallDirY * velocityAlongWall * 0.85;
+                    
+                    // Mettre à jour la vitesse et l'angle
+                    player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
+                    
+                    // Ajuster légèrement l'angle pour suivre le mur
+                    if (player.speed > 0.1) {
+                        const targetAngle = Math.atan2(newVy, newVx);
+                        const angleDiff = targetAngle - player.angle;
+                        
+                        // Normaliser la différence d'angle entre -PI et PI
+                        let normalizedDiff = angleDiff;
+                        while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
+                        while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
+                        
+                        // Appliquer progressivement le changement d'angle
+                        player.angle += normalizedDiff * 0.3;
+                    }
+                    
                 } else {
-                    // ➖ Frottement latéral
-                    player.speed *= 0.998; // frottement plus doux
-                    player.x += nx * (minDist - dist) * 0.15;
-                    player.y += ny * (minDist - dist) * 0.15;
+                    // Collision à angle rasant
+                    player.speed *= 0.95;
                 }
-
-                break; // collision traitée, on sort de la courbe
+                
+                // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
+                const finalDistX = player.x - closestX;
+                const finalDistY = player.y - closestY;
+                const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
+                
+                if (finalDistSq < minDistSq) {
+                    // Forcer la sortie du mur
+                    const pushDist = Math.sqrt(minDistSq) + 2;
+                    player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
+                    player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
+                }
+                
+                // Limiter la vitesse minimale
+                if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
+                    player.speed = 0;
+                }
+                
+                break; // Collision traitée
             }
             }
         }

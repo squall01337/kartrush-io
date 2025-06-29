@@ -262,29 +262,27 @@ class GameEngine {
         return interpolated ? { ...player, ...interpolated } : player;
     }
 
-    render() {
-        if (!this.track) return; // 👈 Idem ici, on ne rend rien tant que la map est absente
-        // OPTIMISATION: Utiliser le canvas hors-écran pour éviter le flickering
-        const ctx = this.offscreenCtx;
-        
-        // Effacer avec fillRect (plus rapide que clearRect)
-        ctx.fillStyle = this.track.background;
-        ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
-        
-        ctx.save();
-        ctx.scale(this.scale, this.scale);
-        ctx.translate(-this.camera.x, -this.camera.y);
-        
-        this.renderTrack(ctx);
-        this.renderPlayers(ctx);
-        
-        ctx.restore();
-        
-        // Copier le rendu final sur le canvas principal
-        this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-        
-        this.renderUI();
-    }
+render() {
+    if (!this.track) return;
+    const ctx = this.offscreenCtx;
+    
+    ctx.fillStyle = this.track.background;
+    ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
+    
+    ctx.save();
+    ctx.scale(this.scale, this.scale);
+    ctx.translate(-this.camera.x, -this.camera.y);
+    
+    this.renderTrack(ctx);
+    this.renderDebugElements(ctx); // AJOUTER CETTE LIGNE
+    this.renderPlayers(ctx);
+    
+    ctx.restore();
+    
+    this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+    
+    this.renderUI();
+}
 
     renderTrack(ctx) {
         // Chargement dynamique du fond depuis le JSON
@@ -447,6 +445,83 @@ class GameEngine {
             delete itemSlot.dataset.item;
         }
     }
+
+    renderDebugElements(ctx) {
+    // Dessiner les checkpoints en semi-transparent pour debug
+    if (this.track.checkpoints) {
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        
+        this.track.checkpoints.forEach((checkpoint, index) => {
+            ctx.save();
+            
+            // Centre du rectangle
+            const cx = checkpoint.x + checkpoint.width / 2;
+            const cy = checkpoint.y + checkpoint.height / 2;
+            
+            ctx.translate(cx, cy);
+            ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
+            
+            // Dessiner le rectangle
+            ctx.fillStyle = '#00FF00';
+            ctx.fillRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
+            
+            // Numéro du checkpoint
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${index + 1}`, 0, 0);
+            
+            // Flèche pour indiquer le sens
+            ctx.strokeStyle = '#FFFF00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-20, 0);
+            ctx.lineTo(20, 0);
+            ctx.lineTo(15, -5);
+            ctx.moveTo(20, 0);
+            ctx.lineTo(15, 5);
+            ctx.stroke();
+            
+            ctx.restore();
+        });
+        
+        ctx.restore();
+    }
+    
+    // Dessiner la ligne d'arrivée
+    if (this.track.finishLine) {
+        ctx.save();
+        ctx.globalAlpha = 0.5;
+        
+        const fl = this.track.finishLine;
+        const cx = fl.x + fl.width / 2;
+        const cy = fl.y + fl.height / 2;
+        
+        ctx.translate(cx, cy);
+        ctx.rotate((fl.angle || 0) * Math.PI / 180);
+        
+        // Pattern damier
+        const squareSize = 10;
+        const rows = Math.ceil(fl.height / squareSize);
+        const cols = Math.ceil(fl.width / squareSize);
+        
+        for (let i = 0; i < rows; i++) {
+            for (let j = 0; j < cols; j++) {
+                ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
+                ctx.fillRect(
+                    -fl.width/2 + j * squareSize, 
+                    -fl.height/2 + i * squareSize, 
+                    squareSize, 
+                    squareSize
+                );
+            }
+        }
+        
+        ctx.restore();
+    }
+}
 
     showFinalLapMessage() {
         const message = document.createElement('div');

@@ -47,8 +47,8 @@ const gameState = {
 const GAME_CONFIG = {
     MAX_PLAYERS_PER_ROOM: 8,
     MIN_PLAYERS_TO_START: 1,
-    LAPS_TO_WIN: 3,
-    TICK_RATE: 30, // Réduire à 20 FPS au lieu de 30
+    // LAPS_TO_WIN sera maintenant défini par la map
+    TICK_RATE: 30,
     TRACK_WIDTH: 1280,
     TRACK_HEIGHT: 720,
     KART_SIZE: 20,
@@ -56,7 +56,6 @@ const GAME_CONFIG = {
     ACCELERATION: 0.8,
     FRICTION: 0.92,
     TURN_SPEED: 0.28,
-    // OPTIMISATION: Zone de collision pour la grille spatiale
     COLLISION_GRID_SIZE: 100
 };
 
@@ -122,6 +121,8 @@ class Room {
         this.gameStartTime = null;
         this.lastUpdate = Date.now();
         this.gameLoop = null;
+        this.warningShown = false; // Pour n'afficher l'avertissement qu'une fois
+        this.raceSettings = null; // Sera défini depuis la map
     }
 
     addPlayer(player) {
@@ -150,6 +151,13 @@ class Room {
         this.gameStarted = true;
         this.gameStartTime = Date.now();
         
+        // Charger les paramètres de course depuis la map
+        this.raceSettings = trackData.raceSettings || {
+            laps: 3,
+            maxTime: 300000,
+            maxTimeWarning: 240000
+        };
+        
         // Positionner les joueurs aux points de départ
         const spawnPoints = (trackData && trackData.spawnPoints) || [];
 
@@ -163,6 +171,9 @@ class Room {
             player.lap = 0;
             player.finished = false;
             player.raceTime = 0;
+            player.finishTime = null;
+            player.checkpointsPassed.clear();
+            player.lastCheckpoint = -1;
             index++;
         }
         
@@ -183,29 +194,72 @@ class Room {
         this.gameStartTime = null;
     }
 
-update() {
-    const now = Date.now();
-    const deltaTime = (now - this.lastUpdate) / 1000;
-    this.lastUpdate = now;
+    update() {
+        const now = Date.now();
+        const deltaTime = (now - this.lastUpdate) / 1000;
+        this.lastUpdate = now;
+        
+        const raceTime = now - this.gameStartTime;
 
-    // Mettre à jour tous les joueurs + vérifier collision murs
-    for (let player of this.players.values()) {
-        if (!player.finished) {
-            player.update(deltaTime);
-            player.raceTime = now - this.gameStartTime;
-
-            // ✅ Collision avec murs ou courbes Bézier
-            this.checkWallCollisions(player);
+        // Vérifier le temps limite
+        if (this.raceSettings) {
+            // Avertissement de temps
+            if (!this.warningShown && raceTime >= this.raceSettings.maxTimeWarning) {
+                this.warningShown = true;
+                const remainingTime = Math.ceil((this.raceSettings.maxTime - raceTime) / 1000);
+                io.to(this.id).emit('timeWarning', { 
+                    remainingTime: remainingTime,
+                    message: `Attention ! Plus que ${remainingTime} secondes !`
+                });
+            }
+            
+            // Temps écoulé - fin de course forcée
+            if (raceTime >= this.raceSettings.maxTime) {
+                console.log('⏱️ Temps limite atteint !');
+                this.forceEndRace();
+                return;
+            }
         }
+
+        // Mettre à jour tous les joueurs + vérifier collision murs
+        for (let player of this.players.values()) {
+            if (!player.finished) {
+                player.update(deltaTime);
+                player.raceTime = now - this.gameStartTime;
+
+                // Collision avec murs ou courbes Bézier
+                this.checkWallCollisions(player);
+                
+                // Vérifier les checkpoints et la ligne d'arrivée
+                this.checkRaceProgress(player);
+            }
+        }
+
+        // Collision entre joueurs
+        this.checkPlayerCollisions();
+
+        // Positions et update client
+        this.updatePositions();
+        
+        // Vérifier si la course est terminée
+        this.checkRaceEnd();
+        
+        this.broadcastGameState();
     }
 
-    // ✅ Collision entre joueurs
-    this.checkPlayerCollisions();
-
-    // Positions et update client
-    this.updatePositions();
-    this.broadcastGameState();
-}
+    forceEndRace() {
+        console.log('⏱️ Course terminée - Temps limite atteint !');
+        
+        // Marquer tous les joueurs non finis comme DNF (Did Not Finish)
+        for (let player of this.players.values()) {
+            if (!player.finished) {
+                player.finished = true;
+                player.finishTime = null; // null = DNF
+            }
+        }
+        
+        this.endRace();
+    }
 
     updatePositions() {
         const activePlayers = Array.from(this.players.values()).filter(p => !p.finished);
@@ -217,6 +271,63 @@ update() {
         activePlayers.forEach((player, index) => {
             player.position = index + 1;
         });
+    }
+
+    checkRaceProgress(player) {
+        if (!trackData || !this.raceSettings) return;
+        
+        // Vérifier les checkpoints
+        if (trackData.checkpoints) {
+            trackData.checkpoints.forEach((checkpoint, index) => {
+                if (this.isPlayerCrossingLine(player, checkpoint)) {
+                    // Le joueur doit passer les checkpoints dans l'ordre
+                    if (index === player.lastCheckpoint + 1 || 
+                        (index === 0 && player.lastCheckpoint === trackData.checkpoints.length - 1)) {
+                        player.checkpointsPassed.add(index);
+                        player.lastCheckpoint = index;
+                        console.log(`${player.pseudo} a passé le checkpoint ${index + 1}`);
+                    }
+                }
+            });
+        }
+        
+        // Vérifier la ligne d'arrivée
+        if (trackData.finishLine && this.isPlayerCrossingLine(player, trackData.finishLine)) {
+            // Vérifier si tous les checkpoints ont été passés
+            const allCheckpointsPassed = !trackData.checkpoints || 
+                trackData.checkpoints.length === 0 || 
+                player.checkpointsPassed.size === trackData.checkpoints.length;
+            
+            if (allCheckpointsPassed && !player.finishLinePassed) {
+                player.finishLinePassed = true;
+                
+                // Valider le tour
+                player.lap++;
+                player.checkpointsPassed.clear();
+                player.lastCheckpoint = -1;
+                
+                console.log(`${player.pseudo} termine le tour ${player.lap}/${this.raceSettings.laps}`);
+                
+                // Vérifier si le joueur a terminé la course
+                if (player.lap >= this.raceSettings.laps) {
+                    player.finished = true;
+                    player.finishTime = player.raceTime;
+                    console.log(`🏁 ${player.pseudo} a terminé la course en ${this.formatTime(player.finishTime)}`);
+                    
+                    // Envoyer un événement spécial
+                    io.to(this.id).emit('playerFinished', {
+                        playerId: player.id,
+                        pseudo: player.pseudo,
+                        finishTime: player.finishTime,
+                        position: this.getFinishPosition()
+                    });
+                }
+            }
+        } else if (player.finishLinePassed && trackData.finishLine && 
+                   !this.isPlayerCrossingLine(player, trackData.finishLine)) {
+            // Réinitialiser le flag quand le joueur n'est plus sur la ligne
+            player.finishLinePassed = false;
+        }
     }
 
     checkPlayerCollisions() {
@@ -453,12 +564,58 @@ checkWallCollisions(player) {
                 position: p.position,
                 item: p.item,
                 finished: p.finished,
-                raceTime: p.raceTime
+                finishTime: p.finishTime,
+                raceTime: p.raceTime,
+                checkpointsPassed: Array.from(p.checkpointsPassed),
+                lapsToWin: this.raceSettings ? this.raceSettings.laps : 3
             })),
-            gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0
+            gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
+            totalLaps: this.raceSettings ? this.raceSettings.laps : 3,
+            maxTime: this.raceSettings ? this.raceSettings.maxTime : null,
+            remainingTime: this.raceSettings ? Math.max(0, this.raceSettings.maxTime - (Date.now() - this.gameStartTime)) : null
         };
 
         io.to(this.id).emit('gameUpdate', gameData);
+    }
+
+    getFinalResults() {
+        const results = Array.from(this.players.values()).map(player => ({
+            id: player.id,
+            pseudo: player.pseudo,
+            color: player.color,
+            finished: player.finished,
+            finishTime: player.finishTime,
+            lap: player.lap,
+            position: player.position,
+            dnf: player.finishTime === null && player.finished // Did Not Finish
+        }));
+        
+        // Trier par position finale
+        results.sort((a, b) => {
+            // D'abord ceux qui ont fini
+            if (a.finished && !b.finished) return -1;
+            if (!a.finished && b.finished) return 1;
+            
+            // Entre ceux qui ont fini avec un temps
+            if (a.finished && b.finished && a.finishTime && b.finishTime) {
+                return a.finishTime - b.finishTime;
+            }
+            
+            // DNF après ceux qui ont fini
+            if (a.dnf && !b.dnf) return 1;
+            if (!a.dnf && b.dnf) return -1;
+            
+            // Entre les DNF, par nombre de tours puis position
+            if (a.lap !== b.lap) return b.lap - a.lap;
+            return a.position - b.position;
+        });
+        
+        // Assigner les positions finales
+        results.forEach((result, index) => {
+            result.finalPosition = index + 1;
+        });
+        
+        return results;
     }
 }
 

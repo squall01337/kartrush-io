@@ -288,44 +288,12 @@ renderTrack(ctx) {
     if (trackBg) {
         ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
     } else {
-        // Fallback sans image : on dessine les murs
+        // Fallback sans image : fond uni seulement
         ctx.fillStyle = '#444444';
-        ctx.fillRect(0, 0, this.track.width, this.track.height); // fond uni
-
-        ctx.fillStyle = '#ffffff';
-        if (this.track.walls && this.track.walls.length > 0) {
-            this.track.walls.forEach(wall => {
-                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
-            });
-        }
+        ctx.fillRect(0, 0, this.track.width, this.track.height);
     }
-
-    // Ligne de départ (startLine)
-    if (this.track.startLine) {
-        ctx.strokeStyle = this.track.startLine.color || '#00ff00';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([10, 5]);
-        ctx.beginPath();
-        ctx.moveTo(this.track.startLine.x1, this.track.startLine.y1);
-        ctx.lineTo(this.track.startLine.x2, this.track.startLine.y2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
-
-    // Checkpoints
-    if (this.track.checkpoints && this.track.checkpoints.length > 0) {
-        ctx.strokeStyle = '#ffff00';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.beginPath();
-        this.track.checkpoints.forEach(checkpoint => {
-            ctx.moveTo(checkpoint.x1, checkpoint.y1);
-            ctx.lineTo(checkpoint.x2, checkpoint.y2);
-        });
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }   
 }
+
     renderPlayers(ctx) {
         // OPTIMISATION: Trier les joueurs une seule fois par distance à la caméra
         const sortedPlayers = [...this.gameState.players].sort((a, b) => {

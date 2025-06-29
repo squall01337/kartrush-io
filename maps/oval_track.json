@@ -6,13 +6,13 @@
   "background": "track_background",
   "spawnPoints": [
     {
-      "x": 100,
-      "y": 500,
+      "x": 995,
+      "y": 386,
       "angle": 0
     },
     {
-      "x": 410,
-      "y": 500,
+      "x": 1016,
+      "y": 385,
       "angle": 0
     },
     {

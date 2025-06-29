@@ -37,6 +37,9 @@ class GameEngine {
         this.fpsInterval = 1000 / this.targetFPS;
         this.then = Date.now();
         
+        // DEBUG
+        this.lastDebugTime = 0;
+        
         this.setupCanvas();
         this.preprocessSprites();
     }
@@ -262,27 +265,28 @@ class GameEngine {
         return interpolated ? { ...player, ...interpolated } : player;
     }
 
-render() {
-    if (!this.track) return;
-    const ctx = this.offscreenCtx;
-    
-    ctx.fillStyle = this.track.background;
-    ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
-    
-    ctx.save();
-    ctx.scale(this.scale, this.scale);
-    ctx.translate(-this.camera.x, -this.camera.y);
-    
-    this.renderTrack(ctx);
-    this.renderDebugElements(ctx); // AJOUTER CETTE LIGNE
-    this.renderPlayers(ctx);
-    
-    ctx.restore();
-    
-    this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-    
-    this.renderUI();
-}
+    render() {
+        if (!this.track) return;
+        const ctx = this.offscreenCtx;
+        
+        ctx.fillStyle = this.track.background;
+        ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
+        
+        ctx.save();
+        ctx.scale(this.scale, this.scale);
+        ctx.translate(-this.camera.x, -this.camera.y);
+        
+        this.renderTrack(ctx);
+        this.renderDetectionZones(ctx); // AJOUTER CETTE LIGNE
+        this.renderDebugElements(ctx);
+        this.renderPlayers(ctx);
+        
+        ctx.restore();
+        
+        this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+        
+        this.renderUI();
+    }
 
     renderTrack(ctx) {
         // Chargement dynamique du fond depuis le JSON
@@ -294,6 +298,234 @@ render() {
             // Fallback sans image : fond uni seulement
             ctx.fillStyle = '#444444';
             ctx.fillRect(0, 0, this.track.width, this.track.height);
+        }
+    }
+
+    renderDetectionZones(ctx) {
+        // Afficher les zones de détection élargies
+        const margin = 10; // Même marge que dans le serveur
+        
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.strokeStyle = '#00FFFF';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        
+        // Zones des checkpoints
+        if (this.track.checkpoints) {
+            this.track.checkpoints.forEach((checkpoint) => {
+                ctx.save();
+                
+                const cx = checkpoint.x + checkpoint.width / 2;
+                const cy = checkpoint.y + checkpoint.height / 2;
+                
+                ctx.translate(cx, cy);
+                ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
+                
+                // Zone de détection élargie
+                ctx.strokeRect(
+                    -checkpoint.width/2 - margin, 
+                    -checkpoint.height/2 - margin, 
+                    checkpoint.width + margin * 2, 
+                    checkpoint.height + margin * 2
+                );
+                
+                ctx.restore();
+            });
+        }
+        
+        // Zone de la ligne d'arrivée
+        if (this.track.finishLine) {
+            const fl = this.track.finishLine;
+            ctx.save();
+            
+            const cx = fl.x + fl.width / 2;
+            const cy = fl.y + fl.height / 2;
+            
+            ctx.translate(cx, cy);
+            ctx.rotate((fl.angle || 0) * Math.PI / 180);
+            
+            ctx.strokeStyle = '#FF00FF';
+            ctx.strokeRect(
+                -fl.width/2 - margin, 
+                -fl.height/2 - margin, 
+                fl.width + margin * 2, 
+                fl.height + margin * 2
+            );
+            
+            ctx.restore();
+        }
+        
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
+
+    renderDebugElements(ctx) {
+        // Récupérer le joueur actuel
+        const currentPlayer = this.gameState.players.find(p => p.id === this.playerId);
+        
+        // Dessiner les checkpoints en semi-transparent pour debug
+        if (this.track.checkpoints) {
+            ctx.save();
+            
+            this.track.checkpoints.forEach((checkpoint, index) => {
+                ctx.save();
+                
+                // Centre du rectangle
+                const cx = checkpoint.x + checkpoint.width / 2;
+                const cy = checkpoint.y + checkpoint.height / 2;
+                
+                ctx.translate(cx, cy);
+                ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
+                
+                // Déterminer la couleur selon l'état
+                let fillColor = '#FF0000'; // Rouge par défaut (non passé)
+                let alpha = 0.3;
+                
+                if (currentPlayer) {
+                    if (!currentPlayer.hasPassedStartLine) {
+                        // Pas encore commencé la course
+                        fillColor = '#808080'; // Gris
+                    } else if (index < currentPlayer.nextCheckpoint) {
+                        // Checkpoint déjà passé
+                        fillColor = '#00FF00'; // Vert
+                        alpha = 0.2;
+                    } else if (index === currentPlayer.nextCheckpoint) {
+                        // Prochain checkpoint attendu
+                        fillColor = '#FFFF00'; // Jaune
+                        alpha = 0.5;
+                        
+                        // Animation pulse pour le prochain checkpoint
+                        const pulse = Math.sin(Date.now() * 0.005) * 0.2 + 0.5;
+                        alpha = pulse;
+                    }
+                }
+                
+                ctx.globalAlpha = alpha;
+                
+                // Dessiner le rectangle
+                ctx.fillStyle = fillColor;
+                ctx.fillRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
+                
+                // Bordure
+                ctx.globalAlpha = 0.8;
+                ctx.strokeStyle = fillColor;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
+                
+                // Numéro du checkpoint
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 20px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(`${index + 1}`, 0, 0);
+                
+                // Flèche pour indiquer le sens
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(-20, 0);
+                ctx.lineTo(20, 0);
+                ctx.lineTo(15, -5);
+                ctx.moveTo(20, 0);
+                ctx.lineTo(15, 5);
+                ctx.stroke();
+                
+                ctx.restore();
+            });
+            
+            ctx.restore();
+        }
+        
+        // Dessiner la ligne d'arrivée
+        if (this.track.finishLine) {
+            ctx.save();
+            
+            const fl = this.track.finishLine;
+            const cx = fl.x + fl.width / 2;
+            const cy = fl.y + fl.height / 2;
+            
+            ctx.translate(cx, cy);
+            ctx.rotate((fl.angle || 0) * Math.PI / 180);
+            
+            // Déterminer l'opacité selon l'état
+            let alpha = 0.5;
+            if (currentPlayer && !currentPlayer.hasPassedStartLine) {
+                alpha = 0.8; // Plus visible au début
+            } else if (currentPlayer && currentPlayer.nextCheckpoint === this.track.checkpoints.length) {
+                // Tous les checkpoints passés, ligne d'arrivée active
+                alpha = 0.8;
+                
+                // Animation pour attirer l'attention
+                const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 0.8;
+                alpha = pulse;
+            }
+            
+            ctx.globalAlpha = alpha;
+            
+            // Pattern damier
+            const squareSize = 10;
+            const rows = Math.ceil(fl.height / squareSize);
+            const cols = Math.ceil(fl.width / squareSize);
+            
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
+                    ctx.fillRect(
+                        -fl.width/2 + j * squareSize, 
+                        -fl.height/2 + i * squareSize, 
+                        squareSize, 
+                        squareSize
+                    );
+                }
+            }
+            
+            ctx.restore();
+        }
+        
+        // Afficher l'état du joueur en haut à droite
+        if (currentPlayer) {
+            ctx.save();
+            ctx.resetTransform(); // Ignorer la caméra
+            
+            const infoX = this.canvas.width - 200 * this.scale;
+            const infoY = 20 * this.scale;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(infoX - 10, infoY - 5, 190 * this.scale, 80 * this.scale);
+            
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = `${14 * this.scale}px Arial`;
+            
+            // État de la course
+            if (!currentPlayer.hasPassedStartLine) {
+                ctx.fillText('⏸️ Passez la ligne de départ', infoX, infoY + 15 * this.scale);
+            } else {
+                ctx.fillText(`✅ Checkpoint: ${currentPlayer.nextCheckpoint}/${this.track.checkpoints.length}`, infoX, infoY + 15 * this.scale);
+                ctx.fillText(`🏁 Tour: ${currentPlayer.lap}/${currentPlayer.lapsToWin}`, infoX, infoY + 35 * this.scale);
+                
+                // Barre de progression des checkpoints
+                const barWidth = 170 * this.scale;
+                const barHeight = 10 * this.scale;
+                const barY = infoY + 50 * this.scale;
+                
+                // Fond de la barre
+                ctx.fillStyle = '#333333';
+                ctx.fillRect(infoX, barY, barWidth, barHeight);
+                
+                // Progression
+                const progress = currentPlayer.nextCheckpoint / this.track.checkpoints.length;
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(infoX, barY, barWidth * progress, barHeight);
+                
+                // Bordure
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(infoX, barY, barWidth, barHeight);
+            }
+            
+            ctx.restore();
         }
     }
 
@@ -446,83 +678,6 @@ render() {
         }
     }
 
-    renderDebugElements(ctx) {
-    // Dessiner les checkpoints en semi-transparent pour debug
-    if (this.track.checkpoints) {
-        ctx.save();
-        ctx.globalAlpha = 0.3;
-        
-        this.track.checkpoints.forEach((checkpoint, index) => {
-            ctx.save();
-            
-            // Centre du rectangle
-            const cx = checkpoint.x + checkpoint.width / 2;
-            const cy = checkpoint.y + checkpoint.height / 2;
-            
-            ctx.translate(cx, cy);
-            ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
-            
-            // Dessiner le rectangle
-            ctx.fillStyle = '#00FF00';
-            ctx.fillRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
-            
-            // Numéro du checkpoint
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 20px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(`${index + 1}`, 0, 0);
-            
-            // Flèche pour indiquer le sens
-            ctx.strokeStyle = '#FFFF00';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(-20, 0);
-            ctx.lineTo(20, 0);
-            ctx.lineTo(15, -5);
-            ctx.moveTo(20, 0);
-            ctx.lineTo(15, 5);
-            ctx.stroke();
-            
-            ctx.restore();
-        });
-        
-        ctx.restore();
-    }
-    
-    // Dessiner la ligne d'arrivée
-    if (this.track.finishLine) {
-        ctx.save();
-        ctx.globalAlpha = 0.5;
-        
-        const fl = this.track.finishLine;
-        const cx = fl.x + fl.width / 2;
-        const cy = fl.y + fl.height / 2;
-        
-        ctx.translate(cx, cy);
-        ctx.rotate((fl.angle || 0) * Math.PI / 180);
-        
-        // Pattern damier
-        const squareSize = 10;
-        const rows = Math.ceil(fl.height / squareSize);
-        const cols = Math.ceil(fl.width / squareSize);
-        
-        for (let i = 0; i < rows; i++) {
-            for (let j = 0; j < cols; j++) {
-                ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
-                ctx.fillRect(
-                    -fl.width/2 + j * squareSize, 
-                    -fl.height/2 + i * squareSize, 
-                    squareSize, 
-                    squareSize
-                );
-            }
-        }
-        
-        ctx.restore();
-    }
-}
-
     showFinalLapMessage() {
         const message = document.createElement('div');
         message.className = 'final-lap-message';
@@ -558,6 +713,21 @@ render() {
 
     updateGameState(gameData) {
         this.gameState = gameData;
+        
+        // DEBUG: Afficher l'état du joueur actuel
+        const myPlayer = gameData.players.find(p => p.id === this.playerId);
+        if (myPlayer) {
+            // Log toutes les 60 frames (1 seconde)
+            if (!this.lastDebugTime || Date.now() - this.lastDebugTime > 1000) {
+                console.log('🎮 État client:', {
+                    position: `(${Math.round(myPlayer.x)}, ${Math.round(myPlayer.y)})`,
+                    hasPassedStartLine: myPlayer.hasPassedStartLine,
+                    nextCheckpoint: myPlayer.nextCheckpoint,
+                    lap: myPlayer.lap
+                });
+                this.lastDebugTime = Date.now();
+            }
+        }
         
         // Nettoyer l'interpolation pour les joueurs qui ont quitté
         const currentIds = new Set(gameData.players.map(p => p.id));

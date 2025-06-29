@@ -10,7 +10,7 @@
     "maxTimeWarning": 240000
   },
   "spawnPoints": [
-    {"x": 588, "y": 545, "angle": 0}
+    {"x": 523, "y": 504, "angle": 0}
   ],
   "walls": [
   ],
@@ -27,7 +27,7 @@
     {"x": 374, "y": 215, "width": 20, "height": 100, "angle": 0},
     {"x": 392.0, "y": 410.0, "width": 20, "height": 100, "angle": 19.29004621918874}
   ],
-  "finishLine": {"x": 688, "y": 538, "width": 10, "height": 100, "angle": 0},
+"finishLine": {"x": 678, "y": 488, "width": 30, "height": 150, "angle": 0},
   "boosters": [
   ],
   "items": [

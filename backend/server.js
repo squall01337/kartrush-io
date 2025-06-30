@@ -704,34 +704,36 @@ class Room {
             raceTime: Date.now() - this.gameStartTime
         });
         
-        // Démarrer le timer de 10 secondes pour le rematch
-        this.rematchTimer = setTimeout(() => {
-            // Ceux qui ont voté rematch restent, les autres sont kickés
-            const playersToRemove = [];
-            
-            for (let [playerId, player] of this.players) {
-                if (!this.rematchVotes.has(playerId)) {
-                    playersToRemove.push(playerId);
+        // Démarrer le timer de 10 secondes pour le rematch APRÈS le délai de 2 secondes
+        setTimeout(() => {
+            this.rematchTimer = setTimeout(() => {
+                // Ceux qui ont voté rematch restent, les autres sont kickés
+                const playersToRemove = [];
+                
+                for (let [playerId, player] of this.players) {
+                    if (!this.rematchVotes.has(playerId)) {
+                        playersToRemove.push(playerId);
+                    }
                 }
-            }
-            
-            // Kicker les joueurs qui n'ont pas voté
-            for (let playerId of playersToRemove) {
-                const socket = io.sockets.sockets.get(playerId);
-                if (socket) {
-                    socket.emit('kickedFromLobby', { reason: 'Pas de vote pour rejouer' });
-                    socket.leave(this.id);
+                
+                // Kicker les joueurs qui n'ont pas voté
+                for (let playerId of playersToRemove) {
+                    const socket = io.sockets.sockets.get(playerId);
+                    if (socket) {
+                        socket.emit('kickedFromLobby', { reason: 'Pas de vote pour rejouer' });
+                        socket.leave(this.id);
+                    }
+                    this.removePlayer(playerId);
                 }
-                this.removePlayer(playerId);
-            }
-            
-            // Si il reste des joueurs, retourner au lobby
-            if (this.players.size > 0) {
-                this.resetForNewRace();
-                io.to(this.id).emit('returnToLobby');
-                broadcastPlayersList(this);
-            }
-        }, 10000);
+                
+                // Si il reste des joueurs, retourner au lobby
+                if (this.players.size > 0) {
+                    this.resetForNewRace();
+                    io.to(this.id).emit('returnToLobby');
+                    broadcastPlayersList(this);
+                }
+            }, 10000);
+        }, 2000); // Attendre 2 secondes comme le client
     }
 
     formatTime(ms) {

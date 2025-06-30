@@ -848,18 +848,18 @@ class GameClient {
         
         document.getElementById('results').appendChild(timerDiv);
         
+        // Afficher immédiatement 10s
+        timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
+        
         const intervalId = setInterval(() => {
-            timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
+            timeLeft--;
             if (timeLeft <= 0) {
                 clearInterval(intervalId);
-                timerDiv.remove();
+                timerDiv.textContent = `Retour au lobby...`;
             } else {
-                timeLeft--;
+                timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
             }
         }, 1000);
-        
-        // Commencer avec l'affichage immédiat
-        timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
     }
 
     // Méthode générique pour les notifications

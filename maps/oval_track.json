@@ -1,12 +1,12 @@
 {
   "id": "lava_test",
-  "name": "azertyu",
+  "name": "Night City",
   "width": 1280,
   "height": 720,
   "music": "assets/audio/lava_theme.mp3",
   "background": "assets/lava_background.png",
   "raceSettings": {
-    "laps": 5,
+    "laps": 1,
     "maxTime": 300000,
     "maxTimeWarning": 240000
   },

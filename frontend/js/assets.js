@@ -30,29 +30,6 @@ class AssetManager {
         }
     }
 
-    // Nouvelle méthode pour charger les assets d'une map spécifique
-    async loadMapAssets(mapData) {
-        const promises = [];
-        
-        // Charger le background si spécifié
-        if (mapData.background && mapData.background.endsWith('.png')) {
-            const backgroundName = `map_background_${mapData.id}`;
-            promises.push(this.loadImage(backgroundName, mapData.background));
-        }
-        
-        // On pourrait aussi charger d'autres assets spécifiques à la map ici
-        // Par exemple: des textures spéciales, des sprites d'obstacles, etc.
-        
-        try {
-            await Promise.all(promises);
-            console.log(`✅ Assets de la map ${mapData.id} chargés`);
-            return true;
-        } catch (error) {
-            console.error(`❌ Erreur lors du chargement des assets de la map ${mapData.id}:`, error);
-            return false;
-        }
-    }
-
     loadImage(name, path) {
         return new Promise((resolve, reject) => {
             const img = new Image();

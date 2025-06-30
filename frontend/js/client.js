@@ -292,8 +292,31 @@ class GameClient {
         this.socket.on('mapData', (mapData) => {
             console.log('📦 Map reçue :', mapData);
             this.mapData = mapData;
-            if (this.gameEngine) {
-                this.gameEngine.setMapData(mapData);
+            
+            // Précharger l'image de background si elle existe
+            if (mapData.background && mapData.background.endsWith('.png')) {
+                console.log('🖼️ Préchargement du background:', mapData.background);
+                const img = new Image();
+                img.onload = () => {
+                    console.log('✅ Background préchargé avec succès');
+                    // Maintenant que l'image est chargée, on peut la passer au gameEngine
+                    if (this.gameEngine) {
+                        this.gameEngine.setMapData(mapData);
+                    }
+                };
+                img.onerror = () => {
+                    console.error('❌ Erreur de préchargement du background');
+                    // Même en cas d'erreur, on passe les données
+                    if (this.gameEngine) {
+                        this.gameEngine.setMapData(mapData);
+                    }
+                };
+                img.src = mapData.background;
+            } else {
+                // Pas d'image à précharger
+                if (this.gameEngine) {
+                    this.gameEngine.setMapData(mapData);
+                }
             }
         });
 
@@ -420,6 +443,10 @@ class GameClient {
         // Nouveau : Rematch qui démarre
         this.socket.on('rematchStarting', (data) => {
             this.rematchVotes = 0;
+            
+            // Nettoyer les notifications avant de retourner au lobby
+            this.cleanupGameNotifications();
+            
             this.showScreen('lobby');
             
             // Arrêter la musique si elle joue encore
@@ -1166,6 +1193,10 @@ class GameClient {
 
     startGameCountdown() {
         this.showScreen('game');
+        
+        // Nettoyer toutes les notifications restantes de la partie précédente
+        this.cleanupGameNotifications();
+        
         this.initializeGame();
 
         // Appliquer les données de la map si elles ont déjà été reçues
@@ -1203,6 +1234,24 @@ class GameClient {
                 clearInterval(countdownInterval);
             }
         }, 1000);
+    }
+
+    // Nouvelle méthode pour nettoyer toutes les notifications du jeu
+    cleanupGameNotifications() {
+        const gameElement = document.getElementById('game');
+        if (!gameElement) return;
+        
+        // Sélectionner et supprimer toutes les notifications
+        const notifications = gameElement.querySelectorAll(
+            '.personal-finish, .finish-notification, .game-notification, ' +
+            '.checkpoint-notification, .lap-notification, .time-warning, .final-lap-message'
+        );
+        
+        notifications.forEach(notification => {
+            notification.remove();
+        });
+        
+        console.log('🧹 Nettoyage des notifications:', notifications.length, 'éléments supprimés');
     }
 
     initializeGame() {

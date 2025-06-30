@@ -94,32 +94,39 @@ class GameEngine {
     }
 
         setMapData(mapData) {
-        this.setTrack(mapData);
+            this.setTrack(mapData);
 
-        // 🎵 Gérer la musique de la map
-        if (this.music) {
-            this.music.pause();
-            this.music = null;
-        }
+            // 🎵 Gérer la musique de la map
+            if (this.music) {
+                this.music.pause();
+                this.music = null;
+            }
 
-        if (mapData.music) {
-            this.music = new Audio(mapData.music);
-            this.music.loop = true;
-            this.music.volume = 0.5;
-            this.music.play().catch(e => {
-                console.warn('🔇 Musique bloquée par lautoplay. Lutilisateur doit interagir avec la page.');
-            });
+            if (mapData.music) {
+                this.music = new Audio(mapData.music);
+                this.music.loop = true;
+                this.music.volume = 0.5;
+                this.music.play().catch(e => {
+                    console.warn('🔇 Musique bloquée par lautoplay. Lutilisateur doit interagir avec la page.');
+                });
+            }
+            
+            // 🖼️ Charger le background de la map immédiatement
+            if (mapData.background && mapData.background.endsWith('.png')) {
+                const img = new Image();
+                img.onload = () => {
+                    this.backgroundImage = img;
+                    console.log('✅ Background de la map chargé:', mapData.background);
+                };
+                img.onerror = () => {
+                    console.error('❌ Erreur de chargement du background:', mapData.background);
+                    this.backgroundImage = null;
+                };
+                img.src = mapData.background;
+            } else {
+                this.backgroundImage = null;
+            }
         }
-        
-        // 🖼️ Charger les assets de la map (background, etc.)
-        if (window.assetManager) {
-            window.assetManager.loadMapAssets(mapData).then(success => {
-                if (success) {
-                    console.log('✅ Assets de la map chargés');
-                }
-            });
-        }
-    }
 
     cacheProcessedSprite(color, kartSprite) {
         const finalSize = 28;
@@ -300,18 +307,20 @@ class GameEngine {
         this.renderUI();
     }
 
-    renderTrack(ctx) {
-        // Chargement dynamique du fond depuis le JSON
-        const bgName = this.track.background || 'track_background';
-        const trackBg = window.assetManager.getImage(bgName);
-        if (trackBg) {
-            ctx.drawImage(trackBg, 0, 0, this.track.width, this.track.height);
-        } else {
-            // Fallback sans image : fond uni seulement
-            ctx.fillStyle = '#444444';
-            ctx.fillRect(0, 0, this.track.width, this.track.height);
-        }
+  renderTrack(ctx) {
+    // Si on a une image de background chargée
+    if (this.backgroundImage) {
+        ctx.drawImage(this.backgroundImage, 0, 0, this.track.width, this.track.height);
+    } else if (this.track.background && !this.track.background.endsWith('.png')) {
+        // Si c'est une couleur (ancien format)
+        ctx.fillStyle = this.track.background;
+        ctx.fillRect(0, 0, this.track.width, this.track.height);
+    } else {
+        // Fallback : fond gris si l'image n'est pas encore chargée
+        ctx.fillStyle = '#444444';
+        ctx.fillRect(0, 0, this.track.width, this.track.height);
     }
+}
 
     // Méthode pour afficher les lignes de détection
     renderDetectionZones(ctx) {

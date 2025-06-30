@@ -584,3 +584,229 @@ button:disabled {
     letter-spacing: normal;
     white-space: nowrap;
 }
+
+/* ===== NOUVEAUX STYLES ÉTAPE 1 ===== */
+
+/* Styles pour le timer de rematch */
+.rematch-timer {
+    border: 2px solid #ff6b6b;
+    animation: timerPulse 1s infinite;
+}
+
+@keyframes timerPulse {
+    0%, 100% {
+        border-color: #ff6b6b;
+    }
+    50% {
+        border-color: #ffaa44;
+    }
+}
+
+/* Amélioration du bouton de l'hôte */
+#startGame.host-button {
+    background: linear-gradient(45deg, #ffd700, #ffed4e);
+    color: #333;
+    font-size: 1.1em;
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+}
+
+#startGame.host-button:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(255, 215, 0, 0.6);
+}
+
+/* Styles pour les votes de rematch */
+.results-actions {
+    margin-top: 30px;
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+}
+
+#playAgain {
+    position: relative;
+    overflow: hidden;
+}
+
+#playAgain.voted {
+    background: linear-gradient(45deg, #4ecdc4, #44a3aa);
+}
+
+#playAgain.voted::after {
+    content: '✓';
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.2em;
+}
+
+/* Indicateur d'hôte dans la liste des joueurs */
+.player-item.is-host {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 215, 0, 0.05));
+    border: 1px solid rgba(255, 215, 0, 0.3);
+}
+
+/* Badge d'hôte animé */
+.host-badge {
+    display: inline-block;
+    animation: crownFloat 2s ease-in-out infinite;
+}
+
+@keyframes crownFloat {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-3px);
+    }
+}
+
+/* Notification de changement d'hôte */
+.host-change-notification {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 215, 0, 0.9);
+    color: #333;
+    padding: 20px 40px;
+    border-radius: 20px;
+    font-size: 1.3em;
+    font-weight: bold;
+    z-index: 1000;
+    animation: hostChangeZoom 0.6s ease-out;
+}
+
+@keyframes hostChangeZoom {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+/* États du bouton démarrer selon le rôle */
+.lobby-actions {
+    margin-top: 30px;
+    text-align: center;
+}
+
+#startGame.waiting {
+    background: linear-gradient(45deg, #808080, #a0a0a0);
+    cursor: wait;
+}
+
+#startGame.ready {
+    background: linear-gradient(45deg, #4ecdc4, #45b7d1);
+}
+
+/* Amélioration de l'affichage du statut dans le lobby */
+.player-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-left: auto;
+}
+
+.status-icon {
+    font-size: 1.2em;
+}
+
+.status-text {
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
+/* Animation pour le bouton prêt */
+@keyframes readyPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+#startGame:not(:disabled):not(.waiting) {
+    animation: readyPulse 2s ease-in-out infinite;
+}
+
+/* Notifications de jeu */
+.game-notification {
+    pointer-events: none;
+}
+
+/* Styles pour les notifications de fin */
+.finish-notification {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+}
+
+.finish-position {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #ffd700;
+}
+
+.finish-player {
+    flex: 1;
+}
+
+.finish-time {
+    font-family: monospace;
+    font-size: 1.1em;
+}
+
+/* Message personnel de fin */
+.personal-finish {
+    pointer-events: none;
+}
+
+.finish-position-big {
+    font-size: 3em;
+    font-weight: bold;
+    color: #ffd700;
+    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+    margin-bottom: 20px;
+}
+
+.finish-time-big {
+    font-size: 2em;
+    font-family: monospace;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+@keyframes finishZoom {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Animation pour les notifications */
+@keyframes notificationSlide {
+    0% {
+        transform: translateX(-50%) translateY(-20px);
+        opacity: 0;
+    }
+    100% {
+        transform: translateX(-50%) translateY(0);
+        opacity: 1;
+    }
+}

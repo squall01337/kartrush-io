@@ -172,7 +172,8 @@ class Player {
         this.raceTime = 0;
         this.finishTime = null;
         this.finished = false;
-        this.ready = true;
+        this.ready = false;
+        this.isHost = false; // Nouveau : marquer si c'est l'hôte
         
         // Position précédente pour la détection de franchissement
         this.lastX = this.x;
@@ -233,6 +234,21 @@ class Room {
         this.gameLoop = null;
         this.warningShown = false;
         this.raceSettings = null;
+        this.mapName = 'lava_track'; // Map par défaut
+        this.rematchVotes = new Set(); // Nouveaux votes pour rejouer
+        this.rematchTimer = null; // Timer pour le rematch
+    }
+
+    // Nouvelle méthode pour vérifier si l'hôte peut démarrer
+    canHostStart() {
+        if (this.host && this.players.size >= GAME_CONFIG.MIN_PLAYERS_TO_START && !this.gameStarted) {
+            // L'hôte est toujours considéré comme prêt
+            for (let player of this.players.values()) {
+                if (player.id !== this.host && !player.ready) return false;
+            }
+            return true;
+        }
+        return false;
     }
 
     addPlayer(player) {
@@ -240,19 +256,108 @@ class Room {
             return false;
         }
         this.players.set(player.id, player);
+        
+        // Si c'est le premier joueur, il devient l'hôte
+        if (!this.host && this.players.size === 1) {
+            this.host = player.id;
+            player.isHost = true;
+            player.ready = true; // L'hôte est toujours prêt
+        }
+        
         return true;
     }
 
     removePlayer(playerId) {
+        const wasHost = this.host === playerId;
         this.players.delete(playerId);
+        
+        // Nettoyer les votes de rematch
+        this.rematchVotes.delete(playerId);
+        
         if (this.players.size === 0) {
             this.stopGame();
+            if (this.rematchTimer) {
+                clearTimeout(this.rematchTimer);
+                this.rematchTimer = null;
+            }
+        } else if (wasHost) {
+            // Transférer l'hôte au premier joueur disponible
+            const newHost = this.players.keys().next().value;
+            this.host = newHost;
+            
+            // Marquer le nouveau hôte
+            const newHostPlayer = this.players.get(newHost);
+            if (newHostPlayer) {
+                newHostPlayer.isHost = true;
+                newHostPlayer.ready = true; // Le nouvel hôte est automatiquement prêt
+            }
+            
+            // Notifier le nouveau hôte
+            io.to(this.id).emit('hostChanged', { newHostId: newHost });
         }
     }
 
     canStart() {
         return this.players.size >= GAME_CONFIG.MIN_PLAYERS_TO_START && 
                !this.gameStarted;
+    }
+
+    // Nouvelle méthode pour réinitialiser la room après une course
+    resetForNewRace() {
+        this.gameStarted = false;
+        this.gameStartTime = null;
+        this.warningShown = false;
+        this.rematchVotes.clear();
+        
+        // Réinitialiser l'état ready de tous les joueurs (sauf l'hôte)
+        for (let player of this.players.values()) {
+            player.ready = player.isHost ? true : false;
+            player.finished = false;
+            player.finishTime = null;
+            player.lap = 0;
+            player.nextCheckpoint = 0;
+            player.hasPassedStartLine = false;
+            player.lastCheckpointTime = {};
+            player.lastFinishLineTime = 0;
+            player.raceTime = 0;
+        }
+    }
+
+    // Nouvelle méthode pour gérer les votes de rematch
+    voteRematch(playerId) {
+        if (!this.players.has(playerId)) return;
+        
+        this.rematchVotes.add(playerId);
+        
+        // Informer tous les joueurs du vote
+        io.to(this.id).emit('rematchVote', {
+            playerId: playerId,
+            votes: this.rematchVotes.size,
+            total: this.players.size
+        });
+        
+        // Si tous ont voté pour rejouer
+        if (this.rematchVotes.size === this.players.size) {
+            this.startRematch();
+        }
+    }
+
+    // Nouvelle méthode pour démarrer le rematch
+    startRematch() {
+        if (this.rematchTimer) {
+            clearTimeout(this.rematchTimer);
+            this.rematchTimer = null;
+        }
+        
+        this.resetForNewRace();
+        
+        // Recharger la map et informer les clients
+        io.to(this.id).emit('rematchStarting', {
+            mapName: this.mapName
+        });
+        
+        // Renvoyer au lobby
+        broadcastPlayersList(this);
     }
 
     startGame() {
@@ -546,6 +651,7 @@ class Room {
         
         // Si tous ont terminé et qu'au moins un a commencé
         if (allFinished && hasActivePlayer) {
+            // Ne PAS attendre ici, endRace directement
             this.endRace();
         }
     }
@@ -564,6 +670,35 @@ class Room {
             results: results,
             raceTime: Date.now() - this.gameStartTime
         });
+        
+        // Démarrer le timer de 10 secondes pour le rematch
+        this.rematchTimer = setTimeout(() => {
+            // Ceux qui ont voté rematch restent, les autres sont kickés
+            const playersToRemove = [];
+            
+            for (let [playerId, player] of this.players) {
+                if (!this.rematchVotes.has(playerId)) {
+                    playersToRemove.push(playerId);
+                }
+            }
+            
+            // Kicker les joueurs qui n'ont pas voté
+            for (let playerId of playersToRemove) {
+                const socket = io.sockets.sockets.get(playerId);
+                if (socket) {
+                    socket.emit('kickedFromLobby', { reason: 'Pas de vote pour rejouer' });
+                    socket.leave(this.id);
+                }
+                this.removePlayer(playerId);
+            }
+            
+            // Si il reste des joueurs, retourner au lobby
+            if (this.players.size > 0) {
+                this.resetForNewRace();
+                io.to(this.id).emit('returnToLobby');
+                broadcastPlayersList(this);
+            }
+        }, 10000);
     }
 
     formatTime(ms) {
@@ -911,50 +1046,51 @@ io.on('connection', (socket) => {
     console.log(`Joueur connecté: ${socket.id}`);
 
     socket.on('joinGame', (data) => {
-    const { pseudo, color } = data;
-    
-    // Créer le joueur
-    const player = new Player(socket.id, pseudo, color);
-    gameState.players.set(socket.id, player);
-    
-    // Trouver ou créer une room publique
-    let room = findAvailableRoom();
-    if (!room) {
-        // Créer une nouvelle room publique avec un code court
-        const roomCode = generateRoomCode();
-        room = new Room(roomCode, false); // Utiliser le code comme ID même pour les publiques
-        room.displayCode = roomCode; // Stocker le code pour l'affichage
-        gameState.rooms.set(roomCode, room); // Utiliser le code comme clé
-        console.log('🌍 Room publique créée - Code:', roomCode);
-    }
-    
-    // Ajouter le joueur à la room
-    if (room.addPlayer(player)) {
-        socket.join(room.id);
-
-        // Envoyer les infos de la room avec le code
-        socket.emit('joinedRoom', {
-            roomId: room.id,
-            playerId: player.id,
-            isPrivate: false,
-            roomCode: room.id // Le code est l'ID pour toutes les rooms maintenant
-        });
-
-        // ✅ Envoyer la map au joueur
-        socket.emit('mapData', trackData);
-
-        // Notifier les autres joueurs
-        socket.to(room.id).emit('playerJoined', {
-            id: player.id,
-            pseudo: player.pseudo,
-            color: player.color
-        });
+        const { pseudo, color } = data;
         
-        // Envoyer la liste des joueurs
-        broadcastPlayersList(room);
-    } else {
-        socket.emit('error', { message: 'Room pleine' });
-    }
+        // Créer le joueur
+        const player = new Player(socket.id, pseudo, color);
+        gameState.players.set(socket.id, player);
+        
+        // Trouver ou créer une room publique
+        let room = findAvailableRoom();
+        if (!room) {
+            // Créer une nouvelle room publique avec un code court
+            const roomCode = generateRoomCode();
+            room = new Room(roomCode, false);
+            room.host = player.id; // Le créateur devient l'hôte
+            gameState.rooms.set(roomCode, room);
+            console.log('🌍 Room publique créée - Code:', roomCode);
+        }
+        
+        // Ajouter le joueur à la room
+        if (room.addPlayer(player)) {
+            socket.join(room.id);
+
+            // Envoyer les infos de la room avec le statut d'hôte
+            socket.emit('joinedRoom', {
+                roomId: room.id,
+                playerId: player.id,
+                isPrivate: false,
+                roomCode: room.id,
+                isHost: room.host === player.id
+            });
+
+            // Envoyer la map au joueur
+            socket.emit('mapData', trackData);
+
+            // Notifier les autres joueurs
+            socket.to(room.id).emit('playerJoined', {
+                id: player.id,
+                pseudo: player.pseudo,
+                color: player.color
+            });
+            
+            // Envoyer la liste des joueurs
+            broadcastPlayersList(room);
+        } else {
+            socket.emit('error', { message: 'Room pleine' });
+        }
     });
 
     socket.on('createRoom', (data) => {
@@ -991,57 +1127,57 @@ io.on('connection', (socket) => {
 
     // Nouveau handler pour rejoindre avec un code
     socket.on('joinRoomWithCode', (data) => {
-    const { pseudo, color, roomCode } = data;
-    
-    // Chercher la room par son code (publique ou privée)
-    const room = gameState.rooms.get(roomCode.toUpperCase());
-    
-    if (!room) {
-        socket.emit('error', { message: 'Code de room invalide' });
-        return;
-    }
-    
-    if (room.gameStarted) {
-        socket.emit('error', { message: 'La partie a déjà commencé' });
-        return;
-    }
-    
-    if (room.players.size >= GAME_CONFIG.MAX_PLAYERS_PER_ROOM) {
-        socket.emit('error', { message: 'Room pleine' });
-        return;
-    }
-    
-    // Créer le joueur
-    const player = new Player(socket.id, pseudo, color);
-    gameState.players.set(socket.id, player);
-    
-    // Ajouter le joueur à la room
-    if (room.addPlayer(player)) {
-        socket.join(room.id);
+        const { pseudo, color, roomCode } = data;
         
-        socket.emit('joinedRoom', {
-            roomId: room.id,
-            playerId: player.id,
-            isPrivate: room.isPrivate,
-            roomCode: room.id,
-            isHost: false
-        });
+        // Chercher la room par son code (publique ou privée)
+        const room = gameState.rooms.get(roomCode.toUpperCase());
         
-        // ✅ Envoyer la map
-        socket.emit('mapData', trackData);
+        if (!room) {
+            socket.emit('error', { message: 'Code de room invalide' });
+            return;
+        }
         
-        // Notifier les autres joueurs
-        socket.to(room.id).emit('playerJoined', {
-            id: player.id,
-            pseudo: player.pseudo,
-            color: player.color
-        });
+        if (room.gameStarted) {
+            socket.emit('error', { message: 'La partie a déjà commencé' });
+            return;
+        }
         
-        broadcastPlayersList(room);
-    } else {
-        socket.emit('error', { message: 'Room pleine' });
-    }
-});
+        if (room.players.size >= GAME_CONFIG.MAX_PLAYERS_PER_ROOM) {
+            socket.emit('error', { message: 'Room pleine' });
+            return;
+        }
+        
+        // Créer le joueur
+        const player = new Player(socket.id, pseudo, color);
+        gameState.players.set(socket.id, player);
+        
+        // Ajouter le joueur à la room
+        if (room.addPlayer(player)) {
+            socket.join(room.id);
+            
+            socket.emit('joinedRoom', {
+                roomId: room.id,
+                playerId: player.id,
+                isPrivate: room.isPrivate,
+                roomCode: room.id,
+                isHost: false
+            });
+            
+            // ✅ Envoyer la map
+            socket.emit('mapData', trackData);
+            
+            // Notifier les autres joueurs
+            socket.to(room.id).emit('playerJoined', {
+                id: player.id,
+                pseudo: player.pseudo,
+                color: player.color
+            });
+            
+            broadcastPlayersList(room);
+        } else {
+            socket.emit('error', { message: 'Room pleine' });
+        }
+    });
 
     socket.on('playerReady', () => {
         const player = gameState.players.get(socket.id);
@@ -1051,14 +1187,61 @@ io.on('connection', (socket) => {
             if (room) {
                 broadcastPlayersList(room);
                 
-                // Vérifier si on peut démarrer
-                if (room.canStart()) {
-                    setTimeout(() => {
-                        if (room.startGame()) {
-                            io.to(room.id).emit('gameStarted');
-                        }
-                    }, 3000); // Délai de 3 secondes
-                }
+                // Ne plus démarrer automatiquement
+                // L'hôte doit cliquer sur le bouton démarrer
+            }
+        }
+    });
+
+    // Nouveau handler pour l'hôte qui démarre la partie
+    socket.on('hostStartGame', () => {
+        const room = findPlayerRoom(socket.id);
+        if (!room) return;
+        
+        // Vérifier que c'est bien l'hôte
+        if (room.host !== socket.id) {
+            socket.emit('error', { message: 'Seul l\'hôte peut démarrer la partie' });
+            return;
+        }
+        
+        // Vérifier que tout le monde est prêt (sauf l'hôte qui est toujours prêt)
+        let allReady = true;
+        for (let player of room.players.values()) {
+            if (player.id !== room.host && !player.ready) {
+                allReady = false;
+                break;
+            }
+        }
+        
+        if (!allReady) {
+            socket.emit('error', { message: 'Tous les joueurs doivent être prêts' });
+            return;
+        }
+        
+        // Démarrer la partie
+        if (room.startGame()) {
+            io.to(room.id).emit('gameStarted');
+        }
+    });
+
+    // Nouveau handler pour voter rematch
+    socket.on('voteRematch', () => {
+        const room = findPlayerRoom(socket.id);
+        if (room) {
+            room.voteRematch(socket.id);
+        }
+    });
+
+    // Nouveau handler pour quitter les résultats
+    socket.on('leaveResults', () => {
+        const room = findPlayerRoom(socket.id);
+        if (room) {
+            room.removePlayer(socket.id);
+            socket.leave(room.id);
+            
+            // Si la room est vide, la supprimer
+            if (room.players.size === 0) {
+                gameState.rooms.delete(room.id);
             }
         }
     });
@@ -1128,7 +1311,8 @@ function broadcastPlayersList(room) {
     
     io.to(room.id).emit('playersUpdate', {
         players: playersList,
-        canStart: room.canStart()
+        canStart: room.canHostStart(), // Utiliser la nouvelle méthode
+        hostId: room.host
     });
 }
 

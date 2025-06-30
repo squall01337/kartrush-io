@@ -10,6 +10,9 @@ class GameClient {
         this.currentScreen = 'menu';
         this.selectedColor = '#ff4444';
         this.isHost = false;
+        this.hostId = null; // Nouveau : ID de l'hôte actuel
+        this.rematchVotes = 0; // Nouveau : compteur de votes
+        this.totalPlayers = 0; // Nouveau : nombre total de joueurs
         
         this.initializeUI();
         this.connectToServer();
@@ -37,12 +40,12 @@ class GameClient {
             this.createRoom();
         });
         
-        // NOUVEAU: Bouton rejoindre avec code
+        // Bouton rejoindre avec code
         document.getElementById('joinWithCode').addEventListener('click', () => {
             this.joinWithCode();
         });
         
-        // NOUVEAU: Formater automatiquement le code en majuscules (ID changé)
+        // Formater automatiquement le code en majuscules
         document.getElementById('roomCodeInput').addEventListener('input', (e) => {
             e.target.value = e.target.value.toUpperCase();
         });
@@ -51,16 +54,22 @@ class GameClient {
             this.leaveRoom();
         });
 
+        // Modifier le handler du bouton startGame
         document.getElementById('startGame').addEventListener('click', () => {
-            this.startGame();
+            if (this.isHost) {
+                this.hostStartGame();
+            } else {
+                this.playerReady();
+            }
         });
 
+        // Nouveaux handlers pour l'écran de résultats
         document.getElementById('playAgain').addEventListener('click', () => {
-            this.showScreen('lobby');
+            this.voteRematch();
         });
 
         document.getElementById('backToMenu').addEventListener('click', () => {
-            this.backToMenu();
+            this.leaveResults();
         });
 
         // Gestion des touches
@@ -119,14 +128,44 @@ class GameClient {
             }
         });
 
+        // Modifier le handler playersUpdate
         this.socket.on('playersUpdate', (data) => {
             this.updatePlayersList(data.players);
+            this.hostId = data.hostId;
+            this.totalPlayers = data.players.length;
             
             const startButton = document.getElementById('startGame');
-            if (data.canStart) {
-                startButton.classList.remove('hidden');
+            
+            if (this.isHost) {
+                // Si on est l'hôte
+                if (data.canStart) {
+                    startButton.classList.remove('hidden');
+                    startButton.textContent = 'Démarrer la course';
+                    startButton.disabled = false;
+                    startButton.className = 'host-button';
+                } else {
+                    startButton.classList.remove('hidden');
+                    startButton.textContent = 'En attente des joueurs...';
+                    startButton.disabled = true;
+                    startButton.className = 'host-button waiting';
+                }
             } else {
-                startButton.classList.add('hidden');
+                // Si on n'est pas l'hôte
+                const myPlayer = data.players.find(p => p.id === this.playerId);
+                if (myPlayer && !myPlayer.ready) {
+                    startButton.classList.remove('hidden');
+                    startButton.textContent = 'Prêt';
+                    startButton.disabled = false;
+                    startButton.className = 'ready';
+                } else if (myPlayer && myPlayer.ready) {
+                    startButton.classList.remove('hidden');
+                    startButton.textContent = 'En attente de l\'hôte...';
+                    startButton.disabled = true;
+                    startButton.className = 'waiting';
+                } else {
+                    // Cas où le joueur n'est pas trouvé
+                    startButton.classList.add('hidden');
+                }
             }
         });
 
@@ -137,6 +176,56 @@ class GameClient {
         this.socket.on('gameUpdate', (gameData) => {
             if (this.gameEngine) {
                 this.gameEngine.updateGameState(gameData);
+            }
+        });
+
+        // Nouveau : Changement d'hôte
+        this.socket.on('hostChanged', (data) => {
+            this.hostId = data.newHostId;
+            this.isHost = (data.newHostId === this.playerId);
+            
+            if (this.isHost) {
+                this.showNotification({
+                    text: 'Vous êtes maintenant l\'hôte !',
+                    type: 'info',
+                    icon: '👑'
+                });
+            }
+        });
+        
+        // Nouveau : Vote de rematch
+        this.socket.on('rematchVote', (data) => {
+            this.rematchVotes = data.votes;
+            this.updateRematchButton();
+        });
+        
+        // Nouveau : Rematch qui démarre
+        this.socket.on('rematchStarting', (data) => {
+            this.rematchVotes = 0;
+            this.showScreen('lobby');
+            
+            // Arrêter la musique si elle joue encore
+            if (this.gameEngine && this.gameEngine.music) {
+                this.gameEngine.music.pause();
+                this.gameEngine.music = null;
+            }
+            
+            this.showNotification({
+                text: 'Nouvelle partie dans le même lobby !',
+                type: 'success',
+                icon: '🔄'
+            });
+        });
+        
+        // Nouveau : Retour au lobby forcé
+        this.socket.on('returnToLobby', () => {
+            this.rematchVotes = 0;
+            this.showScreen('lobby');
+            
+            // Arrêter la musique
+            if (this.gameEngine && this.gameEngine.music) {
+                this.gameEngine.music.pause();
+                this.gameEngine.music = null;
             }
         });
 
@@ -309,15 +398,43 @@ class GameClient {
             // Si c'est nous qui avons fini
             if (data.playerId === this.playerId) {
                 this.showPersonalFinish(data);
+                
+                // Afficher un message d'attente
+                setTimeout(() => {
+                    this.showNotification({
+                        text: 'En attente que tous les joueurs terminent...',
+                        type: 'info',
+                        icon: '⏳'
+                    });
+                }, 3000);
             }
         });
 
+        // Modifier raceEnded pour afficher les résultats après un délai
         this.socket.on('raceEnded', (data) => {
-            console.log('🏁 Course terminée !');
+            console.log('🏁 Course terminée ! Tous les joueurs ont fini.');
             
-            // Attendre un peu pour laisser voir la fin
+            // Notification que la course est terminée
+            this.showNotification({
+                text: 'Course terminée ! Tous les joueurs ont fini.',
+                type: 'success',
+                icon: '🏆'
+            });
+            
+            // Attendre 2 secondes avant d'afficher les résultats
             setTimeout(() => {
+                // Arrêter le moteur de jeu et la musique
+                if (this.gameEngine) {
+                    this.gameEngine.stop();
+                    if (this.gameEngine.music) {
+                        this.gameEngine.music.pause();
+                        this.gameEngine.music = null;
+                    }
+                }
+                
+                // Afficher les résultats
                 this.showRaceResults(data.results);
+                this.startRematchTimer();
             }, 2000);
         });
 
@@ -331,6 +448,20 @@ class GameClient {
 
         this.socket.on('error', (error) => {
             alert(error.message);
+        });
+
+        this.socket.on('kickedFromLobby', (data) => {
+            console.log('❌ Kicked du lobby:', data.reason);
+            this.showScreen('menu');
+            
+            // Arrêter la musique
+            if (this.gameEngine && this.gameEngine.music) {
+                this.gameEngine.music.pause();
+                this.gameEngine.music = null;
+            }
+            
+            // Notification
+            alert('Vous avez été exclu du lobby car vous n\'avez pas voté pour rejouer.');
         });
 
         this.socket.on('disconnect', () => {
@@ -389,10 +520,10 @@ class GameClient {
         }, 5000);
     }
 
-    // NOUVELLE méthode pour rejoindre avec code
+    // Méthode pour rejoindre avec code
     joinWithCode() {
         const pseudo = document.getElementById('pseudo').value.trim();
-        const roomCode = document.getElementById('roomCodeInput').value.trim(); // ID changé
+        const roomCode = document.getElementById('roomCodeInput').value.trim();
         
         if (!pseudo) {
             alert('Veuillez entrer un pseudo');
@@ -414,6 +545,76 @@ class GameClient {
             color: this.selectedColor,
             roomCode: roomCode.toUpperCase()
         });
+    }
+
+    // Nouvelles méthodes
+    hostStartGame() {
+        this.socket.emit('hostStartGame');
+    }
+
+    playerReady() {
+        this.socket.emit('playerReady');
+        document.getElementById('startGame').disabled = true;
+        document.getElementById('startGame').textContent = 'En attente...';
+    }
+
+    voteRematch() {
+        this.socket.emit('voteRematch');
+        const btn = document.getElementById('playAgain');
+        btn.disabled = true;
+        btn.textContent = `Vote enregistré (${this.rematchVotes + 1}/${this.totalPlayers})`;
+        btn.className = 'voted';
+    }
+
+    leaveResults() {
+        this.socket.emit('leaveResults');
+        this.backToMenu();
+    }
+
+    updateRematchButton() {
+        const btn = document.getElementById('playAgain');
+        if (!btn.disabled) {
+            btn.textContent = `Rejouer (${this.rematchVotes}/${this.totalPlayers})`;
+        } else {
+            btn.textContent = `Vote enregistré (${this.rematchVotes}/${this.totalPlayers})`;
+        }
+    }
+
+    startRematchTimer() {
+        this.rematchVotes = 0;
+        let timeLeft = 10;
+        
+        // Supprimer l'ancien timer s'il existe
+        const oldTimer = document.querySelector('.rematch-timer');
+        if (oldTimer) oldTimer.remove();
+        
+        const timerDiv = document.createElement('div');
+        timerDiv.className = 'rematch-timer';
+        timerDiv.style.cssText = `
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 10px;
+            font-size: 1.2em;
+            z-index: 100;
+        `;
+        
+        document.getElementById('results').appendChild(timerDiv);
+        
+        const intervalId = setInterval(() => {
+            timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
+            if (timeLeft <= 0) {
+                clearInterval(intervalId);
+                timerDiv.remove();
+            } else {
+                timeLeft--;
+            }
+        }, 1000);
+        
+        // Commencer avec l'affichage immédiat
+        timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
     }
 
     // Méthode générique pour les notifications
@@ -635,10 +836,7 @@ class GameClient {
     }
 
     showRaceResults(results) {
-        // Arrêter le moteur de jeu
-        if (this.gameEngine) {
-            this.gameEngine.stop();
-        }
+        // NE PAS arrêter le moteur ici, il a déjà été arrêté
         
         // Remplir le tableau des résultats
         const ranking = document.getElementById('finalRanking');
@@ -684,7 +882,7 @@ class GameClient {
                 time.textContent = 'DNF - Temps écoulé';
                 time.style.color = '#ff6666';
             } else {
-                time.textContent = `Tour ${player.lap}/${this.gameEngine.gameState.totalLaps || 3}`;
+                time.textContent = `Tour ${player.lap}/${3}`;
                 time.style.color = '#ff6666';
             }
             
@@ -697,6 +895,12 @@ class GameClient {
             
             ranking.appendChild(rankDiv);
         });
+        
+        // Réinitialiser le bouton rejouer
+        const playAgainBtn = document.getElementById('playAgain');
+        playAgainBtn.disabled = false;
+        playAgainBtn.textContent = 'Rejouer';
+        playAgainBtn.className = '';
         
         // Afficher l'écran des résultats
         this.showScreen('results');
@@ -796,6 +1000,7 @@ class GameClient {
         this.leaveRoom();
     }
 
+    // Modifier updatePlayersList pour afficher l'hôte
     updatePlayersList(players) {
         const playersList = document.getElementById('playersList');
         playersList.innerHTML = '<h3>Joueurs connectés:</h3>';
@@ -804,6 +1009,11 @@ class GameClient {
             const playerDiv = document.createElement('div');
             playerDiv.className = 'player-item';
             
+            // Ajouter la classe is-host si c'est l'hôte
+            if (player.isHost) {
+                playerDiv.className += ' is-host';
+            }
+            
             const colorDiv = document.createElement('div');
             colorDiv.className = 'player-color';
             colorDiv.style.backgroundColor = player.color;
@@ -811,21 +1021,42 @@ class GameClient {
             const nameSpan = document.createElement('span');
             nameSpan.textContent = player.pseudo;
             
-            // Indicateur d'hôte
+            // Indicateur d'hôte amélioré
             if (player.isHost) {
                 const hostBadge = document.createElement('span');
+                hostBadge.className = 'host-badge';
                 hostBadge.textContent = ' 👑';
+                hostBadge.title = 'Hôte de la partie';
                 hostBadge.style.marginLeft = '5px';
                 nameSpan.appendChild(hostBadge);
             }
             
-            const statusSpan = document.createElement('span');
-            statusSpan.textContent = player.ready ? ' ✓' : ' ⏳';
-            statusSpan.style.marginLeft = 'auto';
+            const statusDiv = document.createElement('div');
+            statusDiv.className = 'player-status';
+            statusDiv.style.marginLeft = 'auto';
+            
+            if (player.isHost) {
+                const statusText = document.createElement('span');
+                statusText.className = 'status-text';
+                statusText.textContent = 'Hôte';
+                statusText.style.color = '#ffd700';
+                statusDiv.appendChild(statusText);
+            } else {
+                const statusIcon = document.createElement('span');
+                statusIcon.className = 'status-icon';
+                statusIcon.textContent = player.ready ? '✓' : '⏳';
+                statusDiv.appendChild(statusIcon);
+            }
             
             playerDiv.appendChild(colorDiv);
             playerDiv.appendChild(nameSpan);
-            playerDiv.appendChild(statusSpan);
+            playerDiv.appendChild(statusDiv);
+            
+            // Mettre en évidence notre propre entrée
+            if (player.id === this.playerId) {
+                playerDiv.style.border = '2px solid #4ecdc4';
+                playerDiv.style.backgroundColor = 'rgba(78, 205, 196, 0.1)';
+            }
             
             playersList.appendChild(playerDiv);
         });
@@ -931,7 +1162,8 @@ class GameClient {
     }
 }
 
-// Initialiser le client quand la page est chargée
+// Classe GameEngine dans le fichier client.js (pour la référence)
+// Cette classe est utilisée dans client.js
 document.addEventListener('DOMContentLoaded', async () => {
     // Charger les assets avant d'initialiser le client
     try {

@@ -934,59 +934,6 @@ class GameEngine {
             }
         }
         
-        const player = this.gameState.players.find(p => p.id === this.playerId);
-        if (player && player.finished) {
-            setTimeout(() => {
-                this.showResults();
-            }, 2000);
         }
-    }
 
-    showResults() {
-        this.stop();
-        
-        const sortedPlayers = [...this.gameState.players].sort((a, b) => a.position - b.position);
-        
-        const ranking = document.getElementById('finalRanking');
-        ranking.innerHTML = '';
-        
-        sortedPlayers.forEach((player, index) => {
-            const rankDiv = document.createElement('div');
-            rankDiv.className = 'rank-item';
-            
-            const position = document.createElement('span');
-            position.className = 'rank-position';
-            position.textContent = `#${index + 1}`;
-            
-            const playerInfo = document.createElement('div');
-            playerInfo.className = 'rank-player';
-            
-            const colorDiv = document.createElement('div');
-            colorDiv.className = 'player-color';
-            colorDiv.style.backgroundColor = player.color;
-            
-            const name = document.createElement('span');
-            name.textContent = player.pseudo;
-            name.style.marginLeft = '10px';
-            
-            const time = document.createElement('span');
-            time.className = 'rank-time';
-            const minutes = Math.floor(player.raceTime / 60000);
-            const seconds = Math.floor((player.raceTime % 60000) / 1000);
-            const milliseconds = Math.floor((player.raceTime % 1000) / 10);
-            time.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
-            
-            playerInfo.appendChild(colorDiv);
-            playerInfo.appendChild(name);
-            
-            rankDiv.appendChild(position);
-            rankDiv.appendChild(playerInfo);
-            rankDiv.appendChild(time);
-            
-            ranking.appendChild(rankDiv);
-        });
-        
-        document.getElementById('game').classList.add('hidden');
-        document.getElementById('results').classList.remove('hidden');
-    }
 }

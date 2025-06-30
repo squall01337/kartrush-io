@@ -5,7 +5,7 @@
   "music": "assets/audio/lava_theme.mp3",
   "background": "track_background",
   "raceSettings": {
-    "laps": 3,
+    "laps": 1,
     "maxTime": 300000,
     "maxTimeWarning": 240000
   },

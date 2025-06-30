@@ -301,7 +301,9 @@ class GameEngine {
         }
     }
 
- renderDetectionZones(ctx) {
+ // Mettre à jour renderDetectionZones dans game.js
+
+renderDetectionZones(ctx) {
     ctx.save();
     ctx.globalAlpha = 0.4;
     ctx.setLineDash([10, 5]);

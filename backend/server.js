@@ -27,16 +27,50 @@ app.use('/assets', express.static(path.join(__dirname, '../assets')));
 let trackData = null;
 function loadMapData() {
     try {
-        const data = fs.readFileSync(path.join(__dirname, '../maps/oval_track.json'), 'utf-8');
+        // Essayer de charger lava_track.json d'abord
+        let mapPath = path.join(__dirname, '../maps/lava_track.json');
+        
+        // Si lava_track n'existe pas, charger oval_track
+        if (!fs.existsSync(mapPath)) {
+            console.log('⚠️ lava_track.json non trouvé, chargement de oval_track.json');
+            mapPath = path.join(__dirname, '../maps/oval_track.json');
+        }
+        
+        const data = fs.readFileSync(mapPath, 'utf-8');
         trackData = JSON.parse(data);
         
         // Convertir les anciens rectangles en lignes si nécessaire
         convertRectsToLines(trackData);
         
         console.log('✅ Map chargée :', trackData.name);
+        console.log('📍 Checkpoints:', trackData.checkpoints ? trackData.checkpoints.length : 0);
+        console.log('🏁 Ligne d\'arrivée:', trackData.finishLine ? 'Oui' : 'Non');
+        
     } catch (error) {
         console.error('❌ Erreur de chargement de la map :', error);
-        process.exit(1);
+        
+        // Map de secours minimale pour éviter les crashes
+        trackData = {
+            name: "default_track",
+            width: 1280,
+            height: 720,
+            background: "#333333",
+            spawnPoints: [{ x: 400, y: 500, angle: 0 }],
+            walls: [],
+            curves: [],
+            continuousCurves: [],
+            checkpoints: [],
+            finishLine: null,
+            boosters: [],
+            items: [],
+            raceSettings: {
+                laps: 3,
+                maxTime: 300000,
+                maxTimeWarning: 240000
+            }
+        };
+        
+        console.log('⚠️ Map de secours chargée');
     }
 }
 
@@ -85,6 +119,16 @@ function convertRectsToLines(data) {
             y2: cy + sin * halfLength
         };
     }
+}
+
+// Fonction helper pour générer des codes courts
+function generateRoomCode() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
 }
 
 loadMapData();
@@ -181,6 +225,7 @@ class Room {
     constructor(id, isPrivate = false) {
         this.id = id;
         this.isPrivate = isPrivate;
+        this.host = null; // ID de l'hôte
         this.players = new Map();
         this.gameStarted = false;
         this.gameStartTime = null;
@@ -866,45 +911,50 @@ io.on('connection', (socket) => {
     console.log(`Joueur connecté: ${socket.id}`);
 
     socket.on('joinGame', (data) => {
-        const { pseudo, color } = data;
-        
-        // Créer le joueur
-        const player = new Player(socket.id, pseudo, color);
-        gameState.players.set(socket.id, player);
-        
-        // Trouver ou créer une room
-        let room = findAvailableRoom();
-        if (!room) {
-            room = new Room(uuidv4());
-            gameState.rooms.set(room.id, room);
-        }
-        
-        // Ajouter le joueur à la room
-        if (room.addPlayer(player)) {
-            socket.join(room.id);
+    const { pseudo, color } = data;
+    
+    // Créer le joueur
+    const player = new Player(socket.id, pseudo, color);
+    gameState.players.set(socket.id, player);
+    
+    // Trouver ou créer une room publique
+    let room = findAvailableRoom();
+    if (!room) {
+        // Créer une nouvelle room publique avec un code court
+        const roomCode = generateRoomCode();
+        room = new Room(roomCode, false); // Utiliser le code comme ID même pour les publiques
+        room.displayCode = roomCode; // Stocker le code pour l'affichage
+        gameState.rooms.set(roomCode, room); // Utiliser le code comme clé
+        console.log('🌍 Room publique créée - Code:', roomCode);
+    }
+    
+    // Ajouter le joueur à la room
+    if (room.addPlayer(player)) {
+        socket.join(room.id);
 
-            // Envoyer les infos de la room
-            socket.emit('joinedRoom', {
-                roomId: room.id,
-                playerId: player.id,
-                isPrivate: room.isPrivate
-            });
+        // Envoyer les infos de la room avec le code
+        socket.emit('joinedRoom', {
+            roomId: room.id,
+            playerId: player.id,
+            isPrivate: false,
+            roomCode: room.id // Le code est l'ID pour toutes les rooms maintenant
+        });
 
-            // ✅ Envoyer la map au joueur
-            socket.emit('mapData', trackData);
+        // ✅ Envoyer la map au joueur
+        socket.emit('mapData', trackData);
 
-            // Notifier les autres joueurs
-            socket.to(room.id).emit('playerJoined', {
-                id: player.id,
-                pseudo: player.pseudo,
-                color: player.color
-            });
-            
-            // Envoyer la liste des joueurs
-            broadcastPlayersList(room);
-        } else {
-            socket.emit('error', { message: 'Room pleine' });
-        }
+        // Notifier les autres joueurs
+        socket.to(room.id).emit('playerJoined', {
+            id: player.id,
+            pseudo: player.pseudo,
+            color: player.color
+        });
+        
+        // Envoyer la liste des joueurs
+        broadcastPlayersList(room);
+    } else {
+        socket.emit('error', { message: 'Room pleine' });
+    }
     });
 
     socket.on('createRoom', (data) => {
@@ -914,22 +964,84 @@ io.on('connection', (socket) => {
         const player = new Player(socket.id, pseudo, color);
         gameState.players.set(socket.id, player);
         
-        // Créer une room privée
-        const room = new Room(uuidv4(), true);
-        gameState.rooms.set(room.id, room);
+        // Créer une room privée avec un code court
+        const roomCode = generateRoomCode();
+        const room = new Room(roomCode, true); // L'ID de la room EST le code
+        room.host = player.id; // Marquer l'hôte
+        gameState.rooms.set(roomCode, room); // Utiliser le code comme clé
         
         room.addPlayer(player);
+        socket.join(roomCode); // Joindre avec le code
+        
+        console.log('🔑 Room privée créée - Code:', roomCode);
+        
+        socket.emit('joinedRoom', {
+            roomId: roomCode,     // L'ID est le code
+            playerId: player.id,
+            isPrivate: true,
+            roomCode: roomCode,   // Le code explicite pour l'affichage
+            isHost: true
+        });
+        
+        // ✅ IMPORTANT: Envoyer la map aussi pour les rooms privées !
+        socket.emit('mapData', trackData);
+        
+        broadcastPlayersList(room);
+    });
+
+    // Nouveau handler pour rejoindre avec un code
+    socket.on('joinRoomWithCode', (data) => {
+    const { pseudo, color, roomCode } = data;
+    
+    // Chercher la room par son code (publique ou privée)
+    const room = gameState.rooms.get(roomCode.toUpperCase());
+    
+    if (!room) {
+        socket.emit('error', { message: 'Code de room invalide' });
+        return;
+    }
+    
+    if (room.gameStarted) {
+        socket.emit('error', { message: 'La partie a déjà commencé' });
+        return;
+    }
+    
+    if (room.players.size >= GAME_CONFIG.MAX_PLAYERS_PER_ROOM) {
+        socket.emit('error', { message: 'Room pleine' });
+        return;
+    }
+    
+    // Créer le joueur
+    const player = new Player(socket.id, pseudo, color);
+    gameState.players.set(socket.id, player);
+    
+    // Ajouter le joueur à la room
+    if (room.addPlayer(player)) {
         socket.join(room.id);
         
         socket.emit('joinedRoom', {
             roomId: room.id,
             playerId: player.id,
-            isPrivate: true,
-            roomCode: room.id.substring(0, 6).toUpperCase()
+            isPrivate: room.isPrivate,
+            roomCode: room.id,
+            isHost: false
+        });
+        
+        // ✅ Envoyer la map
+        socket.emit('mapData', trackData);
+        
+        // Notifier les autres joueurs
+        socket.to(room.id).emit('playerJoined', {
+            id: player.id,
+            pseudo: player.pseudo,
+            color: player.color
         });
         
         broadcastPlayersList(room);
-    });
+    } else {
+        socket.emit('error', { message: 'Room pleine' });
+    }
+});
 
     socket.on('playerReady', () => {
         const player = gameState.players.get(socket.id);
@@ -1010,7 +1122,8 @@ function broadcastPlayersList(room) {
         id: p.id,
         pseudo: p.pseudo,
         color: p.color,
-        ready: p.ready
+        ready: p.ready,
+        isHost: p.id === room.host
     }));
     
     io.to(room.id).emit('playersUpdate', {

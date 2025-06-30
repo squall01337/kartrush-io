@@ -382,3 +382,205 @@ button:disabled {
     pointer-events: none;
     animation: finalLapPulse 1.5s ease-out !important;
 }
+
+/* Styles pour le menu */
+.menu-section {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 15px 0;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menu-section h3 {
+    margin-bottom: 15px;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.join-code-section {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+    align-items: center;
+}
+
+/* Style pour l'INPUT du code dans le menu */
+#roomCodeInput {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+#roomCodeInput:focus {
+    border-color: #4ecdc4;
+    outline: none;
+    box-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+}
+
+#roomCodeInput::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: normal;
+}
+
+/* Styles pour le lobby */
+.room-info {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 20px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+    text-align: center;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.room-type {
+    font-size: 1.2em;
+    margin-bottom: 15px;
+    color: #4ecdc4;
+    font-weight: bold;
+}
+
+/* Style pour l'AFFICHAGE du code dans le lobby */
+#roomCode {
+    display: block !important;
+    min-height: 60px !important;
+}
+
+.room-code {
+    display: block;
+    font-size: 2.5em;
+    font-weight: bold;
+    letter-spacing: 8px;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-radius: 15px;
+    margin: 10px auto;
+    text-align: center;
+    min-width: 250px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Animation brillante */
+.room-code::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transform: rotate(45deg);
+    animation: shine 3s infinite;
+}
+
+@keyframes shine {
+    0% {
+        transform: translateX(-100%) translateY(-100%) rotate(45deg);
+    }
+    100% {
+        transform: translateX(100%) translateY(100%) rotate(45deg);
+    }
+}
+
+.room-code.public {
+    font-size: 2em;
+    background: rgba(0, 150, 255, 0.3);
+    border: 2px solid rgba(0, 150, 255, 0.6);
+    letter-spacing: 5px;
+    padding: 15px 30px;
+}
+
+/* Animations pour les notifications */
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+/* Style de la notification de partage */
+.room-share-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    max-width: 350px;
+    transition: all 0.3s ease;
+}
+
+.room-share-info:hover {
+    transform: scale(1.02);
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+}
+
+.share-icon {
+    font-size: 2em;
+}
+
+.share-text {
+    flex: 1;
+}
+
+.share-text strong {
+    color: #4ecdc4;
+    font-size: 1.2em;
+    letter-spacing: 2px;
+}
+
+.share-text small {
+    opacity: 0.8;
+    font-size: 0.9em;
+}
+
+/* Amélioration du style des codes publics */
+.room-code.public {
+    background: linear-gradient(135deg, #4ecdc4 0%, #44a3aa 100%);
+    font-size: 2.2em;
+}
+
+/* Tooltip au survol du code */
+#roomCode {
+    cursor: pointer;
+    position: relative;
+}
+
+#roomCode:hover::after {
+    content: "Cliquez pour copier";
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.5em;
+    letter-spacing: normal;
+    white-space: nowrap;
+}

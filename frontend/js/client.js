@@ -9,6 +9,7 @@ class GameClient {
         this.gameEngine = null;
         this.currentScreen = 'menu';
         this.selectedColor = '#ff4444';
+        this.isHost = false;
         
         this.initializeUI();
         this.connectToServer();
@@ -34,6 +35,16 @@ class GameClient {
 
         document.getElementById('createRoom').addEventListener('click', () => {
             this.createRoom();
+        });
+        
+        // NOUVEAU: Bouton rejoindre avec code
+        document.getElementById('joinWithCode').addEventListener('click', () => {
+            this.joinWithCode();
+        });
+        
+        // NOUVEAU: Formater automatiquement le code en majuscules (ID changé)
+        document.getElementById('roomCodeInput').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
         });
 
         document.getElementById('leaveRoom').addEventListener('click', () => {
@@ -64,14 +75,37 @@ class GameClient {
         });
 
         this.socket.on('joinedRoom', (data) => {
+            console.log('📍 Joined room:', data);
+            
             this.playerId = data.playerId;
             this.roomId = data.roomId;
+            this.isHost = data.isHost || false;
+            
+            const roomTypeEl = document.getElementById('roomType');
+            const roomCodeEl = document.getElementById('roomCode');
+            
+            if (!roomTypeEl || !roomCodeEl) {
+                console.error('❌ Elements roomType ou roomCode introuvables !');
+                return;
+            }
+            
+            // Afficher le code pour toutes les rooms
+            const code = data.roomCode || data.roomId;
+            roomCodeEl.textContent = code;
+            roomCodeEl.style.display = 'block';
             
             if (data.isPrivate) {
-                document.getElementById('roomCode').textContent = `Code de la room: ${data.roomCode}`;
+                roomTypeEl.innerHTML = '🔒 Room Privée' + (this.isHost ? ' (Hôte)' : '');
+                roomCodeEl.className = 'room-code private';
             } else {
-                document.getElementById('roomCode').textContent = 'Room publique';
+                roomTypeEl.innerHTML = '🌍 Room Publique';
+                roomCodeEl.className = 'room-code public';
             }
+            
+            console.log('🔑 Code de room:', code);
+            
+            // Ajouter une info pour partager le code
+            this.showRoomShareInfo(code, data.isPrivate);
             
             this.showScreen('lobby');
         });
@@ -302,6 +336,83 @@ class GameClient {
         this.socket.on('disconnect', () => {
             console.log('Déconnecté du serveur');
             this.showScreen('menu');
+        });
+    }
+
+    // Nouvelle méthode pour afficher comment partager le code
+    showRoomShareInfo(code, isPrivate) {
+        // Créer une notification temporaire
+        const notification = document.createElement('div');
+        notification.className = 'room-share-info';
+        notification.innerHTML = `
+            <div class="share-icon">📋</div>
+            <div class="share-text">
+                ${isPrivate ? 'Partagez ce code privé' : 'Code de la partie publique'} : <strong>${code}</strong>
+                <br><small>Les amis peuvent rejoindre avec ce code</small>
+            </div>
+        `;
+        
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            border: 2px solid ${isPrivate ? '#ff6b6b' : '#4ecdc4'};
+            z-index: 1000;
+            animation: slideIn 0.5s ease-out;
+            cursor: pointer;
+        `;
+        
+        // Copier le code au clic
+        notification.addEventListener('click', () => {
+            navigator.clipboard.writeText(code).then(() => {
+                notification.innerHTML = `
+                    <div class="share-icon">✅</div>
+                    <div class="share-text">Code copié !</div>
+                `;
+                setTimeout(() => notification.remove(), 1000);
+            }).catch(() => {
+                // Fallback si clipboard non disponible
+                alert(`Code de la room : ${code}`);
+            });
+        });
+        
+        document.body.appendChild(notification);
+        
+        // Retirer après 5 secondes
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.5s ease-out';
+            setTimeout(() => notification.remove(), 500);
+        }, 5000);
+    }
+
+    // NOUVELLE méthode pour rejoindre avec code
+    joinWithCode() {
+        const pseudo = document.getElementById('pseudo').value.trim();
+        const roomCode = document.getElementById('roomCodeInput').value.trim(); // ID changé
+        
+        if (!pseudo) {
+            alert('Veuillez entrer un pseudo');
+            return;
+        }
+        
+        if (!roomCode) {
+            alert('Veuillez entrer un code de room');
+            return;
+        }
+        
+        if (roomCode.length !== 6) {
+            alert('Le code de room doit contenir 6 caractères');
+            return;
+        }
+        
+        this.socket.emit('joinRoomWithCode', {
+            pseudo: pseudo,
+            color: this.selectedColor,
+            roomCode: roomCode.toUpperCase()
         });
     }
 
@@ -699,6 +810,14 @@ class GameClient {
             
             const nameSpan = document.createElement('span');
             nameSpan.textContent = player.pseudo;
+            
+            // Indicateur d'hôte
+            if (player.isHost) {
+                const hostBadge = document.createElement('span');
+                hostBadge.textContent = ' 👑';
+                hostBadge.style.marginLeft = '5px';
+                nameSpan.appendChild(hostBadge);
+            }
             
             const statusSpan = document.createElement('span');
             statusSpan.textContent = player.ready ? ' ✓' : ' ⏳';

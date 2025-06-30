@@ -8,14 +8,13 @@ class AssetManager {
     }
 
     async loadAssets() {
-        
         try {
-            // Charger les images avec timeout
+            // Charger les images de base avec timeout
             const timeout = 10000; // 10 secondes
             
             await Promise.race([
                 Promise.all([
-                    this.loadImage('track_background', 'assets/track_background.png'),
+                    // Ne plus charger track_background par défaut
                     this.loadImage('kart_sprites', 'assets/kart_sprites.png'),
                     this.loadImage('item_icons', 'assets/item_icons.png')
                 ]),
@@ -28,6 +27,29 @@ class AssetManager {
         } catch (error) {
             console.warn('Erreur lors du chargement des assets:', error);
             this.loaded = false;
+        }
+    }
+
+    // Nouvelle méthode pour charger les assets d'une map spécifique
+    async loadMapAssets(mapData) {
+        const promises = [];
+        
+        // Charger le background si spécifié
+        if (mapData.background && mapData.background.endsWith('.png')) {
+            const backgroundName = `map_background_${mapData.id}`;
+            promises.push(this.loadImage(backgroundName, mapData.background));
+        }
+        
+        // On pourrait aussi charger d'autres assets spécifiques à la map ici
+        // Par exemple: des textures spéciales, des sprites d'obstacles, etc.
+        
+        try {
+            await Promise.all(promises);
+            console.log(`✅ Assets de la map ${mapData.id} chargés`);
+            return true;
+        } catch (error) {
+            console.error(`❌ Erreur lors du chargement des assets de la map ${mapData.id}:`, error);
+            return false;
         }
     }
 
@@ -48,6 +70,11 @@ class AssetManager {
 
     getImage(name) {
         return this.images.get(name);
+    }
+    
+    // Nouvelle méthode pour obtenir le background d'une map
+    getMapBackground(mapId) {
+        return this.getImage(`map_background_${mapId}`);
     }
 
     getKartSprite(color) {

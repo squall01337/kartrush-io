@@ -20,6 +20,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    background: url('assets/lobby_background.png') no-repeat center center;
+    background-size: cover;
 }
 
 .hidden {
@@ -809,4 +811,203 @@ button:disabled {
         transform: translateX(-50%) translateY(0);
         opacity: 1;
     }
+}
+
+/* ===== SÉLECTEUR DE MAPS ===== */
+.map-selector {
+    margin: 20px 0;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 15px;
+    border: 2px solid rgba(255, 215, 0, 0.3);
+}
+
+.map-selector h3 {
+    color: #ffd700;
+    margin-bottom: 15px;
+    text-align: center;
+    font-size: 1.2em;
+}
+
+.map-selector-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    position: relative;
+}
+
+.map-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 15px;
+    flex: 1;
+    overflow: hidden;
+}
+
+.map-item {
+    position: relative;
+    cursor: pointer;
+    border: 3px solid transparent;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    background: rgba(0, 0, 0, 0.8);
+}
+
+.map-item:hover {
+    transform: scale(1.05);
+    border-color: #4ecdc4;
+    box-shadow: 0 5px 15px rgba(78, 205, 196, 0.5);
+}
+
+.map-item.selected {
+    border-color: #ffd700;
+    box-shadow: 0 5px 20px rgba(255, 215, 0, 0.6);
+}
+
+.map-item.selected::after {
+    content: '✓';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #ffd700;
+    color: #000;
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.map-thumbnail {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    display: block;
+}
+
+.map-name {
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    font-size: 0.9em;
+    text-align: center;
+    font-weight: bold;
+}
+
+.map-nav-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    font-size: 1.2em;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.map-nav-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #4ecdc4;
+    transform: scale(1.1);
+}
+
+.map-nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.map-nav-btn:disabled:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Animation de chargement des maps */
+@keyframes mapFadeIn {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.map-item {
+    animation: mapFadeIn 0.3s ease-out;
+}
+
+/* Placeholder quand pas d'image */
+.map-thumbnail.placeholder {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 2em;
+}
+
+/* Responsive pour le sélecteur */
+@media (max-width: 768px) {
+    .map-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .map-item {
+        font-size: 0.9em;
+    }
+    
+    .map-thumbnail {
+        height: 60px;
+    }
+}
+
+/* Animation pulse pour la sélection */
+@keyframes mapPulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.08);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+.map-item.pulse {
+    animation: mapPulse 0.5s ease-out;
+}
+
+/* Affichage de la map sélectionnée */
+.selected-map-info {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 10px 20px;
+    border-radius: 10px;
+    margin: 15px 0;
+    text-align: center;
+    border: 1px solid rgba(78, 205, 196, 0.5);
+}
+
+.selected-map-info .map-label {
+    color: #4ecdc4;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+#selectedMapName {
+    color: white;
+    font-size: 1.1em;
 }

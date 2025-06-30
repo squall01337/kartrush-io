@@ -93,7 +93,7 @@ class GameEngine {
         });
     }
 
-    setMapData(mapData) {
+        setMapData(mapData) {
         this.setTrack(mapData);
 
         // 🎵 Gérer la musique de la map
@@ -108,6 +108,15 @@ class GameEngine {
             this.music.volume = 0.5;
             this.music.play().catch(e => {
                 console.warn('🔇 Musique bloquée par lautoplay. Lutilisateur doit interagir avec la page.');
+            });
+        }
+        
+        // 🖼️ Charger les assets de la map (background, etc.)
+        if (window.assetManager) {
+            window.assetManager.loadMapAssets(mapData).then(success => {
+                if (success) {
+                    console.log('✅ Assets de la map chargés');
+                }
             });
         }
     }

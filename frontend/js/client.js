@@ -14,8 +14,54 @@ class GameClient {
         this.rematchVotes = 0; // Nouveau : compteur de votes
         this.totalPlayers = 0; // Nouveau : nombre total de joueurs
         
+        // Gestion des maps
+        this.availableMaps = [];
+        this.selectedMap = null;
+        this.currentMapPage = 0;
+        this.mapsPerPage = 6;
+        
         this.initializeUI();
         this.connectToServer();
+        this.loadAvailableMaps();
+    }
+
+    // Nouvelle méthode pour charger la liste des maps disponibles
+    async loadAvailableMaps() {
+        try {
+            // Essayer de charger depuis le serveur
+            const response = await fetch('/api/maps');
+            if (response.ok) {
+                const data = await response.json();
+                this.availableMaps = data.maps.map(map => ({
+                    id: map.id,
+                    name: map.name,
+                    thumbnail: map.thumbnail // Utiliser directement le chemin du JSON
+                }));
+                console.log('✅ Maps chargées depuis le serveur:', this.availableMaps);
+            } else {
+                throw new Error('Impossible de charger les maps');
+            }
+        } catch (error) {
+            console.warn('⚠️ Chargement des maps échoué, utilisation de la liste statique');
+            // Fallback sur la liste statique
+            this.availableMaps = [
+                { id: 'lava_track', name: 'City', thumbnail: 'assets/track_background.png' },
+                { id: 'ice_circuit', name: 'Lava world', thumbnail: 'assets/track_background.png2' },
+                { id: 'desert_rally', name: 'Rallye du Désert', thumbnail: 'assets/track_background.png3' },
+                { id: 'forest_trail', name: 'Sentier Forestier', thumbnail: 'assets/track_background.png4' },
+                { id: 'space_station', name: 'Station Spatiale', thumbnail: 'assets/space_background.png' },
+                { id: 'underwater_tunnel', name: 'Tunnel Sous-Marin', thumbnail: 'assets/underwater_background.png' },
+                { id: 'volcano_escape', name: 'Évasion du Volcan', thumbnail: 'assets/volcano_background.png' },
+                { id: 'crystal_caves', name: 'Grottes de Cristal', thumbnail: 'assets/crystal_background.png' },
+                { id: 'rainbow_road', name: 'Route Arc-en-ciel', thumbnail: 'assets/rainbow_background.png' },
+                { id: 'cyber_city', name: 'Cyber Cité', thumbnail: 'assets/cyber_background.png' }
+            ];
+        }
+        
+        // Sélectionner la première map par défaut
+        if (this.availableMaps.length > 0) {
+            this.selectedMap = this.availableMaps[0].id;
+        }
     }
 
     initializeUI() {
@@ -74,6 +120,129 @@ class GameClient {
 
         // Gestion des touches
         this.setupKeyboardControls();
+        
+        // Initialiser le sélecteur de maps
+        this.initializeMapSelector();
+    }
+
+    // Nouvelle méthode pour initialiser le sélecteur de maps
+    initializeMapSelector() {
+        const prevBtn = document.getElementById('mapPrevBtn');
+        const nextBtn = document.getElementById('mapNextBtn');
+        
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => this.navigateMaps(-1));
+        }
+        
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => this.navigateMaps(1));
+        }
+        
+        // Écouter les clics sur les maps
+        document.getElementById('mapGrid').addEventListener('click', (e) => {
+            const mapItem = e.target.closest('.map-item');
+            if (mapItem && this.isHost) {
+                this.selectMap(mapItem.dataset.mapId);
+            }
+        });
+    }
+
+    // Méthode pour naviguer entre les pages de maps
+    navigateMaps(direction) {
+        const totalPages = Math.ceil(this.availableMaps.length / this.mapsPerPage);
+        this.currentMapPage = Math.max(0, Math.min(totalPages - 1, this.currentMapPage + direction));
+        this.renderMapSelector();
+    }
+
+    // Méthode pour sélectionner une map
+    selectMap(mapId) {
+        if (!this.isHost) return;
+        
+        this.selectedMap = mapId;
+        this.renderMapSelector();
+        
+        // Mettre à jour l'affichage du nom
+        const mapInfo = this.availableMaps.find(m => m.id === mapId);
+        if (mapInfo) {
+            const selectedMapName = document.getElementById('selectedMapName');
+            if (selectedMapName) {
+                selectedMapName.textContent = mapInfo.name;
+            }
+        }
+        
+        // Envoyer la sélection au serveur
+        this.socket.emit('selectMap', { mapId: mapId });
+        
+        // Feedback visuel
+        const selectedItem = document.querySelector(`.map-item[data-map-id="${mapId}"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('pulse');
+            setTimeout(() => selectedItem.classList.remove('pulse'), 500);
+        }
+    }
+
+    // Méthode pour afficher le sélecteur de maps
+    renderMapSelector() {
+        const mapGrid = document.getElementById('mapGrid');
+        const prevBtn = document.getElementById('mapPrevBtn');
+        const nextBtn = document.getElementById('mapNextBtn');
+        
+        if (!mapGrid) return;
+        
+        // Calculer les maps à afficher
+        const startIdx = this.currentMapPage * this.mapsPerPage;
+        const endIdx = Math.min(startIdx + this.mapsPerPage, this.availableMaps.length);
+        const mapsToShow = this.availableMaps.slice(startIdx, endIdx);
+        
+        // Vider la grille
+        mapGrid.innerHTML = '';
+        
+        // Afficher les maps
+        mapsToShow.forEach((map, index) => {
+            const mapItem = document.createElement('div');
+            mapItem.className = 'map-item';
+            mapItem.dataset.mapId = map.id;
+            
+            if (map.id === this.selectedMap) {
+                mapItem.classList.add('selected');
+            }
+            
+            // Créer la miniature
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'map-thumbnail';
+            
+            // Vérifier si l'image existe, sinon afficher un placeholder
+            const img = new Image();
+            img.onload = () => {
+                thumbnail.style.backgroundImage = `url(${map.thumbnail})`;
+                thumbnail.style.backgroundSize = 'cover';
+                thumbnail.style.backgroundPosition = 'center';
+            };
+            img.onerror = () => {
+                // Placeholder avec l'icône de la map
+                thumbnail.classList.add('placeholder');
+                thumbnail.innerHTML = '🏁';
+            };
+            img.src = map.thumbnail;
+            
+            // Nom de la map
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'map-name';
+            nameDiv.textContent = map.name;
+            
+            mapItem.appendChild(thumbnail);
+            mapItem.appendChild(nameDiv);
+            
+            // Animation d'apparition décalée
+            mapItem.style.animationDelay = `${index * 0.05}s`;
+            
+            mapGrid.appendChild(mapItem);
+        });
+        
+        // Gérer l'état des boutons de navigation
+        const totalPages = Math.ceil(this.availableMaps.length / this.mapsPerPage);
+        prevBtn.disabled = this.currentMapPage === 0;
+        nextBtn.disabled = this.currentMapPage >= totalPages - 1;
     }
 
     connectToServer() {
@@ -135,6 +304,17 @@ class GameClient {
             this.totalPlayers = data.players.length;
             
             const startButton = document.getElementById('startGame');
+            const mapSelector = document.getElementById('mapSelector');
+            
+            // Afficher/masquer le sélecteur de maps selon le statut d'hôte
+            if (mapSelector) {
+                if (this.isHost) {
+                    mapSelector.classList.remove('hidden');
+                    this.renderMapSelector();
+                } else {
+                    mapSelector.classList.add('hidden');
+                }
+            }
             
             if (this.isHost) {
                 // Si on est l'hôte
@@ -169,6 +349,31 @@ class GameClient {
             }
         });
 
+        // Nouveau : Réception de la map sélectionnée
+        this.socket.on('mapSelected', (data) => {
+            this.selectedMap = data.mapId;
+            
+            // Mettre à jour l'affichage du nom pour tous
+            const mapInfo = this.availableMaps.find(m => m.id === data.mapId);
+            if (mapInfo) {
+                const selectedMapName = document.getElementById('selectedMapName');
+                if (selectedMapName) {
+                    selectedMapName.textContent = mapInfo.name;
+                }
+                
+                if (!this.isHost) {
+                    // Notification seulement pour les non-hôtes
+                    this.showNotification({
+                        text: `Map sélectionnée : ${mapInfo.name}`,
+                        type: 'info',
+                        icon: '🗺️'
+                    });
+                }
+            }
+            
+            this.renderMapSelector();
+        });
+
         this.socket.on('gameStarted', () => {
             this.startGameCountdown();
         });
@@ -190,6 +395,19 @@ class GameClient {
                     type: 'info',
                     icon: '👑'
                 });
+                
+                // Afficher le sélecteur de maps si on devient hôte
+                const mapSelector = document.getElementById('mapSelector');
+                if (mapSelector) {
+                    mapSelector.classList.remove('hidden');
+                    this.renderMapSelector();
+                }
+            } else {
+                // Masquer le sélecteur si on n'est plus hôte
+                const mapSelector = document.getElementById('mapSelector');
+                if (mapSelector) {
+                    mapSelector.classList.add('hidden');
+                }
             }
         });
         

@@ -1,10 +1,10 @@
 {
-  "id": "lava_track",
-  "name": "azertyu",
+  "id": "pipi_track",
+  "name": "qsdfgklsd",
   "width": 1280,
   "height": 720,
-  "music": "assets/audio/lava_theme.mp3",
-  "background": "assets/lava_background.png",
+  "music": "assets/audio/lava_theme2.mp3",
+  "background": "assets/track_background2.png",
   "raceSettings": {
     "laps": 5,
     "maxTime": 300000,

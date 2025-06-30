@@ -40,6 +40,9 @@ class GameEngine {
         // DEBUG
         this.lastDebugTime = 0;
         
+        // Configuration de détection (doit correspondre au serveur)
+        this.CHECKPOINT_MARGIN = 20;
+        
         this.setupCanvas();
         this.preprocessSprites();
     }
@@ -277,8 +280,8 @@ class GameEngine {
         ctx.translate(-this.camera.x, -this.camera.y);
         
         this.renderTrack(ctx);
-        this.renderDetectionZones(ctx); // AJOUTER CETTE LIGNE
-        this.renderDebugElements(ctx);
+        this.renderDetectionZones(ctx); // Zones de détection rectangulaires
+        this.renderCheckpointsAndFinishLine(ctx); // Rendu visuel des checkpoints
         this.renderPlayers(ctx);
         
         ctx.restore();
@@ -301,132 +304,279 @@ class GameEngine {
         }
     }
 
- // Mettre à jour renderDetectionZones dans game.js
-
-renderDetectionZones(ctx) {
-    ctx.save();
-    ctx.globalAlpha = 0.4;
-    ctx.setLineDash([10, 5]);
-    
-    // CERCLES de détection pour les checkpoints - EXACTEMENT LE MÊME RAYON !
-    if (this.track.checkpoints) {
-        this.track.checkpoints.forEach((checkpoint, idx) => {
-            const centerX = checkpoint.x + checkpoint.width / 2;
-            const centerY = checkpoint.y + checkpoint.height / 2;
-            const radius = Math.max(checkpoint.width, checkpoint.height) / 2 + 15; // 15 pixels comme le serveur !
-            
-            // Cercle de détection
-            ctx.strokeStyle = '#00FF00';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-            ctx.stroke();
-            
-            // Point central
-            ctx.fillStyle = '#00FF00';
-            ctx.beginPath();
-            ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
-            ctx.fill();
-            
-            // Numéro du checkpoint
-            ctx.fillStyle = '#00FF00';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(`CP${idx + 1}`, centerX, centerY - radius - 10);
-        });
-    }
-    
-    // RECTANGLE de détection pour la ligne d'arrivée
-    if (this.track.finishLine) {
-        const fl = this.track.finishLine;
-        const margin = 20; // MÊME MARGE QUE LE SERVEUR
+    // Méthode pour afficher les lignes de détection
+    renderDetectionZones(ctx) {
+        ctx.save();
         
-        ctx.strokeStyle = '#FFD700';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(
-            fl.x - margin,
-            fl.y - margin,
-            fl.width + margin * 2,
-            fl.height + margin * 2
-        );
+        // Lignes de détection des checkpoints
+        if (this.track.checkpoints) {
+            this.track.checkpoints.forEach((checkpoint, idx) => {
+                // Vérifier si c'est le nouveau format ligne
+                if (checkpoint.x1 !== undefined && checkpoint.y1 !== undefined) {
+                    // Nouveau format : ligne directe
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 5;
+                    ctx.globalAlpha = 0.6;
+                    ctx.setLineDash([10, 5]);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(checkpoint.x1, checkpoint.y1);
+                    ctx.lineTo(checkpoint.x2, checkpoint.y2);
+                    ctx.stroke();
+                    
+                    // Points aux extrémités
+                    ctx.fillStyle = '#00FF00';
+                    ctx.globalAlpha = 0.8;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.arc(checkpoint.x1, checkpoint.y1, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(checkpoint.x2, checkpoint.y2, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    // Numéro du checkpoint
+                    const cx = (checkpoint.x1 + checkpoint.x2) / 2;
+                    const cy = (checkpoint.y1 + checkpoint.y2) / 2;
+                    ctx.fillStyle = '#00FF00';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.globalAlpha = 1;
+                    ctx.fillText(`CP${idx + 1}`, cx, cy - 20);
+                    
+                    // Flèche directionnelle
+                    const angle = Math.atan2(checkpoint.y2 - checkpoint.y1, checkpoint.x2 - checkpoint.x1);
+                    const normalAngle = angle + Math.PI / 2;
+                    const arrowX = cx + Math.cos(normalAngle) * 30;
+                    const arrowY = cy + Math.sin(normalAngle) * 30;
+                    
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(arrowX, arrowY);
+                    ctx.stroke();
+                    
+                    // Pointe de la flèche
+                    ctx.beginPath();
+                    ctx.moveTo(arrowX, arrowY);
+                    ctx.lineTo(arrowX - 10 * Math.cos(normalAngle - 0.5), arrowY - 10 * Math.sin(normalAngle - 0.5));
+                    ctx.lineTo(arrowX - 10 * Math.cos(normalAngle + 0.5), arrowY - 10 * Math.sin(normalAngle + 0.5));
+                    ctx.closePath();
+                    ctx.fillStyle = '#00FF00';
+                    ctx.fill();
+                    
+                } else {
+                    // Ancien format : convertir le rectangle en ligne pour l'affichage
+                    const cx = checkpoint.x + checkpoint.width / 2;
+                    const cy = checkpoint.y + checkpoint.height / 2;
+                    const angle = (checkpoint.angle || 0) * Math.PI / 180 + Math.PI / 2;
+                    const halfLength = checkpoint.height / 2 + 30; // Avec marge
+                    
+                    const x1 = cx - Math.cos(angle) * halfLength;
+                    const y1 = cy - Math.sin(angle) * halfLength;
+                    const x2 = cx + Math.cos(angle) * halfLength;
+                    const y2 = cy + Math.sin(angle) * halfLength;
+                    
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 5;
+                    ctx.globalAlpha = 0.6;
+                    ctx.setLineDash([10, 5]);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                    
+                    // Numéro
+                    ctx.fillStyle = '#00FF00';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.globalAlpha = 1;
+                    ctx.setLineDash([]);
+                    ctx.fillText(`CP${idx + 1}`, cx, cy - checkpoint.height / 2 - 20);
+                }
+            });
+        }
+        
+        // Ligne de détection de la ligne d'arrivée
+        if (this.track.finishLine) {
+            const fl = this.track.finishLine;
+            
+            if (fl.x1 !== undefined && fl.y1 !== undefined) {
+                // Nouveau format : ligne directe
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 5;
+                ctx.globalAlpha = 0.6;
+                ctx.setLineDash([10, 5]);
+                
+                ctx.beginPath();
+                ctx.moveTo(fl.x1, fl.y1);
+                ctx.lineTo(fl.x2, fl.y2);
+                ctx.stroke();
+                
+                // Points aux extrémités
+                ctx.fillStyle = '#FFD700';
+                ctx.globalAlpha = 0.8;
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(fl.x1, fl.y1, 5, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(fl.x2, fl.y2, 5, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Label
+                const cx = (fl.x1 + fl.x2) / 2;
+                const cy = (fl.y1 + fl.y2) / 2;
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.globalAlpha = 1;
+                ctx.fillText('FINISH', cx, cy - 20);
+                
+            } else {
+                // Ancien format : convertir
+                const cx = fl.x + fl.width / 2;
+                const cy = fl.y + fl.height / 2;
+                const angle = (fl.angle || 0) * Math.PI / 180 + Math.PI / 2;
+                const halfLength = fl.height / 2 + 30;
+                
+                const x1 = cx - Math.cos(angle) * halfLength;
+                const y1 = cy - Math.sin(angle) * halfLength;
+                const x2 = cx + Math.cos(angle) * halfLength;
+                const y2 = cy + Math.sin(angle) * halfLength;
+                
+                ctx.strokeStyle = '#FFD700';
+                ctx.lineWidth = 5;
+                ctx.globalAlpha = 0.6;
+                ctx.setLineDash([10, 5]);
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+        
+        ctx.restore();
     }
-    
-    ctx.restore();
-}
 
-    renderDebugElements(ctx) {
+    // Rendu visuel des checkpoints et de la ligne d'arrivée
+    renderCheckpointsAndFinishLine(ctx) {
         // Récupérer le joueur actuel
         const currentPlayer = this.gameState.players.find(p => p.id === this.playerId);
         
-        // Dessiner les checkpoints en semi-transparent pour debug
+        // Dessiner les checkpoints
         if (this.track.checkpoints) {
             ctx.save();
             
             this.track.checkpoints.forEach((checkpoint, index) => {
-                ctx.save();
-                
-                // Centre du rectangle
-                const cx = checkpoint.x + checkpoint.width / 2;
-                const cy = checkpoint.y + checkpoint.height / 2;
-                
-                ctx.translate(cx, cy);
-                ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
-                
-                // Déterminer la couleur selon l'état
-                let fillColor = '#FF0000'; // Rouge par défaut (non passé)
-                let alpha = 0.3;
-                
-                if (currentPlayer) {
-                    if (!currentPlayer.hasPassedStartLine) {
-                        // Pas encore commencé la course
-                        fillColor = '#808080'; // Gris
-                    } else if (index < currentPlayer.nextCheckpoint) {
-                        // Checkpoint déjà passé
-                        fillColor = '#00FF00'; // Vert
-                        alpha = 0.2;
-                    } else if (index === currentPlayer.nextCheckpoint) {
-                        // Prochain checkpoint attendu
-                        fillColor = '#FFFF00'; // Jaune
-                        alpha = 0.5;
-                        
-                        // Animation pulse pour le prochain checkpoint
-                        const pulse = Math.sin(Date.now() * 0.005) * 0.2 + 0.5;
-                        alpha = pulse;
+                // Vérifier le format
+                if (checkpoint.x1 !== undefined && checkpoint.y1 !== undefined) {
+                    // NOUVEAU FORMAT : Ligne
+                    const cx = (checkpoint.x1 + checkpoint.x2) / 2;
+                    const cy = (checkpoint.y1 + checkpoint.y2) / 2;
+                    
+                    // Déterminer la couleur selon l'état
+                    let strokeColor = '#FF0000'; // Rouge par défaut (non passé)
+                    let alpha = 0.4;
+                    let lineWidth = 8;
+                    
+                    if (currentPlayer) {
+                        if (!currentPlayer.hasPassedStartLine) {
+                            // Pas encore commencé la course
+                            strokeColor = '#808080'; // Gris
+                        } else if (index < currentPlayer.nextCheckpoint) {
+                            // Checkpoint déjà passé
+                            strokeColor = '#00FF00'; // Vert
+                            alpha = 0.3;
+                            lineWidth = 6;
+                        } else if (index === currentPlayer.nextCheckpoint) {
+                            // Prochain checkpoint attendu
+                            strokeColor = '#FFFF00'; // Jaune
+                            alpha = 0.8;
+                            lineWidth = 10;
+                            
+                            // Animation pulse
+                            const pulse = Math.sin(Date.now() * 0.005) * 0.2 + 0.8;
+                            alpha = pulse;
+                        }
                     }
+                    
+                    ctx.globalAlpha = alpha;
+                    ctx.strokeStyle = strokeColor;
+                    ctx.lineWidth = lineWidth;
+                    ctx.lineCap = 'round';
+                    
+                    // Dessiner la ligne du checkpoint
+                    ctx.beginPath();
+                    ctx.moveTo(checkpoint.x1, checkpoint.y1);
+                    ctx.lineTo(checkpoint.x2, checkpoint.y2);
+                    ctx.stroke();
+                    
+                    // Numéro du checkpoint
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Fond noir pour le texte
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(cx - 15, cy - 15, 30, 30);
+                    
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillText(`${index + 1}`, cx, cy);
+                    
+                } else {
+                    // ANCIEN FORMAT : Rectangle
+                    ctx.save();
+                    
+                    const cx = checkpoint.x + checkpoint.width / 2;
+                    const cy = checkpoint.y + checkpoint.height / 2;
+                    
+                    ctx.translate(cx, cy);
+                    ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
+                    
+                    // Déterminer la couleur selon l'état
+                    let fillColor = '#FF0000'; // Rouge par défaut (non passé)
+                    let alpha = 0.3;
+                    
+                    if (currentPlayer) {
+                        if (!currentPlayer.hasPassedStartLine) {
+                            fillColor = '#808080'; // Gris
+                        } else if (index < currentPlayer.nextCheckpoint) {
+                            fillColor = '#00FF00'; // Vert
+                            alpha = 0.2;
+                        } else if (index === currentPlayer.nextCheckpoint) {
+                            fillColor = '#FFFF00'; // Jaune
+                            alpha = 0.5;
+                            
+                            const pulse = Math.sin(Date.now() * 0.005) * 0.2 + 0.5;
+                            alpha = pulse;
+                        }
+                    }
+                    
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = fillColor;
+                    ctx.fillRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
+                    
+                    ctx.globalAlpha = 0.8;
+                    ctx.strokeStyle = fillColor;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
+                    
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(`${index + 1}`, 0, 0);
+                    
+                    ctx.restore();
                 }
-                
-                ctx.globalAlpha = alpha;
-                
-                // Dessiner le rectangle
-                ctx.fillStyle = fillColor;
-                ctx.fillRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
-                
-                // Bordure
-                ctx.globalAlpha = 0.8;
-                ctx.strokeStyle = fillColor;
-                ctx.lineWidth = 2;
-                ctx.strokeRect(-checkpoint.width/2, -checkpoint.height/2, checkpoint.width, checkpoint.height);
-                
-                // Numéro du checkpoint
-                ctx.globalAlpha = 1;
-                ctx.fillStyle = '#FFFFFF';
-                ctx.font = 'bold 20px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(`${index + 1}`, 0, 0);
-                
-                // Flèche pour indiquer le sens
-                ctx.strokeStyle = '#FFFFFF';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.moveTo(-20, 0);
-                ctx.lineTo(20, 0);
-                ctx.lineTo(15, -5);
-                ctx.moveTo(20, 0);
-                ctx.lineTo(15, 5);
-                ctx.stroke();
-                
-                ctx.restore();
             });
             
             ctx.restore();
@@ -437,51 +587,108 @@ renderDetectionZones(ctx) {
             ctx.save();
             
             const fl = this.track.finishLine;
-            const cx = fl.x + fl.width / 2;
-            const cy = fl.y + fl.height / 2;
             
-            ctx.translate(cx, cy);
-            ctx.rotate((fl.angle || 0) * Math.PI / 180);
-            
-            // Déterminer l'opacité selon l'état
-            let alpha = 0.5;
-            if (currentPlayer && !currentPlayer.hasPassedStartLine) {
-                alpha = 0.8; // Plus visible au début
-            } else if (currentPlayer && currentPlayer.nextCheckpoint === this.track.checkpoints.length) {
-                // Tous les checkpoints passés, ligne d'arrivée active
-                alpha = 0.8;
+            if (fl.x1 !== undefined && fl.y1 !== undefined) {
+                // NOUVEAU FORMAT : Ligne
+                const cx = (fl.x1 + fl.x2) / 2;
+                const cy = (fl.y1 + fl.y2) / 2;
                 
-                // Animation pour attirer l'attention
-                const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 0.8;
-                alpha = pulse;
-            }
-            
-            ctx.globalAlpha = alpha;
-            
-            // Pattern damier
-            const squareSize = 10;
-            const rows = Math.ceil(fl.height / squareSize);
-            const cols = Math.ceil(fl.width / squareSize);
-            
-            for (let i = 0; i < rows; i++) {
-                for (let j = 0; j < cols; j++) {
-                    ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
-                    ctx.fillRect(
-                        -fl.width/2 + j * squareSize, 
-                        -fl.height/2 + i * squareSize, 
-                        squareSize, 
-                        squareSize
-                    );
+                // Déterminer l'opacité selon l'état
+                let alpha = 0.5;
+                if (currentPlayer && !currentPlayer.hasPassedStartLine) {
+                    alpha = 0.8; // Plus visible au début
+                } else if (currentPlayer && currentPlayer.nextCheckpoint === this.track.checkpoints.length) {
+                    alpha = 0.8;
+                    const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 0.8;
+                    alpha = pulse;
+                }
+                
+                ctx.globalAlpha = alpha;
+                
+                // Ligne principale épaisse
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 12;
+                ctx.lineCap = 'butt';
+                ctx.beginPath();
+                ctx.moveTo(fl.x1, fl.y1);
+                ctx.lineTo(fl.x2, fl.y2);
+                ctx.stroke();
+                
+                // Pattern damier sur la ligne
+                const dx = fl.x2 - fl.x1;
+                const dy = fl.y2 - fl.y1;
+                const lineLength = Math.sqrt(dx * dx + dy * dy);
+                const segments = Math.floor(lineLength / 20); // Un carré tous les 20 pixels
+                
+                for (let i = 0; i < segments; i++) {
+                    if (i % 2 === 0) {
+                        const t1 = i / segments;
+                        const t2 = (i + 1) / segments;
+                        
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 12;
+                        ctx.beginPath();
+                        ctx.moveTo(fl.x1 + t1 * dx, fl.y1 + t1 * dy);
+                        ctx.lineTo(fl.x1 + t2 * dx, fl.y1 + t2 * dy);
+                        ctx.stroke();
+                    }
+                }
+                
+                // Texte FINISH
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(cx - 40, cy - 15, 80, 30);
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 18px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('FINISH', cx, cy);
+                
+            } else {
+                // ANCIEN FORMAT : Rectangle
+                const cx = fl.x + fl.width / 2;
+                const cy = fl.y + fl.height / 2;
+                
+                ctx.translate(cx, cy);
+                ctx.rotate((fl.angle || 0) * Math.PI / 180);
+                
+                let alpha = 0.5;
+                if (currentPlayer && !currentPlayer.hasPassedStartLine) {
+                    alpha = 0.8;
+                } else if (currentPlayer && currentPlayer.nextCheckpoint === this.track.checkpoints.length) {
+                    alpha = 0.8;
+                    const pulse = Math.sin(Date.now() * 0.003) * 0.2 + 0.8;
+                    alpha = pulse;
+                }
+                
+                ctx.globalAlpha = alpha;
+                
+                // Pattern damier
+                const squareSize = 10;
+                const rows = Math.ceil(fl.height / squareSize);
+                const cols = Math.ceil(fl.width / squareSize);
+                
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                        ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
+                        ctx.fillRect(
+                            -fl.width/2 + j * squareSize, 
+                            -fl.height/2 + i * squareSize, 
+                            squareSize, 
+                            squareSize
+                        );
+                    }
                 }
             }
             
             ctx.restore();
         }
         
-        // Afficher l'état du joueur en haut à droite
+        // Afficher l'état du joueur
         if (currentPlayer) {
             ctx.save();
-            ctx.resetTransform(); // Ignorer la caméra
+            ctx.resetTransform();
             
             const infoX = this.canvas.width - 200 * this.scale;
             const infoY = 20 * this.scale;
@@ -492,28 +699,24 @@ renderDetectionZones(ctx) {
             ctx.fillStyle = '#FFFFFF';
             ctx.font = `${14 * this.scale}px Arial`;
             
-            // État de la course
             if (!currentPlayer.hasPassedStartLine) {
                 ctx.fillText('⏸️ Passez la ligne de départ', infoX, infoY + 15 * this.scale);
             } else {
                 ctx.fillText(`✅ Checkpoint: ${currentPlayer.nextCheckpoint}/${this.track.checkpoints.length}`, infoX, infoY + 15 * this.scale);
                 ctx.fillText(`🏁 Tour: ${currentPlayer.lap}/${currentPlayer.lapsToWin}`, infoX, infoY + 35 * this.scale);
                 
-                // Barre de progression des checkpoints
+                // Barre de progression
                 const barWidth = 170 * this.scale;
                 const barHeight = 10 * this.scale;
                 const barY = infoY + 50 * this.scale;
                 
-                // Fond de la barre
                 ctx.fillStyle = '#333333';
                 ctx.fillRect(infoX, barY, barWidth, barHeight);
                 
-                // Progression
                 const progress = currentPlayer.nextCheckpoint / this.track.checkpoints.length;
                 ctx.fillStyle = '#00FF00';
                 ctx.fillRect(infoX, barY, barWidth * progress, barHeight);
                 
-                // Bordure
                 ctx.strokeStyle = '#FFFFFF';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(infoX, barY, barWidth, barHeight);

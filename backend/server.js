@@ -29,12 +29,64 @@ function loadMapData() {
     try {
         const data = fs.readFileSync(path.join(__dirname, '../maps/oval_track.json'), 'utf-8');
         trackData = JSON.parse(data);
+        
+        // Convertir les anciens rectangles en lignes si nécessaire
+        convertRectsToLines(trackData);
+        
         console.log('✅ Map chargée :', trackData.name);
     } catch (error) {
         console.error('❌ Erreur de chargement de la map :', error);
         process.exit(1);
     }
 }
+
+// Fonction de conversion des rectangles en lignes
+function convertRectsToLines(data) {
+    // Convertir les checkpoints rectangulaires en lignes
+    if (data.checkpoints && data.checkpoints.length > 0 && data.checkpoints[0].width !== undefined) {
+        console.log('🔄 Conversion des checkpoints rectangulaires en lignes...');
+        data.checkpoints = data.checkpoints.map(cp => {
+            const cx = cp.x + cp.width / 2;
+            const cy = cp.y + cp.height / 2;
+            const angle = (cp.angle || 0) * Math.PI / 180;
+            const halfLength = cp.height / 2;
+            
+            // Ligne perpendiculaire au rectangle
+            const perpAngle = angle + Math.PI / 2;
+            const cos = Math.cos(perpAngle);
+            const sin = Math.sin(perpAngle);
+            
+            return {
+                x1: cx - cos * halfLength,
+                y1: cy - sin * halfLength,
+                x2: cx + cos * halfLength,
+                y2: cy + sin * halfLength
+            };
+        });
+    }
+    
+    // Convertir la ligne d'arrivée
+    if (data.finishLine && data.finishLine.width !== undefined) {
+        console.log('🔄 Conversion de la ligne d\'arrivée rectangulaire en ligne...');
+        const fl = data.finishLine;
+        const cx = fl.x + fl.width / 2;
+        const cy = fl.y + fl.height / 2;
+        const angle = (fl.angle || 0) * Math.PI / 180;
+        const halfLength = fl.height / 2;
+        
+        const perpAngle = angle + Math.PI / 2;
+        const cos = Math.cos(perpAngle);
+        const sin = Math.sin(perpAngle);
+        
+        data.finishLine = {
+            x1: cx - cos * halfLength,
+            y1: cy - sin * halfLength,
+            x2: cx + cos * halfLength,
+            y2: cy + sin * halfLength
+        };
+    }
+}
+
 loadMapData();
 
 // État du jeu
@@ -71,23 +123,27 @@ class Player {
         this.lap = 0;
         this.position = 1;
         this.item = null;
-        this.nextCheckpoint = 0; // Prochain checkpoint attendu
-        this.hasPassedStartLine = false; // Pour savoir si le joueur a franchi la ligne pour la première fois
+        this.nextCheckpoint = 0;
+        this.hasPassedStartLine = false;
         this.raceTime = 0;
         this.finishTime = null;
         this.finished = false;
         this.ready = true;
         
-        // États pour la détection (on les garde pour compatibilité)
-        this.lastCheckpointState = {};
-        this.wasOnFinishLine = false;
+        // Position précédente pour la détection de franchissement
+        this.lastX = this.x;
+        this.lastY = this.y;
         
-        // Timestamps pour anti-spam
-        this.lastCheckpointTime = 0;
-        this.lastFinishTime = 0;
+        // Cooldown pour éviter les détections multiples
+        this.lastCheckpointTime = {};
+        this.lastFinishLineTime = 0;
     }
 
     update(deltaTime) {
+        // Sauvegarder la position précédente
+        this.lastX = this.x;
+        this.lastY = this.y;
+        
         // Appliquer la friction
         this.speed *= GAME_CONFIG.FRICTION;
         
@@ -173,6 +229,8 @@ class Room {
             const pos = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
             player.x = pos.x;
             player.y = pos.y;
+            player.lastX = pos.x;
+            player.lastY = pos.y;
             player.angle = (pos.angle || 0) * Math.PI / 180;
             player.speed = 0;
             player.lap = 0;
@@ -182,19 +240,8 @@ class Room {
             
             player.nextCheckpoint = 0;
             player.hasPassedStartLine = false;
-            player.lastCheckpointState = {};
-            player.wasOnFinishLine = false;
-            
-            // Réinitialiser les timestamps
-            player.lastCheckpointTime = 0;
-            player.lastFinishTime = 0;
-            
-            // Initialiser tous les checkpoints à false
-            if (trackData.checkpoints) {
-                trackData.checkpoints.forEach((checkpoint, idx) => {
-                    player.lastCheckpointState[idx] = false;
-                });
-            }
+            player.lastCheckpointTime = {};
+            player.lastFinishLineTime = 0;
             
             index++;
         }
@@ -250,7 +297,7 @@ class Room {
                 this.checkWallCollisions(player);
                 
                 // Vérifier les checkpoints et la ligne d'arrivée
-                this.checkRaceProgress(player);
+                this.checkRaceProgress(player, now);
             }
         }
 
@@ -280,126 +327,146 @@ class Room {
         this.endRace();
     }
 
-    checkRaceProgress(player) {
+    checkRaceProgress(player, currentTime) {
         if (!trackData || !this.raceSettings) return;
         
-        // Initialiser les états si nécessaire
-        if (!player.lastCheckpointState) player.lastCheckpointState = {};
-        
         // === LOGIQUE DE LA LIGNE D'ARRIVÉE ===
-        const wasOnFinishLine = player.wasOnFinishLine || false;
-        const isOnFinishLine = trackData.finishLine && this.isPlayerCrossingLine(player, trackData.finishLine);
-        
-        // Détecter le franchissement de la ligne d'arrivée (transition false -> true)
-        if (!wasOnFinishLine && isOnFinishLine) {
-            // Vérifier le sens
-            const angleToFinish = this.getAngleToRectangle(trackData.finishLine);
-            const angleDiff = this.normalizeAngle(player.angle - angleToFinish);
+        if (trackData.finishLine) {
+            const crossed = this.lineSegmentsIntersect(
+                player.lastX, player.lastY,
+                player.x, player.y,
+                trackData.finishLine.x1, trackData.finishLine.y1,
+                trackData.finishLine.x2, trackData.finishLine.y2
+            );
             
-            if (Math.abs(angleDiff) < (2 * Math.PI) / 3) { // Tolérance de 120°
-                // Premier passage = on active le comptage des tours
-                if (!player.hasPassedStartLine) {
-                    player.hasPassedStartLine = true;
-                    player.lap = 1;
-                    player.nextCheckpoint = 0;
-                    
-                    console.log(`🚦 ${player.pseudo} - Tour 1 commencé !`);
-                    
-                    io.to(player.id).emit('lapStarted', {
-                        message: 'Tour 1 commencé !',
-                        lap: 1,
-                        totalLaps: this.raceSettings.laps
-                    });
-                }
-                // Passages suivants = validation d'un tour SI tous les checkpoints sont passés
-                else if (player.nextCheckpoint === (trackData.checkpoints ? trackData.checkpoints.length : 0)) {
-                    player.lap++;
-                    player.nextCheckpoint = 0;
-                    
-                    console.log(`🏁 ${player.pseudo} - Tour ${player.lap}/${this.raceSettings.laps} !`);
-                    
-                    if (player.lap > this.raceSettings.laps) {
-                        player.finished = true;
-                        player.finishTime = player.raceTime;
-                        player.lap = this.raceSettings.laps;
+            // Cooldown de 1 seconde pour éviter les détections multiples
+            if (crossed && currentTime - player.lastFinishLineTime > 1000) {
+                player.lastFinishLineTime = currentTime;
+                
+                // Vérifier le sens de passage
+                const lineVector = {
+                    x: trackData.finishLine.x2 - trackData.finishLine.x1,
+                    y: trackData.finishLine.y2 - trackData.finishLine.y1
+                };
+                // Vecteur normal à la ligne (pointe vers l'avant de la course)
+                const normal = { x: -lineVector.y, y: lineVector.x };
+                
+                // Vecteur de mouvement du joueur
+                const movement = {
+                    x: player.x - player.lastX,
+                    y: player.y - player.lastY
+                };
+                
+                // Produit scalaire pour vérifier le sens
+                const dot = normal.x * movement.x + normal.y * movement.y;
+                
+                if (dot > 0) { // Passage dans le bon sens
+                    // Premier passage = début de la course
+                    if (!player.hasPassedStartLine) {
+                        player.hasPassedStartLine = true;
+                        player.lap = 1;
+                        player.nextCheckpoint = 0;
                         
-                        io.to(this.id).emit('playerFinished', {
-                            playerId: player.id,
-                            pseudo: player.pseudo,
-                            finishTime: player.finishTime,
-                            position: this.getFinishPosition()
-                        });
-                    } else {
-                        io.to(player.id).emit('lapCompleted', {
-                            lap: player.lap,
+                        console.log(`🚦 ${player.pseudo} - Tour 1 commencé !`);
+                        
+                        io.to(player.id).emit('lapStarted', {
+                            message: 'Tour 1 commencé !',
+                            lap: 1,
                             totalLaps: this.raceSettings.laps
                         });
                     }
-                } else {
-                    const remaining = (trackData.checkpoints.length - player.nextCheckpoint);
-                    io.to(player.id).emit('invalidFinish', {
-                        message: `Il vous reste ${remaining} checkpoint(s) à passer !`,
-                        nextCheckpoint: player.nextCheckpoint + 1
-                    });
-                }
-            } else {
-                console.log(`⚠️ ${player.pseudo} traverse la ligne dans le mauvais sens`);
-            }
-        }
-        
-        // IMPORTANT: Mettre à jour l'état APRÈS la vérification
-        player.wasOnFinishLine = isOnFinishLine;
-        
-        // === LOGIQUE DES CHECKPOINTS ===
-        if (player.hasPassedStartLine && trackData.checkpoints) {
-            trackData.checkpoints.forEach((checkpoint, index) => {
-                const wasInside = player.lastCheckpointState[index] || false;
-                const isInside = this.isPlayerCrossingLine(player, checkpoint);
-                
-                // Détecter la transition false -> true
-                if (!wasInside && isInside) {
-                    if (index === player.nextCheckpoint) {
-                        const angleToCheckpoint = this.getAngleToRectangle(checkpoint);
-                        const angleDiff = this.normalizeAngle(player.angle - angleToCheckpoint);
+                    // Validation d'un tour
+                    else if (player.nextCheckpoint === (trackData.checkpoints ? trackData.checkpoints.length : 0)) {
+                        player.lap++;
+                        player.nextCheckpoint = 0;
                         
-                        if (Math.abs(angleDiff) < Math.PI / 2) {
-                            player.nextCheckpoint++;
+                        console.log(`🏁 ${player.pseudo} - Tour ${player.lap}/${this.raceSettings.laps} !`);
+                        
+                        if (player.lap > this.raceSettings.laps) {
+                            player.finished = true;
+                            player.finishTime = player.raceTime;
+                            player.lap = this.raceSettings.laps;
                             
-                            console.log(`✅ ${player.pseudo} - Checkpoint ${index + 1}/${trackData.checkpoints.length}`);
-                            
-                            io.to(player.id).emit('checkpointPassed', {
-                                checkpoint: index + 1,
-                                total: trackData.checkpoints.length,
-                                remaining: trackData.checkpoints.length - player.nextCheckpoint,
-                                lap: player.lap
+                            io.to(this.id).emit('playerFinished', {
+                                playerId: player.id,
+                                pseudo: player.pseudo,
+                                finishTime: player.finishTime,
+                                position: this.getFinishPosition()
                             });
                         } else {
-                            io.to(player.id).emit('wrongDirection', {
-                                message: `Checkpoint ${index + 1} - Mauvais sens !`
+                            io.to(player.id).emit('lapCompleted', {
+                                lap: player.lap,
+                                totalLaps: this.raceSettings.laps
                             });
                         }
-                    } else if (index > player.nextCheckpoint) {
-                        io.to(player.id).emit('wrongCheckpoint', {
-                            message: `Checkpoint ${player.nextCheckpoint + 1} manqué !`,
-                            expected: player.nextCheckpoint + 1,
-                            attempted: index + 1
+                    } else {
+                        const remaining = (trackData.checkpoints.length - player.nextCheckpoint);
+                        io.to(player.id).emit('invalidFinish', {
+                            message: `Il vous reste ${remaining} checkpoint(s) à passer !`,
+                            nextCheckpoint: player.nextCheckpoint + 1
                         });
                     }
                 }
+            }
+        }
+        
+        // === LOGIQUE DES CHECKPOINTS ===
+        if (player.hasPassedStartLine && trackData.checkpoints) {
+            const checkpoint = trackData.checkpoints[player.nextCheckpoint];
+            if (checkpoint) {
+                const crossed = this.lineSegmentsIntersect(
+                    player.lastX, player.lastY,
+                    player.x, player.y,
+                    checkpoint.x1, checkpoint.y1,
+                    checkpoint.x2, checkpoint.y2
+                );
                 
-                player.lastCheckpointState[index] = isInside;
-            });
+                // Cooldown de 1 seconde par checkpoint
+                const lastTime = player.lastCheckpointTime[player.nextCheckpoint] || 0;
+                if (crossed && currentTime - lastTime > 1000) {
+                    player.lastCheckpointTime[player.nextCheckpoint] = currentTime;
+                    
+                    // Vérifier le sens
+                    const lineVector = {
+                        x: checkpoint.x2 - checkpoint.x1,
+                        y: checkpoint.y2 - checkpoint.y1
+                    };
+                    const normal = { x: -lineVector.y, y: lineVector.x };
+                    const movement = {
+                        x: player.x - player.lastX,
+                        y: player.y - player.lastY
+                    };
+                    const dot = normal.x * movement.x + normal.y * movement.y;
+                    
+                    if (dot > 0) {
+                        player.nextCheckpoint++;
+                        
+                        console.log(`✅ ${player.pseudo} - Checkpoint ${player.nextCheckpoint}/${trackData.checkpoints.length}`);
+                        
+                        io.to(player.id).emit('checkpointPassed', {
+                            checkpoint: player.nextCheckpoint,
+                            total: trackData.checkpoints.length,
+                            remaining: trackData.checkpoints.length - player.nextCheckpoint,
+                            lap: player.lap
+                        });
+                    }
+                }
+            }
         }
     }
 
-    getAngleToRectangle(rect) {
-        // L'angle du rectangle indique déjà la direction de passage attendue
-        const rectAngle = (rect.angle || 0) * Math.PI / 180;
+    // Algorithme d'intersection de segments optimisé
+    lineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+        const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
         
-        // Pour un checkpoint/ligne d'arrivée, l'angle indique la direction normale
-        // On veut que les joueurs passent perpendiculairement à cette direction
-        // Donc on ajoute 90° (PI/2) pour obtenir la direction de passage
-        return rectAngle + Math.PI / 2;
+        // Lignes parallèles
+        if (Math.abs(denom) < 0.0001) return false;
+        
+        const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+        const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+        
+        // Intersection si t et u sont entre 0 et 1
+        return t >= 0 && t <= 1 && u >= 0 && u <= 1;
     }
 
     normalizeAngle(angle) {
@@ -407,70 +474,6 @@ class Room {
         while (angle > Math.PI) angle -= 2 * Math.PI;
         while (angle < -Math.PI) angle += 2 * Math.PI;
         return angle;
-    }
-
-    isPlayerCrossingLine(player, line) {
-        if (!line) return false;
-        
-        // Pour la ligne d'arrivée : détection rectangulaire précise
-        if (line === trackData.finishLine) {
-            const margin = 20;
-            
-            // Test simple de boîte englobante
-            const isInside = player.x >= (line.x - margin) && 
-                            player.x <= (line.x + line.width + margin) &&
-                            player.y >= (line.y - margin) && 
-                            player.y <= (line.y + line.height + margin);
-            
-            return isInside;
-        }
-        
-        // Pour les checkpoints : détection par cercle PLUS PETIT
-        const centerX = line.x + line.width / 2;
-        const centerY = line.y + line.height / 2;
-        
-        // Rayon réduit : dimension max / 2 + 15 pixels seulement
-        const radius = Math.max(line.width, line.height) / 2 + 15;
-        
-        // Distance entre le joueur et le centre
-        const distance = Math.sqrt(
-            Math.pow(player.x - centerX, 2) + 
-            Math.pow(player.y - centerY, 2)
-        );
-        
-        return distance <= radius;
-    }
-
-    isPointInRotatedRect(px, py, rect) {
-        // Calculer le centre du rectangle
-        const cx = rect.x + rect.width / 2;
-        const cy = rect.y + rect.height / 2;
-        
-        // Si pas de rotation, test simple
-        if (!rect.angle || rect.angle === 0) {
-            return px >= rect.x && px <= rect.x + rect.width && 
-                   py >= rect.y && py <= rect.y + rect.height;
-        }
-        
-        // Angle en radians (négatif pour correspondre au sens de rotation Canvas)
-        const angle = -(rect.angle || 0) * Math.PI / 180;
-        
-        // Translater le point dans le repère du rectangle
-        const dx = px - cx;
-        const dy = py - cy;
-        
-        // Rotation inverse pour ramener le point dans le repère non tourné
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        const localX = dx * cos - dy * sin;
-        const localY = dx * sin + dy * cos;
-        
-        // Vérifier si le point est dans le rectangle non tourné centré en (0,0)
-        const halfWidth = rect.width / 2;
-        const halfHeight = rect.height / 2;
-        
-        return localX >= -halfWidth && localX <= halfWidth &&
-               localY >= -halfHeight && localY <= halfHeight;
     }
 
     getFinishPosition() {
@@ -804,7 +807,7 @@ class Room {
                 finishTime: p.finishTime,
                 raceTime: p.raceTime,
                 nextCheckpoint: p.nextCheckpoint,
-                hasPassedStartLine: p.hasPassedStartLine, // IMPORTANT !
+                hasPassedStartLine: p.hasPassedStartLine,
                 totalCheckpoints: trackData.checkpoints ? trackData.checkpoints.length : 0,
                 lapsToWin: this.raceSettings ? this.raceSettings.laps : 3
             })),

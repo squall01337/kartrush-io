@@ -301,64 +301,56 @@ class GameEngine {
         }
     }
 
-    renderDetectionZones(ctx) {
-        // Afficher les zones de détection élargies
-        const margin = 10; // Même marge que dans le serveur
-        
-        ctx.save();
-        ctx.globalAlpha = 0.2;
-        ctx.strokeStyle = '#00FFFF';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        
-        // Zones des checkpoints
-        if (this.track.checkpoints) {
-            this.track.checkpoints.forEach((checkpoint) => {
-                ctx.save();
-                
-                const cx = checkpoint.x + checkpoint.width / 2;
-                const cy = checkpoint.y + checkpoint.height / 2;
-                
-                ctx.translate(cx, cy);
-                ctx.rotate((checkpoint.angle || 0) * Math.PI / 180);
-                
-                // Zone de détection élargie
-                ctx.strokeRect(
-                    -checkpoint.width/2 - margin, 
-                    -checkpoint.height/2 - margin, 
-                    checkpoint.width + margin * 2, 
-                    checkpoint.height + margin * 2
-                );
-                
-                ctx.restore();
-            });
-        }
-        
-        // Zone de la ligne d'arrivée
-        if (this.track.finishLine) {
-            const fl = this.track.finishLine;
-            ctx.save();
+ renderDetectionZones(ctx) {
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.setLineDash([10, 5]);
+    
+    // CERCLES de détection pour les checkpoints - EXACTEMENT LE MÊME RAYON !
+    if (this.track.checkpoints) {
+        this.track.checkpoints.forEach((checkpoint, idx) => {
+            const centerX = checkpoint.x + checkpoint.width / 2;
+            const centerY = checkpoint.y + checkpoint.height / 2;
+            const radius = Math.max(checkpoint.width, checkpoint.height) / 2 + 15; // 15 pixels comme le serveur !
             
-            const cx = fl.x + fl.width / 2;
-            const cy = fl.y + fl.height / 2;
+            // Cercle de détection
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.stroke();
             
-            ctx.translate(cx, cy);
-            ctx.rotate((fl.angle || 0) * Math.PI / 180);
+            // Point central
+            ctx.fillStyle = '#00FF00';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+            ctx.fill();
             
-            ctx.strokeStyle = '#FF00FF';
-            ctx.strokeRect(
-                -fl.width/2 - margin, 
-                -fl.height/2 - margin, 
-                fl.width + margin * 2, 
-                fl.height + margin * 2
-            );
-            
-            ctx.restore();
-        }
-        
-        ctx.setLineDash([]);
-        ctx.restore();
+            // Numéro du checkpoint
+            ctx.fillStyle = '#00FF00';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`CP${idx + 1}`, centerX, centerY - radius - 10);
+        });
     }
+    
+    // RECTANGLE de détection pour la ligne d'arrivée
+    if (this.track.finishLine) {
+        const fl = this.track.finishLine;
+        const margin = 20; // MÊME MARGE QUE LE SERVEUR
+        
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(
+            fl.x - margin,
+            fl.y - margin,
+            fl.width + margin * 2,
+            fl.height + margin * 2
+        );
+    }
+    
+    ctx.restore();
+}
 
     renderDebugElements(ctx) {
         // Récupérer le joueur actuel

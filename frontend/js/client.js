@@ -7,7 +7,7 @@ class GameClient {
         this.playerId = null;
         this.roomId = null;
         this.gameEngine = null;
-        this.currentScreen = 'menu';
+        this.currentScreen = 'splash'; // Commencer sur l'écran d'accueil
         this.selectedColor = '#ff4444';
         this.isHost = false;
         this.hostId = null; // Nouveau : ID de l'hôte actuel
@@ -20,9 +20,11 @@ class GameClient {
         this.currentMapPage = 0;
         this.mapsPerPage = 6;
         
+        // Musique de fond
+        this.backgroundMusic = null;
+        
         this.initializeUI();
-        this.connectToServer();
-        this.loadAvailableMaps();
+        // Ne pas se connecter tout de suite, attendre le clic sur PLAY
     }
 
     // Nouvelle méthode pour charger la liste des maps disponibles
@@ -64,7 +66,33 @@ class GameClient {
         }
     }
 
+    // Méthode appelée quand on clique sur PLAY
+    onPlayButtonClick() {
+        // Initialiser et lancer la musique de fond
+        this.backgroundMusic = new Audio('assets/audio/kartrush_theme.mp3');
+        this.backgroundMusic.loop = true;
+        this.backgroundMusic.volume = 0.3; // Volume plus bas pour ne pas être intrusif
+        this.backgroundMusic.play().catch(e => {
+            console.log('Musique de fond autorisée par le clic utilisateur');
+        });
+        
+        // Se connecter au serveur et charger les maps
+        this.connectToServer();
+        this.loadAvailableMaps();
+        
+        // Passer au menu principal
+        this.showScreen('menu');
+    }
+
     initializeUI() {
+        // Bouton PLAY de l'écran d'accueil
+        const playButton = document.getElementById('playButton');
+        if (playButton) {
+            playButton.addEventListener('click', () => {
+                this.onPlayButtonClick();
+            });
+        }
+        
         // Sélection de couleur
         document.querySelectorAll('.color-option').forEach(option => {
             option.addEventListener('click', (e) => {
@@ -1092,6 +1120,11 @@ class GameClient {
     showRaceResults(results) {
         // NE PAS arrêter le moteur ici, il a déjà été arrêté
         
+        // Relancer la musique de fond
+        if (this.backgroundMusic) {
+            this.backgroundMusic.play().catch(e => console.log('Reprise de la musique de fond'));
+        }
+        
         // Remplir le tableau des résultats
         const ranking = document.getElementById('finalRanking');
         ranking.innerHTML = '';
@@ -1202,6 +1235,11 @@ class GameClient {
 
     startGameCountdown() {
         this.showScreen('game');
+        
+        // Arrêter la musique de fond quand la course commence
+        if (this.backgroundMusic) {
+            this.backgroundMusic.pause();
+        }
         
         // Nettoyer toutes les notifications restantes de la partie précédente
         this.cleanupGameNotifications();
@@ -1446,6 +1484,16 @@ class GameClient {
         document.getElementById(screenName).classList.remove('hidden');
         this.currentScreen = screenName;
         
+        // Gérer la vidéo de fond
+        const bgVideo = document.getElementById('backgroundVideo');
+        if (bgVideo) {
+            if (screenName === 'game') {
+                bgVideo.style.display = 'none';
+            } else {
+                bgVideo.style.display = 'block';
+            }
+        }
+        
         // Arrêter le son du moteur si on quitte l'écran de jeu
         if (screenName !== 'game') {
             soundManager.stopEngine();
@@ -1465,7 +1513,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Initialisation du client sans assets...');
     }
     
-    // Toujours initialiser le client, avec ou sans assets
+    // Toujours initialiser le client
     window.gameClient = new GameClient();
     console.log('Client initialisé avec succès !');
 });

@@ -7,7 +7,20 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="menu" class="screen">
+
+<video id="backgroundVideo" class="background-video" autoplay loop muted playsinline>
+    <source src="assets/bg_animated.webm" type="video/webm">
+</video>
+
+<div id="splash" class="screen">
+    <div class="splash-container">
+        <h1 class="splash-title">KartRush.io</h1>
+        <button id="playButton" class="play-button">PLAY</button>
+        <p class="splash-subtitle">Drive, Strive, Survive</p>
+    </div>
+</div>
+
+<div id="menu" class="screen hidden">
     <div class="menu-container">
         <h1>KartRush.io</h1>
         <div class="menu-form">

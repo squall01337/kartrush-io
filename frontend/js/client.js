@@ -444,16 +444,17 @@ class GameClient {
         this.socket.on('rematchStarting', (data) => {
             this.rematchVotes = 0;
             
+            // Arrêter la musique AVANT de nettoyer les notifications
+            if (this.gameEngine && this.gameEngine.music) {
+                this.gameEngine.music.pause();
+                this.gameEngine.music.currentTime = 0;
+                this.gameEngine.music = null;
+            }
+            
             // Nettoyer les notifications avant de retourner au lobby
             this.cleanupGameNotifications();
             
             this.showScreen('lobby');
-            
-            // Arrêter la musique si elle joue encore
-            if (this.gameEngine && this.gameEngine.music) {
-                this.gameEngine.music.pause();
-                this.gameEngine.music = null;
-            }
             
             this.showNotification({
                 text: 'Nouvelle partie dans le même lobby !',
@@ -465,13 +466,15 @@ class GameClient {
         // Nouveau : Retour au lobby forcé
         this.socket.on('returnToLobby', () => {
             this.rematchVotes = 0;
-            this.showScreen('lobby');
             
             // Arrêter la musique
             if (this.gameEngine && this.gameEngine.music) {
                 this.gameEngine.music.pause();
+                this.gameEngine.music.currentTime = 0;
                 this.gameEngine.music = null;
             }
+            
+            this.showScreen('lobby');
         });
 
         // ÉVÉNEMENTS DE COURSE
@@ -673,9 +676,15 @@ class GameClient {
                     this.gameEngine.stop();
                     if (this.gameEngine.music) {
                         this.gameEngine.music.pause();
+                        this.gameEngine.music.currentTime = 0;
                         this.gameEngine.music = null;
                     }
+                    // Nettoyer complètement le gameEngine
+                    this.gameEngine = null;
                 }
+                
+                // Réinitialiser les données de map
+                this.mapData = null;
                 
                 // Afficher les résultats
                 this.showRaceResults(data.results);
@@ -697,16 +706,16 @@ class GameClient {
 
         this.socket.on('kickedFromLobby', (data) => {
             console.log('❌ Kicked du lobby:', data.reason);
+            
+            // Retour automatique au menu
             this.showScreen('menu');
             
             // Arrêter la musique
             if (this.gameEngine && this.gameEngine.music) {
                 this.gameEngine.music.pause();
+                this.gameEngine.music.currentTime = 0;
                 this.gameEngine.music = null;
             }
-            
-            // Notification
-            alert('Vous avez été exclu du lobby car vous n\'avez pas voté pour rejouer.');
         });
 
         this.socket.on('disconnect', () => {
@@ -849,15 +858,15 @@ class GameClient {
         document.getElementById('results').appendChild(timerDiv);
         
         // Afficher immédiatement 10s
-        timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
+        timerDiv.textContent = `Retour à l'accueil dans : ${timeLeft}s`;
         
         const intervalId = setInterval(() => {
             timeLeft--;
             if (timeLeft <= 0) {
                 clearInterval(intervalId);
-                timerDiv.textContent = `Retour au lobby...`;
+                timerDiv.textContent = `Retour à l'accueil...`;
             } else {
-                timerDiv.textContent = `Retour au lobby dans : ${timeLeft}s`;
+                timerDiv.textContent = `Retour à l'accueil dans : ${timeLeft}s`;
             }
         }, 1000);
     }
@@ -1197,6 +1206,7 @@ class GameClient {
         // Nettoyer toutes les notifications restantes de la partie précédente
         this.cleanupGameNotifications();
         
+        // Créer une nouvelle instance du gameEngine à chaque partie
         this.initializeGame();
 
         // Appliquer les données de la map si elles ont déjà été reçues
@@ -1262,8 +1272,14 @@ class GameClient {
     backToMenu() {
         if (this.gameEngine) {
             this.gameEngine.stop();
+            if (this.gameEngine.music) {
+                this.gameEngine.music.pause();
+                this.gameEngine.music.currentTime = 0;
+                this.gameEngine.music = null;
+            }
             this.gameEngine = null;
         }
+        this.mapData = null;
         this.leaveRoom();
     }
 
@@ -1355,7 +1371,10 @@ class GameClient {
                 case 'ArrowUp':
                 case 'KeyW':
                     if (!this.keys.up) {
-                        soundManager.playEngine(); // Démarrer la boucle moteur
+                        // Jouer le son du moteur si on est sur l'écran de jeu (même pendant le compte à rebours)
+                        if (this.currentScreen === 'game') {
+                            soundManager.playEngine();
+                        }
                     }
                     this.keys.up = true;
                     e.preventDefault();
@@ -1426,6 +1445,11 @@ class GameClient {
         
         document.getElementById(screenName).classList.remove('hidden');
         this.currentScreen = screenName;
+        
+        // Arrêter le son du moteur si on quitte l'écran de jeu
+        if (screenName !== 'game') {
+            soundManager.stopEngine();
+        }
     }
 }
 

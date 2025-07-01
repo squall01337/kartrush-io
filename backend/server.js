@@ -368,12 +368,18 @@ class Room {
         
         // Si tous ont voté pour rejouer
         if (this.rematchVotes.size === this.players.size) {
+            // IMPORTANT: Annuler le timer de kick avant de démarrer le rematch
+            if (this.rematchTimer) {
+                clearTimeout(this.rematchTimer);
+                this.rematchTimer = null;
+            }
             this.startRematch();
         }
     }
 
     // Nouvelle méthode pour démarrer le rematch
     startRematch() {
+        // S'assurer que le timer est bien annulé
         if (this.rematchTimer) {
             clearTimeout(this.rematchTimer);
             this.rematchTimer = null;
@@ -392,6 +398,12 @@ class Room {
 
     startGame() {
         if (!this.canStart()) return false;
+        
+        // IMPORTANT: Annuler le timer de rematch si une nouvelle partie démarre
+        if (this.rematchTimer) {
+            clearTimeout(this.rematchTimer);
+            this.rematchTimer = null;
+        }
         
         this.gameStarted = true;
         this.gameStartTime = Date.now();
@@ -704,7 +716,7 @@ class Room {
             raceTime: Date.now() - this.gameStartTime
         });
         
-        // Démarrer le timer de 10 secondes pour le rematch APRÈS le délai de 2 secondes
+        // Démarrer le timer de 10 secondes pour le rematch APRÈS le délai de 3 secondes
         setTimeout(() => {
             this.rematchTimer = setTimeout(() => {
                 // Ceux qui ont voté rematch restent, les autres sont kickés
@@ -733,7 +745,7 @@ class Room {
                     broadcastPlayersList(this);
                 }
             }, 10000);
-        }, 2000); // Attendre 2 secondes comme le client
+        }, 3000); // Attendre 3 secondes pour parfaite synchronisation
     }
 
     formatTime(ms) {

@@ -99,6 +99,7 @@ class GameEngine {
             // 🎵 Gérer la musique de la map
             if (this.music) {
                 this.music.pause();
+                this.music.currentTime = 0;
                 this.music = null;
             }
 
@@ -116,7 +117,6 @@ class GameEngine {
                 const img = new Image();
                 img.onload = () => {
                     this.backgroundImage = img;
-                    console.log('✅ Background de la map chargé:', mapData.background);
                 };
                 img.onerror = () => {
                     console.error('❌ Erreur de chargement du background:', mapData.background);
@@ -927,22 +927,7 @@ class GameEngine {
     }
 
     updateGameState(gameData) {
-        this.gameState = gameData;
-        
-        // DEBUG: Afficher l'état du joueur actuel
-        const myPlayer = gameData.players.find(p => p.id === this.playerId);
-        if (myPlayer) {
-            // Log toutes les 60 frames (1 seconde)
-            if (!this.lastDebugTime || Date.now() - this.lastDebugTime > 1000) {
-                console.log('🎮 État client:', {
-                    position: `(${Math.round(myPlayer.x)}, ${Math.round(myPlayer.y)})`,
-                    hasPassedStartLine: myPlayer.hasPassedStartLine,
-                    nextCheckpoint: myPlayer.nextCheckpoint,
-                    lap: myPlayer.lap
-                });
-                this.lastDebugTime = Date.now();
-            }
-        }
+        this.gameState = gameData;      
         
         // Nettoyer l'interpolation pour les joueurs qui ont quitté
         const currentIds = new Set(gameData.players.map(p => p.id));

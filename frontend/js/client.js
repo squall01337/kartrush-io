@@ -499,8 +499,8 @@ class GameClient {
             const notification = document.createElement('div');
             notification.className = 'lap-notification';
             notification.innerHTML = `
-                <div class="lap-icon">🏁</div>
-                <div class="lap-text">${data.message}</div>
+                <span class="lap-icon">🏁</span>
+                <span class="lap-text">${data.message}</span>
             `;
             
             notification.style.cssText = `
@@ -508,16 +508,21 @@ class GameClient {
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%);
-                background: rgba(0, 200, 0, 0.9);
+                background: linear-gradient(135deg, rgba(147, 51, 234, 0.9), rgba(236, 72, 153, 0.9));
                 padding: 20px 40px;
                 border-radius: 20px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
                 color: white;
                 font-size: 2em;
                 font-weight: bold;
                 z-index: 200;
                 animation: lapZoom 0.8s ease-out;
-                box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
+                box-shadow: 0 0 40px rgba(236, 72, 153, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.2);
                 pointer-events: none;
+                text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+                display: flex;
+                align-items: center;
+                gap: 10px;
             `;
             
             document.getElementById('game').appendChild(notification);
@@ -532,8 +537,12 @@ class GameClient {
             }
             
             setTimeout(() => {
-                notification.style.animation = 'fadeOut 0.5s ease-out';
-                setTimeout(() => notification.remove(), 500);
+                notification.style.animation = 'lapDissolve 0.8s ease-out forwards';
+                notification.style.pointerEvents = 'none';
+                setTimeout(() => {
+                    notification.style.display = 'none';
+                    notification.remove();
+                }, 790);
             }, 2000);
         });
 
@@ -860,8 +869,8 @@ class GameClient {
         
         notification.className = 'lap-notification';
         notification.innerHTML = `
-            <div class="lap-icon">🏁</div>
-            <div class="lap-text">${message}</div>
+            <span class="lap-icon">🏁</span>
+            <span class="lap-text">${message}</span>
         `;
         
         notification.style.cssText = `
@@ -869,22 +878,32 @@ class GameClient {
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: ${isLastLap ? 'rgba(255, 165, 0, 0.9)' : 'rgba(0, 100, 255, 0.9)'};
+            background: linear-gradient(135deg, rgba(147, 51, 234, 0.9), rgba(236, 72, 153, 0.9));
             padding: 20px 40px;
             border-radius: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
             color: white;
             font-size: 2em;
             font-weight: bold;
             z-index: 200;
             animation: lapZoom 0.8s ease-out;
+            box-shadow: 0 0 40px rgba(236, 72, 153, 0.8), inset 0 0 20px rgba(255, 255, 255, 0.2);
             pointer-events: none;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            display: flex;
+            align-items: center;
+            gap: 10px;
         `;
         
         document.getElementById('game').appendChild(notification);
         
         setTimeout(() => {
-            notification.style.animation = 'fadeOut 0.5s ease-out';
-            setTimeout(() => notification.remove(), 500);
+            notification.style.animation = 'lapDissolve 0.8s ease-out forwards';
+            notification.style.pointerEvents = 'none';
+            setTimeout(() => {
+                notification.style.display = 'none';
+                notification.remove();
+            }, 790);
         }, 2000);
     }
 
@@ -1175,7 +1194,7 @@ class GameClient {
         // Sélectionner et supprimer toutes les notifications
         const notifications = gameElement.querySelectorAll(
             '.personal-finish, .finish-notification, .game-notification, ' +
-            '.checkpoint-notification, .lap-notification, .time-warning, .final-lap-message'
+            '.checkpoint-notification, .lap-notification, .time-warning'
         );
         
         notifications.forEach(notification => {

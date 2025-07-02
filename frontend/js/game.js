@@ -19,7 +19,6 @@ class GameEngine {
         this.camera = { x: 0, y: 0 };
         this.lastFrameTime = 0;
         this.lastLap = 0;
-        this.finalLapShown = false;
         
         this.spriteCache = new Map();
         
@@ -387,30 +386,95 @@ class GameEngine {
         ctx.resetTransform();
         
         // Ajuster les positions et largeurs pour mieux centrer le texte
-        const boxWidth = 180 * this.scale;  // Largeur réduite
-        const boxHeight = 60 * this.scale;
+        const boxWidth = 220 * this.scale;  // Largeur augmentée pour le temps restant
+        const boxHeight = 85 * this.scale;  // Hauteur augmentée pour la position
         const padding = 10 * this.scale;
         const infoX = this.canvas.width - boxWidth - (20 * this.scale);
         const infoY = 20 * this.scale;
+        const borderRadius = 15 * this.scale;
         
-        // Fond avec padding correct
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(infoX, infoY, boxWidth, boxHeight);
+        // Créer un gradient pour le fond
+        const gradient = ctx.createLinearGradient(infoX, infoY, infoX + boxWidth, infoY + boxHeight);
+        gradient.addColorStop(0, 'rgba(147, 51, 234, 0.7)');
+        gradient.addColorStop(1, 'rgba(236, 72, 153, 0.7)');
+        
+        // Dessiner le rectangle arrondi avec gradient
+        ctx.beginPath();
+        ctx.moveTo(infoX + borderRadius, infoY);
+        ctx.lineTo(infoX + boxWidth - borderRadius, infoY);
+        ctx.quadraticCurveTo(infoX + boxWidth, infoY, infoX + boxWidth, infoY + borderRadius);
+        ctx.lineTo(infoX + boxWidth, infoY + boxHeight - borderRadius);
+        ctx.quadraticCurveTo(infoX + boxWidth, infoY + boxHeight, infoX + boxWidth - borderRadius, infoY + boxHeight);
+        ctx.lineTo(infoX + borderRadius, infoY + boxHeight);
+        ctx.quadraticCurveTo(infoX, infoY + boxHeight, infoX, infoY + boxHeight - borderRadius);
+        ctx.lineTo(infoX, infoY + borderRadius);
+        ctx.quadraticCurveTo(infoX, infoY, infoX + borderRadius, infoY);
+        ctx.closePath();
+        
+        // Remplir avec le gradient
+        ctx.fillStyle = gradient;
+        ctx.fill();
+        
+        // Ajouter une bordure néon
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2 * this.scale;
+        ctx.stroke();
+        
+        // Effet de lueur externe
+        ctx.shadowColor = 'rgba(236, 72, 153, 0.8)';
+        ctx.shadowBlur = 20 * this.scale;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.stroke();
+        
+        // Réinitialiser l'ombre pour le texte
+        ctx.shadowBlur = 0;
         
         // Texte aligné à gauche avec padding
         ctx.fillStyle = '#FFFFFF';
         ctx.font = `${16 * this.scale}px Arial`;
         ctx.textAlign = 'left';
         
+        // Ajouter une légère ombre au texte pour la lisibilité
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 2 * this.scale;
+        
         const textX = infoX + padding;
         
-        const displayLap = currentPlayer.lap === 0 ? 0 : currentPlayer.lap;
-        ctx.fillText(`🏁 Lap: ${displayLap}/${currentPlayer.lapsToWin}`, textX, infoY + 25 * this.scale);
+        // Position
+        ctx.fillText(`🏆 Position: ${currentPlayer.position}/${this.gameState.players.length}`, textX, infoY + 22 * this.scale);
         
+        // Laps
+        const displayLap = currentPlayer.lap === 0 ? 0 : currentPlayer.lap;
+        ctx.fillText(`🏁 Lap: ${displayLap}/${currentPlayer.lapsToWin}`, textX, infoY + 44 * this.scale);
+        
+        // Timer avec temps restant
         const minutes = Math.floor(this.gameState.gameTime / 60000);
         const seconds = Math.floor((this.gameState.gameTime % 60000) / 1000);
-        const timeString = `⏱️ Time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        ctx.fillText(timeString, textX, infoY + 50 * this.scale);
+        let timeString = `⏱️ Time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Ajouter le temps restant si applicable
+        if (this.gameState.maxTime && this.gameState.remainingTime !== null) {
+            const remainingSeconds = Math.floor(this.gameState.remainingTime / 1000);
+            const remainingMinutes = Math.floor(remainingSeconds / 60);
+            const remainingSecondsOnly = remainingSeconds % 60;
+            
+            // Changer la couleur selon le temps restant
+            if (remainingSeconds < 60) {
+                ctx.fillStyle = '#ff4444';
+                ctx.font = `bold ${16 * this.scale}px Arial`;
+                ctx.shadowColor = 'rgba(255, 68, 68, 0.5)';
+                ctx.shadowBlur = 4 * this.scale;
+            } else if (remainingSeconds < 120) {
+                ctx.fillStyle = '#ffaa44';
+                ctx.shadowColor = 'rgba(255, 170, 68, 0.5)';
+                ctx.shadowBlur = 3 * this.scale;
+            }
+            
+            timeString += ` (${remainingMinutes}:${remainingSecondsOnly.toString().padStart(2, '0')})`;
+        }
+        
+        ctx.fillText(timeString, textX, infoY + 66 * this.scale);
         
         ctx.restore();
     }
@@ -474,68 +538,7 @@ class GameEngine {
         const player = this.gameState.players.find(p => p.id === this.playerId);
         if (!player) return;
         
-        const positionEl = document.getElementById('position');
-        const newPosition = `Position: ${player.position}/${this.gameState.players.length}`;
-        if (positionEl.textContent !== newPosition) {
-            positionEl.textContent = newPosition;
-        }
-        
-        const lapEl = document.getElementById('lap');
-        const totalLaps = this.gameState.totalLaps || 3;
-        
-        const displayLap = player.lap === 0 ? 0 : player.lap;
-        const newLap = `Lap: ${displayLap}/${totalLaps}`;
-        
-        if (lapEl.textContent !== newLap) {
-            lapEl.textContent = newLap;
-            
-            if (player.lap > 0 && player.lap > (this.lastLap || 0)) {
-                lapEl.style.animation = 'flash 0.5s';
-                setTimeout(() => {
-                    lapEl.style.animation = '';
-                }, 500);
-                
-                if (player.lap === totalLaps - 1) {
-                    this.showFinalLapMessage();
-                    this.finalLapShown = true;
-                }
-            }
-            this.lastLap = player.lap;
-        }
-        
-        const timerEl = document.getElementById('timer');
-        if (this.gameState.maxTime && this.gameState.remainingTime !== null) {
-            const totalSeconds = Math.floor(this.gameState.gameTime / 1000);
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            
-            const remainingSeconds = Math.floor(this.gameState.remainingTime / 1000);
-            const remainingMinutes = Math.floor(remainingSeconds / 60);
-            const remainingSecondsOnly = remainingSeconds % 60;
-            
-            if (remainingSeconds < 60) {
-                timerEl.style.color = '#ff4444';
-                timerEl.style.fontWeight = 'bold';
-            } else if (remainingSeconds < 120) {
-                timerEl.style.color = '#ffaa44';
-            } else {
-                timerEl.style.color = '';
-                timerEl.style.fontWeight = '';
-            }
-            
-            const newTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} (${remainingMinutes}:${remainingSecondsOnly.toString().padStart(2, '0')})`;
-            if (timerEl.textContent !== newTime) {
-                timerEl.textContent = newTime;
-            }
-        } else {
-            const minutes = Math.floor(this.gameState.gameTime / 60000);
-            const seconds = Math.floor((this.gameState.gameTime % 60000) / 1000);
-            const newTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            if (timerEl.textContent !== newTime) {
-                timerEl.textContent = newTime;
-            }
-        }
-        
+        // Gérer uniquement l'item slot
         const itemSlot = document.getElementById('itemSlot');
         if (player.item && !itemSlot.dataset.item) {
             itemSlot.textContent = this.getItemIcon(player.item);
@@ -546,30 +549,6 @@ class GameEngine {
             itemSlot.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
             delete itemSlot.dataset.item;
         }
-    }
-
-    showFinalLapMessage() {
-        const message = document.createElement('div');
-        message.className = 'final-lap-message';
-        message.textContent = 'FINAL LAP!';
-        message.style.cssText = `
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 4em;
-            font-weight: bold;
-            color: #ff0000;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-            z-index: 200;
-            animation: finalLapPulse 1.5s ease-out;
-        `;
-        
-        document.getElementById('game').appendChild(message);
-        
-        setTimeout(() => {
-            message.remove();
-        }, 1500);
     }
 
     getItemIcon(itemType) {

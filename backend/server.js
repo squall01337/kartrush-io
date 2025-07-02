@@ -406,7 +406,8 @@ class Room {
         }
         
         this.gameStarted = true;
-        this.gameStartTime = Date.now();
+        // NE PAS définir gameStartTime ici, attendre 3 secondes
+        this.gameStartTime = null;
         
         // Charger la map sélectionnée
         loadMapData(this.selectedMap);
@@ -441,9 +442,16 @@ class Room {
             index++;
         }
         
+        // Démarrer la boucle de jeu immédiatement
         this.gameLoop = setInterval(() => {
             this.update();
         }, 1000 / GAME_CONFIG.TICK_RATE);
+        
+        // Démarrer le timer après 3 secondes (temps du countdown)
+        setTimeout(() => {
+            this.gameStartTime = Date.now();
+            console.log('⏱️ Timer de course démarré !');
+        }, 3000);
         
         return true;
     }
@@ -461,6 +469,26 @@ class Room {
         const now = Date.now();
         const deltaTime = (now - this.lastUpdate) / 1000;
         this.lastUpdate = now;
+        
+        // Si le timer n'a pas encore démarré, ne pas vérifier le temps limite
+        if (!this.gameStartTime) {
+            // Mettre à jour seulement les positions des joueurs
+            for (let player of this.players.values()) {
+                if (!player.finished) {
+                    player.update(deltaTime);
+                    player.raceTime = 0; // Garder à 0 tant que le timer n'a pas démarré
+                    
+                    // Collision avec murs
+                    this.checkWallCollisions(player);
+                }
+            }
+            
+            // Collision entre joueurs
+            this.checkPlayerCollisions();
+            this.updatePositions();
+            this.broadcastGameState();
+            return;
+        }
         
         const raceTime = now - this.gameStartTime;
 
@@ -1041,7 +1069,9 @@ class Room {
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,
             maxTime: this.raceSettings ? this.raceSettings.maxTime : null,
-            remainingTime: this.raceSettings ? Math.max(0, this.raceSettings.maxTime - (Date.now() - this.gameStartTime)) : null
+            remainingTime: this.gameStartTime && this.raceSettings ? 
+                Math.max(0, this.raceSettings.maxTime - (Date.now() - this.gameStartTime)) : 
+                (this.raceSettings ? this.raceSettings.maxTime : null)
         };
 
         io.to(this.id).emit('gameUpdate', gameData);

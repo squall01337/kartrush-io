@@ -187,18 +187,6 @@ button:disabled {
     z-index: 10;
 }
 
-#raceInfo {
-    background: rgba(0, 0, 0, 0.7);
-    padding: 15px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-}
-
-#raceInfo div {
-    margin: 5px 0;
-    font-weight: bold;
-}
-
 .item-slot {
     width: 60px;
     height: 60px;
@@ -308,36 +296,12 @@ button:disabled {
     }
 }
 
-@keyframes lapZoom {
-    0% {
-        transform: translate(-50%, -50%) scale(0);
-        opacity: 0;
-    }
-    50% {
-        transform: translate(-50%, -50%) scale(1.2);
-    }
-    100% {
-        transform: translate(-50%, -50%) scale(1);
-        opacity: 1;
-    }
-}
-
 @keyframes flash {
     0%, 100% {
         opacity: 1;
     }
     50% {
         opacity: 0.3;
-    }
-}
-
-@keyframes fadeOut {
-    0% {
-        opacity: 1;
-    }
-    100% {
-        opacity: 0;
-        transform: translateX(-50%) translateY(20px);
     }
 }
 
@@ -350,17 +314,47 @@ button:disabled {
     }
 }
 
-@keyframes finalLapPulse {
+/* Ajouter cette nouvelle animation après l'animation lapZoom existante (vers ligne 580) */
+
+@keyframes lapDissolve {
     0% {
-        transform: translate(-50%, -50%) scale(0) rotate(-10deg);
-        opacity: 0;
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+        filter: blur(0px);
     }
     50% {
-        transform: translate(-50%, -50%) scale(1.2) rotate(5deg);
+        opacity: 0.5;
+        transform: translate(-50%, -50%) scale(1.1);
+        filter: blur(2px);
+    }
+    99% {
+        opacity: 0.01;
+        transform: translate(-50%, -50%) scale(1.2);
+        filter: blur(10px);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(1.2);
+        filter: blur(10px);
+        visibility: hidden;
+    }
+}
+
+/* Optionnel : Améliorer aussi l'animation lapZoom pour qu'elle soit plus cyberpunk */
+@keyframes lapZoom {
+    0% {
+        transform: translate(-50%, -50%) scale(0) rotate(-5deg);
+        opacity: 0;
+        filter: blur(10px);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.15) rotate(2deg);
+        filter: blur(0px);
     }
     100% {
         transform: translate(-50%, -50%) scale(1) rotate(0deg);
         opacity: 1;
+        filter: blur(0px);
     }
 }
 
@@ -376,11 +370,6 @@ button:disabled {
 
 .time-warning {
     pointer-events: none;
-}
-
-.final-lap-message {
-    pointer-events: none;
-    animation: finalLapPulse 1.5s ease-out !important;
 }
 
 /* Styles pour le menu */

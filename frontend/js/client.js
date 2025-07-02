@@ -37,15 +37,12 @@ class GameClient {
                 this.availableMaps = data.maps.map(map => ({
                     id: map.id,
                     name: map.name,
-                    thumbnail: map.thumbnail // Utiliser directement le chemin du JSON
+                    thumbnail: map.thumbnail
                 }));
-                console.log('✅ Maps chargées depuis le serveur:', this.availableMaps);
             } else {
                 throw new Error('Impossible de charger les maps');
             }
         } catch (error) {
-            console.warn('⚠️ Chargement des maps échoué, utilisation de la liste statique');
-            // Fallback sur la liste statique
             this.availableMaps = [
                 { id: 'lava_track', name: 'City', thumbnail: 'assets/track_background.png' },
                 { id: 'ice_circuit', name: 'Lava world', thumbnail: 'assets/track_background.png2' },
@@ -71,10 +68,13 @@ class GameClient {
         // Initialiser et lancer la musique de fond
         this.backgroundMusic = new Audio('assets/audio/kartrush_theme.mp3');
         this.backgroundMusic.loop = true;
-        this.backgroundMusic.volume = 0.3; // Volume plus bas pour ne pas être intrusif
+        this.backgroundMusic.volume = soundManager.getVolumeFor('backgroundMusic');
         this.backgroundMusic.play().catch(e => {
             console.log('Musique de fond autorisée par le clic utilisateur');
         });
+        
+        // Enregistrer la musique dans le gestionnaire
+        soundManager.registerAudio('backgroundMusic', this.backgroundMusic);
         
         // Se connecter au serveur et charger les maps
         this.connectToServer();
@@ -281,8 +281,6 @@ class GameClient {
         });
 
         this.socket.on('joinedRoom', (data) => {
-            console.log('📍 Joined room:', data);
-            
             this.playerId = data.playerId;
             this.roomId = data.roomId;
             this.isHost = data.isHost || false;
@@ -295,7 +293,6 @@ class GameClient {
                 return;
             }
             
-            // Afficher le code pour toutes les rooms
             const code = data.roomCode || data.roomId;
             roomCodeEl.textContent = code;
             roomCodeEl.style.display = 'block';
@@ -308,40 +305,28 @@ class GameClient {
                 roomCodeEl.className = 'room-code public';
             }
             
-            console.log('🔑 Code de room:', code);
-            
-            // Ajouter une info pour partager le code
             this.showRoomShareInfo(code, data.isPrivate);
             
             this.showScreen('lobby');
         });
 
-        // Réception des données de la map depuis le serveur
         this.socket.on('mapData', (mapData) => {
-            console.log('📦 Map reçue :', mapData);
             this.mapData = mapData;
             
-            // Précharger l'image de background si elle existe
             if (mapData.background && mapData.background.endsWith('.png')) {
-                console.log('🖼️ Préchargement du background:', mapData.background);
                 const img = new Image();
                 img.onload = () => {
-                    console.log('✅ Background préchargé avec succès');
-                    // Maintenant que l'image est chargée, on peut la passer au gameEngine
                     if (this.gameEngine) {
                         this.gameEngine.setMapData(mapData);
                     }
                 };
                 img.onerror = () => {
-                    console.error('❌ Erreur de préchargement du background');
-                    // Même en cas d'erreur, on passe les données
                     if (this.gameEngine) {
                         this.gameEngine.setMapData(mapData);
                     }
                 };
                 img.src = mapData.background;
             } else {
-                // Pas d'image à précharger
                 if (this.gameEngine) {
                     this.gameEngine.setMapData(mapData);
                 }
@@ -507,9 +492,6 @@ class GameClient {
 
         // ÉVÉNEMENTS DE COURSE
         this.socket.on('lapStarted', (data) => {
-            console.log('🏁 Tour 1 commencé !');
-            
-            // Notification spéciale pour le début du tour 1
             const notification = document.createElement('div');
             notification.className = 'lap-notification';
             notification.innerHTML = `
@@ -536,27 +518,10 @@ class GameClient {
             document.getElementById('game').appendChild(notification);
             
             // Son de début de tour
-            const lapSound = new Audio('assets/audio/lap.mp3');
-            lapSound.volume = 0.8;
-            lapSound.play().catch(e => {
+            soundManager.playLap().catch(e => {
                 // Fallback Web Audio
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator1 = audioContext.createOscillator();
-                const oscillator2 = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator1.connect(gainNode);
-                oscillator2.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator1.frequency.value = 523; // Do
-                oscillator2.frequency.value = 659; // Mi
-                gainNode.gain.value = 0.3;
-                
-                oscillator1.start();
-                oscillator2.start();
-                oscillator1.stop(audioContext.currentTime + 0.3);
-                oscillator2.stop(audioContext.currentTime + 0.3);
+                soundManager.playTone(523, 0.3);
+                setTimeout(() => soundManager.playTone(659, 0.3), 100);
             });
             
             setTimeout(() => {
@@ -566,61 +531,22 @@ class GameClient {
         });
 
         this.socket.on('checkpointPassed', (data) => {
-            console.log(`✅ Checkpoint ${data.checkpoint}/${data.total} passé !`);
-            
-            // Son de checkpoint
-            const checkpointSound = new Audio('assets/audio/checkpoint.mp3');
-            checkpointSound.volume = 0.7;
-            checkpointSound.play().catch(e => {
-                // Fallback : son simple si pas de fichier audio
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.frequency.value = 800; // Fréquence haute
-                gainNode.gain.value = 0.3;
-                
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.1); // Son court
-            });
-            
-            // Notification visuelle
-            this.showCheckpointNotification(data);
+            // Checkpoint passé silencieusement
         });
 
         this.socket.on('wrongCheckpoint', (data) => {
-            console.log(`❌ ${data.message}`);
             this.showNotification({
                 text: data.message,
                 type: 'error',
                 icon: '❌'
             });
             
-            // Son d'erreur
-            const errorSound = new Audio('assets/audio/error.mp3');
-            errorSound.volume = 0.5;
-            errorSound.play().catch(e => {
-                // Fallback
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.frequency.value = 200; // Fréquence basse pour erreur
-                gainNode.gain.value = 0.3;
-                
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 0.2);
+            soundManager.playError().catch(e => {
+                soundManager.playTone(200, 0.2);
             });
         });
 
         this.socket.on('invalidFinish', (data) => {
-            console.log(`⚠️ ${data.message}`);
             this.showNotification({
                 text: data.message,
                 type: 'warning',
@@ -629,31 +555,10 @@ class GameClient {
         });
 
         this.socket.on('lapCompleted', (data) => {
-            console.log(`🏁 Tour ${data.lap}/${data.totalLaps} complété !`);
-            
-            // Son de passage de tour
-            const lapSound = new Audio('assets/audio/lap.mp3');
-            lapSound.volume = 0.8;
-            lapSound.play().catch(e => {
-                // Fallback : son plus élaboré pour le tour
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator1 = audioContext.createOscillator();
-                const oscillator2 = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator1.connect(gainNode);
-                oscillator2.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                // Double ton pour un effet plus marqué
-                oscillator1.frequency.value = 600;
-                oscillator2.frequency.value = 900;
-                gainNode.gain.value = 0.3;
-                
-                oscillator1.start();
-                oscillator2.start();
-                oscillator1.stop(audioContext.currentTime + 0.2);
-                oscillator2.stop(audioContext.currentTime + 0.2);
+            soundManager.playLap().catch(e => {
+                // Fallback : double ton
+                soundManager.playTone(600, 0.2);
+                setTimeout(() => soundManager.playTone(900, 0.2), 100);
             });
             
             // Notification visuelle du tour
@@ -661,14 +566,10 @@ class GameClient {
         });
 
         this.socket.on('timeWarning', (data) => {
-            console.log(`⏱️ ${data.message}`);
             this.showTimeWarning(data);
         });
 
         this.socket.on('playerFinished', (data) => {
-            console.log(`🏁 ${data.pseudo} a terminé en position ${data.position}!`);
-            
-            // Afficher une notification
             this.showFinishNotification(data);
             
             // Si c'est nous qui avons fini
@@ -688,9 +589,6 @@ class GameClient {
 
         // Modifier raceEnded pour afficher les résultats après un délai
         this.socket.on('raceEnded', (data) => {
-            console.log('🏁 Course terminée ! Tous les joueurs ont fini.');
-            
-            // Notification que la course est terminée
             this.showNotification({
                 text: 'Course terminée ! Tous les joueurs ont fini.',
                 type: 'success',
@@ -703,6 +601,7 @@ class GameClient {
                 if (this.gameEngine) {
                     this.gameEngine.stop();
                     if (this.gameEngine.music) {
+                        soundManager.unregisterAudio('gameMusic');
                         this.gameEngine.music.pause();
                         this.gameEngine.music.currentTime = 0;
                         this.gameEngine.music = null;
@@ -721,11 +620,11 @@ class GameClient {
         });
 
         this.socket.on('playerJoined', (player) => {
-            console.log(`${player.pseudo} a rejoint la partie`);
+            // Joueur rejoint la partie
         });
 
         this.socket.on('playerLeft', (data) => {
-            console.log(`Joueur ${data.id} a quitté la partie`);
+            // Joueur a quitté la partie  
         });
 
         this.socket.on('error', (error) => {
@@ -733,13 +632,11 @@ class GameClient {
         });
 
         this.socket.on('kickedFromLobby', (data) => {
-            console.log('❌ Kicked du lobby:', data.reason);
-            
-            // Retour automatique au menu
             this.showScreen('menu');
             
             // Arrêter la musique
             if (this.gameEngine && this.gameEngine.music) {
+                soundManager.unregisterAudio('gameMusic');
                 this.gameEngine.music.pause();
                 this.gameEngine.music.currentTime = 0;
                 this.gameEngine.music = null;
@@ -747,7 +644,6 @@ class GameClient {
         });
 
         this.socket.on('disconnect', () => {
-            console.log('Déconnecté du serveur');
             this.showScreen('menu');
         });
     }
@@ -940,33 +836,7 @@ class GameClient {
     }
 
     showCheckpointNotification(data) {
-        const notification = document.createElement('div');
-        notification.className = 'checkpoint-notification';
-        notification.innerHTML = `
-            <div class="checkpoint-icon">✅</div>
-            <div class="checkpoint-text">Checkpoint ${data.checkpoint}/${data.total}</div>
-        `;
-        
-        notification.style.cssText = `
-            position: absolute;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 255, 0, 0.8);
-            padding: 10px 20px;
-            border-radius: 20px;
-            color: white;
-            font-weight: bold;
-            z-index: 100;
-            animation: checkpointPulse 0.5s ease-out;
-        `;
-        
-        document.getElementById('game').appendChild(notification);
-        
-        setTimeout(() => {
-            notification.style.animation = 'fadeOut 0.5s ease-out';
-            setTimeout(() => notification.remove(), 500);
-        }, 1500);
+        // Fonction vide - checkpoints masqués
     }
 
     showLapNotification(data) {
@@ -1103,10 +973,7 @@ class GameClient {
         
         // Son de victoire si disponible
         if (data.position <= 3) {
-            // Jouer un son de victoire
-            const audio = new Audio('assets/audio/victory.mp3');
-            audio.volume = 0.5;
-            audio.play().catch(e => console.log('Son non disponible'));
+            soundManager.playVictory().catch(e => console.log('Son non disponible'));
         }
     }
 
@@ -1298,8 +1165,6 @@ class GameClient {
         notifications.forEach(notification => {
             notification.remove();
         });
-        
-        console.log('🧹 Nettoyage des notifications:', notifications.length, 'éléments supprimés');
     }
 
     initializeGame() {
@@ -1311,6 +1176,7 @@ class GameClient {
         if (this.gameEngine) {
             this.gameEngine.stop();
             if (this.gameEngine.music) {
+                soundManager.unregisterAudio('gameMusic');
                 this.gameEngine.music.pause();
                 this.gameEngine.music.currentTime = 0;
                 this.gameEngine.music = null;
@@ -1501,19 +1367,12 @@ class GameClient {
     }
 }
 
-// Classe GameEngine dans le fichier client.js (pour la référence)
-// Cette classe est utilisée dans client.js
 document.addEventListener('DOMContentLoaded', async () => {
-    // Charger les assets avant d'initialiser le client
     try {
         await window.assetManager.loadAssets();
-        console.log('Assets chargés, initialisation du client...');
     } catch (error) {
-        console.error('Erreur lors du chargement des assets:', error);
-        console.log('Initialisation du client sans assets...');
+        // Continuer sans assets
     }
     
-    // Toujours initialiser le client
     window.gameClient = new GameClient();
-    console.log('Client initialisé avec succès !');
 });

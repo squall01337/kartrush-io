@@ -1069,7 +1069,7 @@ class GameClient {
         // Réinitialiser le bouton rejouer
         const playAgainBtn = document.getElementById('playAgain');
         playAgainBtn.disabled = false;
-        playAgainBtn.textContent = 'Rejouer';
+        playAgainBtn.textContent = 'Replay';
         playAgainBtn.className = '';
         
         // Afficher l'écran des résultats

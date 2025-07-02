@@ -298,10 +298,10 @@ class GameClient {
             roomCodeEl.style.display = 'block';
             
             if (data.isPrivate) {
-                roomTypeEl.innerHTML = '🔒 Room Privée' + (this.isHost ? ' (Hôte)' : '');
+                roomTypeEl.innerHTML = '🔒 Private Room' + (this.isHost ? ' (Host)' : '');
                 roomCodeEl.className = 'room-code private';
             } else {
-                roomTypeEl.innerHTML = '🌍 Room Publique';
+                roomTypeEl.innerHTML = '🌍 Public Room';
                 roomCodeEl.className = 'room-code public';
             }
             
@@ -356,12 +356,12 @@ class GameClient {
                 // Si on est l'hôte
                 if (data.canStart) {
                     startButton.classList.remove('hidden');
-                    startButton.textContent = 'Démarrer la course';
+                    startButton.textContent = 'Start race';
                     startButton.disabled = false;
                     startButton.className = 'host-button';
                 } else {
                     startButton.classList.remove('hidden');
-                    startButton.textContent = 'En attente des joueurs...';
+                    startButton.textContent = 'Waiting for players...';
                     startButton.disabled = true;
                     startButton.className = 'host-button waiting';
                 }
@@ -370,12 +370,12 @@ class GameClient {
                 const myPlayer = data.players.find(p => p.id === this.playerId);
                 if (myPlayer && !myPlayer.ready) {
                     startButton.classList.remove('hidden');
-                    startButton.textContent = 'Prêt';
+                    startButton.textContent = 'Ready';
                     startButton.disabled = false;
                     startButton.className = 'ready';
                 } else if (myPlayer && myPlayer.ready) {
                     startButton.classList.remove('hidden');
-                    startButton.textContent = 'En attente de l\'hôte...';
+                    startButton.textContent = 'Waiting for host...';
                     startButton.disabled = true;
                     startButton.className = 'waiting';
                 } else {
@@ -427,7 +427,7 @@ class GameClient {
             
             if (this.isHost) {
                 this.showNotification({
-                    text: 'Vous êtes maintenant l\'hôte !',
+                    text: 'You ar\'e now the host !',
                     type: 'info',
                     icon: '👑'
                 });
@@ -492,6 +492,10 @@ class GameClient {
 
         // ÉVÉNEMENTS DE COURSE
         this.socket.on('lapStarted', (data) => {
+            // CORRECTION BUG 2: Supprimer toute notification de tour existante
+            const existingNotifications = document.querySelectorAll('.lap-notification');
+            existingNotifications.forEach(notif => notif.remove());
+            
             const notification = document.createElement('div');
             notification.className = 'lap-notification';
             notification.innerHTML = `
@@ -513,16 +517,19 @@ class GameClient {
                 z-index: 200;
                 animation: lapZoom 0.8s ease-out;
                 box-shadow: 0 0 30px rgba(0, 255, 0, 0.5);
+                pointer-events: none;
             `;
             
             document.getElementById('game').appendChild(notification);
             
             // Son de début de tour
-            soundManager.playLap().catch(e => {
+            try {
+                soundManager.playLap();
+            } catch (e) {
                 // Fallback Web Audio
                 soundManager.playTone(523, 0.3);
                 setTimeout(() => soundManager.playTone(659, 0.3), 100);
-            });
+            }
             
             setTimeout(() => {
                 notification.style.animation = 'fadeOut 0.5s ease-out';
@@ -541,9 +548,11 @@ class GameClient {
                 icon: '❌'
             });
             
-            soundManager.playError().catch(e => {
+            try {
+                soundManager.playError();
+            } catch (e) {
                 soundManager.playTone(200, 0.2);
-            });
+            }
         });
 
         this.socket.on('invalidFinish', (data) => {
@@ -555,11 +564,13 @@ class GameClient {
         });
 
         this.socket.on('lapCompleted', (data) => {
-            soundManager.playLap().catch(e => {
+            try {
+                soundManager.playLap();
+            } catch (e) {
                 // Fallback : double ton
                 soundManager.playTone(600, 0.2);
                 setTimeout(() => soundManager.playTone(900, 0.2), 100);
-            });
+            }
             
             // Notification visuelle du tour
             this.showLapNotification(data);
@@ -590,7 +601,7 @@ class GameClient {
         // Modifier raceEnded pour afficher les résultats après un délai
         this.socket.on('raceEnded', (data) => {
             this.showNotification({
-                text: 'Course terminée ! Tous les joueurs ont fini.',
+                text: 'Race ended !',
                 type: 'success',
                 icon: '🏆'
             });
@@ -656,8 +667,8 @@ class GameClient {
         notification.innerHTML = `
             <div class="share-icon">📋</div>
             <div class="share-text">
-                ${isPrivate ? 'Partagez ce code privé' : 'Code de la partie publique'} : <strong>${code}</strong>
-                <br><small>Les amis peuvent rejoindre avec ce code</small>
+                ${isPrivate ? 'Shrare this private code' : 'Public Room code'} : <strong>${code}</strong>
+                <br><small>Friends can join with this code</small>
             </div>
         `;
         
@@ -680,7 +691,7 @@ class GameClient {
             navigator.clipboard.writeText(code).then(() => {
                 notification.innerHTML = `
                     <div class="share-icon">✅</div>
-                    <div class="share-text">Code copié !</div>
+                    <div class="share-text">Code copied !</div>
                 `;
                 setTimeout(() => notification.remove(), 1000);
             }).catch(() => {
@@ -704,17 +715,17 @@ class GameClient {
         const roomCode = document.getElementById('roomCodeInput').value.trim();
         
         if (!pseudo) {
-            alert('Veuillez entrer un pseudo');
+            alert('Please enter a nickname');
             return;
         }
         
         if (!roomCode) {
-            alert('Veuillez entrer un code de room');
+            alert('Please enter a room code');
             return;
         }
         
         if (roomCode.length !== 6) {
-            alert('Le code de room doit contenir 6 caractères');
+            alert('The room code must be 6 carac long');
             return;
         }
         
@@ -733,14 +744,14 @@ class GameClient {
     playerReady() {
         this.socket.emit('playerReady');
         document.getElementById('startGame').disabled = true;
-        document.getElementById('startGame').textContent = 'En attente...';
+        document.getElementById('startGame').textContent = 'Waiting...';
     }
 
     voteRematch() {
         this.socket.emit('voteRematch');
         const btn = document.getElementById('playAgain');
         btn.disabled = true;
-        btn.textContent = `Vote enregistré (${this.rematchVotes + 1}/${this.totalPlayers})`;
+        btn.textContent = `Vote registered (${this.rematchVotes + 1}/${this.totalPlayers})`;
         btn.className = 'voted';
     }
 
@@ -752,9 +763,9 @@ class GameClient {
     updateRematchButton() {
         const btn = document.getElementById('playAgain');
         if (!btn.disabled) {
-            btn.textContent = `Rejouer (${this.rematchVotes}/${this.totalPlayers})`;
+            btn.textContent = `Replay (${this.rematchVotes}/${this.totalPlayers})`;
         } else {
-            btn.textContent = `Vote enregistré (${this.rematchVotes}/${this.totalPlayers})`;
+            btn.textContent = `Vote registered (${this.rematchVotes}/${this.totalPlayers})`;
         }
     }
 
@@ -782,15 +793,15 @@ class GameClient {
         document.getElementById('results').appendChild(timerDiv);
         
         // Afficher immédiatement 10s
-        timerDiv.textContent = `Retour à l'accueil dans : ${timeLeft}s`;
+        timerDiv.textContent = `Return to menu in : ${timeLeft}s`;
         
         const intervalId = setInterval(() => {
             timeLeft--;
             if (timeLeft <= 0) {
                 clearInterval(intervalId);
-                timerDiv.textContent = `Retour à l'accueil...`;
+                timerDiv.textContent = `Reurn to menu...`;
             } else {
-                timerDiv.textContent = `Retour à l'accueil dans : ${timeLeft}s`;
+                timerDiv.textContent = `Return to menu in : ${timeLeft}s`;
             }
         }, 1000);
     }
@@ -844,8 +855,8 @@ class GameClient {
         const isLastLap = data.lap === data.totalLaps;
         const isSecondToLastLap = data.lap === data.totalLaps - 1;
         
-        let message = `Tour ${data.lap}/${data.totalLaps}`;
-        if (isLastLap) message = 'DERNIER TOUR !';
+        let message = `Lap ${data.lap}/${data.totalLaps}`;
+        if (isLastLap) message = 'FINAL LAP !';
         
         notification.className = 'lap-notification';
         notification.innerHTML = `
@@ -866,6 +877,7 @@ class GameClient {
             font-weight: bold;
             z-index: 200;
             animation: lapZoom 0.8s ease-out;
+            pointer-events: none;
         `;
         
         document.getElementById('game').appendChild(notification);
@@ -973,7 +985,11 @@ class GameClient {
         
         // Son de victoire si disponible
         if (data.position <= 3) {
-            soundManager.playVictory().catch(e => console.log('Son non disponible'));
+            try {
+                soundManager.playVictory();
+            } catch (e) {
+                console.log('Son non disponible');
+            }
         }
     }
 
@@ -1063,7 +1079,7 @@ class GameClient {
     joinGame() {
         const pseudo = document.getElementById('pseudo').value.trim();
         if (!pseudo) {
-            alert('Veuillez entrer un pseudo');
+            alert('Please enter a nickname');
             return;
         }
 
@@ -1076,7 +1092,7 @@ class GameClient {
     createRoom() {
         const pseudo = document.getElementById('pseudo').value.trim();
         if (!pseudo) {
-            alert('Veuillez entrer un pseudo');
+            alert('Please enter a nickname');
             return;
         }
 
@@ -1190,7 +1206,7 @@ class GameClient {
     // Modifier updatePlayersList pour afficher l'hôte
     updatePlayersList(players) {
         const playersList = document.getElementById('playersList');
-        playersList.innerHTML = '<h3>Joueurs connectés:</h3>';
+        playersList.innerHTML = '<h3>Online players:</h3>';
         
         players.forEach(player => {
             const playerDiv = document.createElement('div');
@@ -1213,7 +1229,7 @@ class GameClient {
                 const hostBadge = document.createElement('span');
                 hostBadge.className = 'host-badge';
                 hostBadge.textContent = ' 👑';
-                hostBadge.title = 'Hôte de la partie';
+                hostBadge.title = 'Host of the game';
                 hostBadge.style.marginLeft = '5px';
                 nameSpan.appendChild(hostBadge);
             }
@@ -1225,7 +1241,7 @@ class GameClient {
             if (player.isHost) {
                 const statusText = document.createElement('span');
                 statusText.className = 'status-text';
-                statusText.textContent = 'Hôte';
+                statusText.textContent = 'Host';
                 statusText.style.color = '#ffd700';
                 statusDiv.appendChild(statusText);
             } else {

@@ -565,7 +565,7 @@ class Room {
                         console.log(`🚦 ${player.pseudo} - Tour 1 commencé !`);
                         
                         io.to(player.id).emit('lapStarted', {
-                            message: 'Tour 1 commencé !',
+                            message: '1st Lap',
                             lap: 1,
                             totalLaps: this.raceSettings.laps
                         });
@@ -575,7 +575,7 @@ class Room {
                         player.lap++;
                         player.nextCheckpoint = 0;
                         
-                        console.log(`🏁 ${player.pseudo} - Tour ${player.lap}/${this.raceSettings.laps} !`);
+                        console.log(`🏁 ${player.pseudo} - Lap ${player.lap}/${this.raceSettings.laps} !`);
                         
                         if (player.lap > this.raceSettings.laps) {
                             player.finished = true;

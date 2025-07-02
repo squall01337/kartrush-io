@@ -315,9 +315,6 @@ class GameEngine {
         
         if (fl.x1 !== undefined && fl.y1 !== undefined) {
             // NOUVEAU FORMAT : Ligne
-            const cx = (fl.x1 + fl.x2) / 2;
-            const cy = (fl.y1 + fl.y2) / 2;
-            
             ctx.globalAlpha = 0.8;
             
             // Ligne principale épaisse
@@ -349,16 +346,7 @@ class GameEngine {
                 }
             }
             
-            // Texte FINISH
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.fillRect(cx - 40, cy - 15, 80, 30);
-            
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 18px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('FINISH', cx, cy);
+            // PAS DE TEXTE "FINISH" - SUPPRIMÉ
             
         } else {
             // ANCIEN FORMAT : Rectangle
@@ -398,22 +386,31 @@ class GameEngine {
         ctx.save();
         ctx.resetTransform();
         
-        const infoX = this.canvas.width - 200 * this.scale;
+        // Ajuster les positions et largeurs pour mieux centrer le texte
+        const boxWidth = 180 * this.scale;  // Largeur réduite
+        const boxHeight = 60 * this.scale;
+        const padding = 10 * this.scale;
+        const infoX = this.canvas.width - boxWidth - (20 * this.scale);
         const infoY = 20 * this.scale;
         
+        // Fond avec padding correct
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(infoX - 10, infoY - 5, 190 * this.scale, 60 * this.scale);
+        ctx.fillRect(infoX, infoY, boxWidth, boxHeight);
         
+        // Texte aligné à gauche avec padding
         ctx.fillStyle = '#FFFFFF';
         ctx.font = `${16 * this.scale}px Arial`;
+        ctx.textAlign = 'left';
+        
+        const textX = infoX + padding;
         
         const displayLap = currentPlayer.lap === 0 ? 0 : currentPlayer.lap;
-        ctx.fillText(`🏁 Lap: ${displayLap}/${currentPlayer.lapsToWin}`, infoX, infoY + 20 * this.scale);
+        ctx.fillText(`🏁 Lap: ${displayLap}/${currentPlayer.lapsToWin}`, textX, infoY + 25 * this.scale);
         
         const minutes = Math.floor(this.gameState.gameTime / 60000);
         const seconds = Math.floor((this.gameState.gameTime % 60000) / 1000);
         const timeString = `⏱️ Time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        ctx.fillText(timeString, infoX, infoY + 45 * this.scale);
+        ctx.fillText(timeString, textX, infoY + 50 * this.scale);
         
         ctx.restore();
     }

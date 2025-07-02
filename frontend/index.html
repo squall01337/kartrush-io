@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KartRush.io - Course Multijoueur</title>
+    <title>KartRush.io - Multiplayer Kart Game</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -24,9 +24,9 @@
     <div class="menu-container">
         <h1>KartRush.io</h1>
         <div class="menu-form">
-            <input type="text" id="pseudo" placeholder="Entrez votre pseudo" maxlength="15">
+            <input type="text" id="pseudo" placeholder="Enter your nickname" maxlength="15">
             <div class="color-selector">
-                <label>Couleur du kart:</label>
+                <label>Kart color</label>
                 <div class="color-options">
                     <div class="color-option" data-color="#ff4444" style="background: #ff4444;"></div>
                     <div class="color-option" data-color="#44ff44" style="background: #44ff44;"></div>
@@ -39,33 +39,33 @@
             
             <!-- Section Partie Publique -->
             <div class="menu-section">
-                <h3>🌍 Partie Publique</h3>
-                <button id="joinGame">Rejoindre une partie</button>
+                <h3>🌍 Public Room</h3>
+                <button id="joinGame">Join a game</button>
             </div>
             
             <!-- Section Partie Privée -->
             <div class="menu-section">
-                <h3>🔒 Partie Privée</h3>
-                <button id="createRoom">Créer une room privée</button>
+                <h3>🔒 Private room</h3>
+                <button id="createRoom">Ceate a private room</button>
                 <div class="join-code-section">
                     <!-- CHANGEMENT ICI : roomCode devient roomCodeInput -->
-                    <input type="text" id="roomCodeInput" placeholder="Code de room" maxlength="6" style="text-transform: uppercase;">
-                    <button id="joinWithCode">Rejoindre avec code</button>
+                    <input type="text" id="roomCodeInput" placeholder="ROOM CODE" maxlength="6" style="text-transform: uppercase;">
+                    <button id="joinWithCode">Join with code</button>
                 </div>
             </div>
         </div>
         <div class="controls-info">
-            <h3>Contrôles:</h3>
-            <p>🔼🔽 Accélérer / Freiner</p>
-            <p>◀️▶️ Tourner</p>
-            <p>ESPACE Utiliser un item</p>
+            <h3>Controls:</h3>
+            <p>🔼🔽 Accelerate / Break</p>
+            <p>◀️▶️ Turn</p>
+            <p>ESPACE Use an item</p>
         </div>
     </div>
 </div>
 
 <div id="lobby" class="screen hidden">
     <div class="lobby-container">
-        <h2>Salle d'attente</h2>
+        <h2>Waiting Room</h2>
         <div id="roomInfo" class="room-info">
             <div id="roomType" class="room-type"></div>
             <!-- Cet ID reste roomCode pour l'affichage -->
@@ -81,7 +81,7 @@
         
         <!-- Sélecteur de maps (visible seulement pour l'hôte) -->
         <div id="mapSelector" class="map-selector hidden">
-            <h3>Choisir la map</h3>
+            <h3>Choose map</h3>
             <div class="map-selector-container">
                 <button class="map-nav-btn map-nav-prev" id="mapPrevBtn">◀</button>
                 <div class="map-grid" id="mapGrid">
@@ -92,8 +92,8 @@
         </div>
         
         <div class="lobby-actions">
-            <button id="startGame" class="hidden">Démarrer la course</button>
-            <button id="leaveRoom">Quitter la room</button>
+            <button id="startGame" class="hidden">Start the race</button>
+            <button id="leaveRoom">Leave the room</button>
         </div>
     </div>
 </div>
@@ -103,7 +103,7 @@
         <div id="gameUI">
             <div id="raceInfo">
                 <div id="position">Position: 1/4</div>
-                <div id="lap">Tour: 1/3</div>
+                <div id="lap">Lap: 1/3</div>
                 <div id="timer">00:00</div>
             </div>
             <div id="itemSlot" class="item-slot"></div>
@@ -114,11 +114,11 @@
 
     <div id="results" class="screen hidden">
         <div class="results-container">
-            <h2>Résultats de la course</h2>
+            <h2>Results of the race</h2>
             <div id="finalRanking" class="ranking"></div>
             <div class="results-actions">
-                <button id="playAgain">Rejouer</button>
-                <button id="backToMenu">Retour au menu</button>
+                <button id="playAgain">Replay</button>
+                <button id="backToMenu">Return to menu</button>
             </div>
         </div>
     </div>

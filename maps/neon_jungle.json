@@ -5,7 +5,7 @@
   "height": 720,
   "music": "assets/audio/neon_jungle.mp3",
   "background": "assets/neon_jungle.png",
- "raceSettings": {
+"raceSettings": {
     "laps": 5,
     "maxTime": 300000,
     "maxTimeWarning": 240000
@@ -540,12 +540,6 @@
       "y1": 134,
       "x2": 398,
       "y2": 235
-    },
-    {
-      "x1": 265,
-      "y1": 136,
-      "x2": 290,
-      "y2": 234
     },
     {
       "x1": 88,

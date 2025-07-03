@@ -174,10 +174,10 @@ const GAME_CONFIG = {
     TRACK_WIDTH: 1280,
     TRACK_HEIGHT: 720,
     KART_SIZE: 20,
-    MAX_SPEED: 16,
-    ACCELERATION: 0.8,
+    MAX_SPEED: 14,
+    ACCELERATION: 0.75,
     FRICTION: 0.92,
-    TURN_SPEED: 0.30,
+    TURN_SPEED: 0.28,
     COLLISION_GRID_SIZE: 100
 };
 
@@ -209,12 +209,26 @@ class Player {
         // Cooldown pour éviter les détections multiples
         this.lastCheckpointTime = {};
         this.lastFinishLineTime = 0;
+        
+        // NOUVEAU: État des inputs pour éviter le traitement multiple
+        this.inputs = {
+            up: false,
+            down: false,
+            left: false,
+            right: false
+        };
     }
 
     update(deltaTime) {
         // Sauvegarder la position précédente
         this.lastX = this.x;
         this.lastY = this.y;
+        
+        // NOUVEAU: Traiter les inputs ici au lieu de playerInput
+        if (this.inputs.up) this.accelerate();
+        if (this.inputs.down) this.brake();
+        if (this.inputs.left) this.turnLeft();
+        if (this.inputs.right) this.turnRight();
         
         // Appliquer la friction
         this.speed *= GAME_CONFIG.FRICTION;
@@ -350,6 +364,14 @@ class Room {
             player.lastCheckpointTime = {};
             player.lastFinishLineTime = 0;
             player.raceTime = 0;
+            
+            // NOUVEAU: Réinitialiser les inputs pour éviter le glissement
+            player.inputs = {
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            };
         }
     }
 
@@ -438,6 +460,14 @@ class Room {
             player.hasPassedStartLine = false;
             player.lastCheckpointTime = {};
             player.lastFinishLineTime = 0;
+            
+            // NOUVEAU: S'assurer que les inputs sont réinitialisés au démarrage
+            player.inputs = {
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            };
             
             index++;
         }
@@ -1388,11 +1418,13 @@ io.on('connection', (socket) => {
         const room = findPlayerRoom(socket.id);
         
         if (player && room && room.gameStarted && !player.finished) {
-            // Traiter les inputs
-            if (input.up) player.accelerate();
-            if (input.down) player.brake();
-            if (input.left) player.turnLeft();
-            if (input.right) player.turnRight();
+            // NOUVEAU: Juste mettre à jour l'état des inputs
+            player.inputs.up = input.up;
+            player.inputs.down = input.down;
+            player.inputs.left = input.left;
+            player.inputs.right = input.right;
+            
+            // Traiter l'item séparément
             if (input.space && player.item) {
                 useItem(player, room);
             }

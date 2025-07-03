@@ -311,6 +311,126 @@ class GameClient {
         nextBtn.disabled = this.currentMapPage >= totalPages - 1;
     }
 
+    // NOUVELLE MÉTHODE : Écran de chargement
+    showLoadingScreen() {
+        // Afficher l'écran de chargement
+        this.showScreen('loading');
+        
+        // Récupérer les éléments
+        const video = document.getElementById('loadingVideo');
+        const fillBar = document.querySelector('.loading-bar-fill');
+        const percentage = document.querySelector('.loading-percentage');
+        const mapNameEl = document.querySelector('.loading-map-name');
+        const mapThumbnailEl = document.querySelector('.loading-map-thumbnail');
+        
+        // Réinitialiser la barre
+        fillBar.style.width = '0%';
+        percentage.textContent = '0%';
+        
+        // Afficher les infos de la map sélectionnée
+        const mapInfo = this.availableMaps.find(m => m.id === this.selectedMap);
+        if (mapInfo) {
+            // Nom de la map
+            mapNameEl.textContent = mapInfo.name;
+            
+            // Thumbnail de la map
+            mapThumbnailEl.classList.remove('placeholder');
+            
+            // Essayer de charger l'image
+            const img = new Image();
+            img.onload = () => {
+                mapThumbnailEl.style.backgroundImage = `url(${mapInfo.thumbnail})`;
+            };
+            img.onerror = () => {
+                // Si l'image n'existe pas, afficher un placeholder
+                mapThumbnailEl.classList.add('placeholder');
+                mapThumbnailEl.innerHTML = '🏁';
+            };
+            img.src = mapInfo.thumbnail;
+        } else {
+            // Fallback si pas d'info de map
+            mapNameEl.textContent = 'Loading Track...';
+            mapThumbnailEl.classList.add('placeholder');
+            mapThumbnailEl.innerHTML = '🏁';
+        }
+        
+        // Démarrer la vidéo depuis le début
+        video.currentTime = 0;
+        
+        // Durée totale du chargement (5 secondes)
+        const loadingDuration = 5000;
+        const startTime = Date.now();
+        
+        // Promesse pour attendre la fin du chargement
+        return new Promise((resolve) => {
+            // Démarrer la vidéo
+            video.play().catch(e => console.log('Erreur lecture vidéo:', e));
+            
+            // Animation de la barre de progression
+            const updateProgress = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min((elapsed / loadingDuration) * 100, 100);
+                
+                // Mettre à jour la barre et le pourcentage
+                fillBar.style.width = `${progress}%`;
+                percentage.textContent = `${Math.floor(progress)}%`;
+                
+                if (progress < 100) {
+                    requestAnimationFrame(updateProgress);
+                } else {
+                    // Petit délai pour voir 100%
+                    setTimeout(() => {
+                        // Créer l'effet de transition
+                        this.transitionToGame(video);
+                        resolve();
+                    }, 200);
+                }
+            };
+            
+            // Démarrer l'animation
+            requestAnimationFrame(updateProgress);
+            
+            // Forcer la résolution après 5.2 secondes au cas où
+            setTimeout(() => {
+                this.transitionToGame(video);
+                resolve();
+            }, loadingDuration + 200);
+        });
+    }
+
+    // Nouvelle méthode pour la transition fluide
+    transitionToGame(video) {
+        // Créer l'effet de flash
+        const flash = document.createElement('div');
+        flash.className = 'loading-flash';
+        document.body.appendChild(flash);
+        
+        // Déclencher l'animation de flash
+        setTimeout(() => {
+            flash.classList.add('active');
+        }, 10);
+        
+        // Ajouter la classe fade-out à l'écran de chargement
+        const loadingScreen = document.getElementById('loading');
+        loadingScreen.classList.add('fade-out');
+        
+        // Préparer l'écran de jeu avec la classe fade-in
+        const gameScreen = document.getElementById('game');
+        gameScreen.classList.add('fade-in');
+        
+        // Attendre la fin de l'animation avant de changer d'écran
+        setTimeout(() => {
+            video.pause();
+            loadingScreen.classList.remove('fade-out');
+            
+            // Enlever le flash après l'animation
+            setTimeout(() => {
+                flash.remove();
+                gameScreen.classList.remove('fade-in');
+            }, 600);
+        }, 800);
+    }
+
     connectToServer() {
         this.socket = io();
 
@@ -514,8 +634,8 @@ class GameClient {
             this.updateRematchButton();
         });
         
-        // Nouveau : Rematch qui démarre
-        this.socket.on('rematchStarting', (data) => {
+        // Nouveau : Rematch qui démarre (MODIFIÉ)
+        this.socket.on('rematchStarting', async (data) => {
             this.rematchVotes = 0;
             
             // Arrêter la musique AVANT de nettoyer les notifications
@@ -528,6 +648,7 @@ class GameClient {
             // Nettoyer les notifications avant de retourner au lobby
             this.cleanupGameNotifications();
             
+            // Retourner au lobby SANS écran de chargement pour le rematch
             this.showScreen('lobby');
             
             this.showNotification({
@@ -1196,7 +1317,15 @@ class GameClient {
         document.getElementById('startGame').textContent = 'En attente...';
     }
 
-    startGameCountdown() {
+    // MODIFIÉE : Méthode startGameCountdown avec écran de chargement
+    async startGameCountdown() {
+        // NOUVEAU : Afficher l'écran de chargement d'abord
+        await this.showLoadingScreen();
+        
+        // Attendre un peu pour que la transition se termine
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        // Puis passer à l'écran de jeu
         this.showScreen('game');
         
         // Arrêter la musique de fond quand la course commence
@@ -1473,7 +1602,7 @@ class GameClient {
         // Gérer la vidéo de fond
         const bgVideo = document.getElementById('backgroundVideo');
         if (bgVideo) {
-            if (screenName === 'game') {
+            if (screenName === 'game' || screenName === 'loading') {
                 bgVideo.style.display = 'none';
             } else {
                 bgVideo.style.display = 'block';

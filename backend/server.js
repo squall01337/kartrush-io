@@ -174,10 +174,10 @@ const GAME_CONFIG = {
     TRACK_WIDTH: 1280,
     TRACK_HEIGHT: 720,
     KART_SIZE: 20,
-    MAX_SPEED: 12,
-    ACCELERATION: 0.28,
-    FRICTION: 0.94,
-    TURN_SPEED: 0.165,
+    MAX_SPEED: 4,        // Augmenté de 12 à 15 (+25%)
+    ACCELERATION: 0.2,    // Augmenté pour compenser la friction
+    FRICTION: 0.98,       // Moins de friction (était 0.94)
+    TURN_SPEED: 0.075,
     COLLISION_GRID_SIZE: 100
 };
 
@@ -220,34 +220,64 @@ class Player {
     }
 
     update(deltaTime) {
-        // Sauvegarder la position précédente
-        this.lastX = this.x;
-        this.lastY = this.y;
-        
-        // NOUVEAU: Traiter les inputs ici au lieu de playerInput
-        if (this.inputs.up) this.accelerate();
-        if (this.inputs.down) this.brake();
-        if (this.inputs.left) this.turnLeft();
-        if (this.inputs.right) this.turnRight();
-        
-        // Appliquer la friction
-        this.speed *= GAME_CONFIG.FRICTION;
-        
-        // Mettre à jour la position
-        this.x += Math.cos(this.angle) * this.speed;
-        this.y += Math.sin(this.angle) * this.speed;
-        
-        // Limites de la piste (temporaire)
-        this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
-        this.y = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_HEIGHT - GAME_CONFIG.KART_SIZE, this.y));
+    // Sauvegarder la position précédente
+    this.lastX = this.x;
+    this.lastY = this.y;
+    
+    // Traiter les inputs
+    if (this.inputs.up) this.accelerate();
+    if (this.inputs.down) this.brake();
+    if (this.inputs.left) this.turnLeft();
+    if (this.inputs.right) this.turnRight();
+    
+    // Appliquer la friction différemment selon l'état
+    if (this.inputs.up && this.speed > 0) {
+        // Moins de friction en accélération
+        this.speed *= GAME_CONFIG.FRICTION + 0.01;
+    } else if (this.inputs.down && this.speed < 0) {
+        // Moins de friction en marche arrière
+        this.speed *= GAME_CONFIG.FRICTION + 0.01;
+    } else {
+        // Friction normale quand on lâche tout
+        this.speed *= GAME_CONFIG.FRICTION - 0.02;
     }
+    
+    // Garantir les limites de vitesse
+    if (this.speed > GAME_CONFIG.MAX_SPEED) {
+        this.speed = GAME_CONFIG.MAX_SPEED;
+    } else if (this.speed < -GAME_CONFIG.MAX_SPEED * 0.5) {
+        this.speed = -GAME_CONFIG.MAX_SPEED * 0.5;
+    }
+    
+    // Arrêt complet si vitesse très faible
+    if (Math.abs(this.speed) < 0.1) {
+        this.speed = 0;
+    }
+    
+    // Mettre à jour la position
+    this.x += Math.cos(this.angle) * this.speed;
+    this.y += Math.sin(this.angle) * this.speed;
+    
+    // Limites de la piste
+    this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
+    this.y = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_HEIGHT - GAME_CONFIG.KART_SIZE, this.y));
+}
 
     accelerate() {
-        this.speed = Math.min(this.speed + GAME_CONFIG.ACCELERATION, GAME_CONFIG.MAX_SPEED);
+    this.speed = Math.min(this.speed + GAME_CONFIG.ACCELERATION, GAME_CONFIG.MAX_SPEED);
+    // Forcer à la vitesse max si on est très proche
+    if (this.speed > GAME_CONFIG.MAX_SPEED * 0.98) {
+        this.speed = GAME_CONFIG.MAX_SPEED;
     }
-
+}
     brake() {
-        this.speed = Math.max(this.speed - GAME_CONFIG.ACCELERATION * 2, -GAME_CONFIG.MAX_SPEED * 0.5);
+        // Si on va en avant, freiner normalement
+        if (this.speed > 0) {
+            this.speed = Math.max(0, this.speed - GAME_CONFIG.ACCELERATION * 2);
+        } else {
+            // Marche arrière : 50% de la vitesse max
+            this.speed = Math.max(this.speed - GAME_CONFIG.ACCELERATION, -GAME_CONFIG.MAX_SPEED * 0.5);
+        }
     }
 
     turnLeft() {
@@ -481,7 +511,7 @@ class Room {
         setTimeout(() => {
             this.gameStartTime = Date.now();
             console.log('⏱️ Timer de course démarré !');
-        }, 3000);
+        }, 8800);
         
         return true;
     }

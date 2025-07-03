@@ -1243,3 +1243,439 @@ button:disabled {
 .volume-control.muted .mute-button {
     color: #ff6b6b;
 }
+
+/* Écran de chargement */
+#loading {
+    position: relative;
+    background: #000;
+}
+
+.loading-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.loading-container {
+    text-align: center;
+    z-index: 10;
+}
+
+.loading-text {
+    font-size: 3em;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: 
+        0 0 10px rgba(78, 205, 196, 0.8),
+        0 0 20px rgba(78, 205, 196, 0.6),
+        0 0 30px rgba(78, 205, 196, 0.4),
+        0 0 40px rgba(147, 51, 234, 0.6);
+    letter-spacing: 5px;
+    margin-bottom: 40px;
+    animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+    0%, 100% {
+        opacity: 0.8;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+}
+
+.loading-bar-container {
+    position: relative;
+    width: 400px;
+    height: 30px;
+    margin: 0 auto 20px;
+}
+
+.loading-bar-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(78, 205, 196, 0.3);
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.loading-bar-background::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 10px,
+        rgba(255, 255, 255, 0.05) 10px,
+        rgba(255, 255, 255, 0.05) 20px
+    );
+}
+
+.loading-bar-fill {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 0%;
+    height: calc(100% - 4px);
+    background: linear-gradient(90deg, 
+        #9333ea 0%, 
+        #ec4899 50%, 
+        #4ecdc4 100%);
+    border-radius: 13px;
+    transition: width 0.1s ease-out;
+    box-shadow: 
+        0 0 10px rgba(236, 72, 153, 0.8),
+        inset 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.loading-bar-glow {
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    right: -10px;
+    bottom: -10px;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(236, 72, 153, 0.3) 0%,
+        transparent 70%
+    );
+    opacity: 0;
+    animation: loadingGlow 2s ease-in-out infinite;
+}
+
+@keyframes loadingGlow {
+    0%, 100% {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+.loading-percentage {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #4ecdc4;
+    text-shadow: 0 0 10px rgba(78, 205, 196, 0.8);
+    font-family: 'Courier New', monospace;
+}
+
+/* Animation de scanlines pour l'effet rétro */
+.loading-overlay::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.03) 2px,
+        rgba(255, 255, 255, 0.03) 4px
+    );
+    pointer-events: none;
+    animation: scanlines 8s linear infinite;
+}
+
+@keyframes scanlines {
+    0% {
+        transform: translateY(0);
+    }
+    100% {
+        transform: translateY(10px);
+    }
+}
+
+/* Effet de distorsion chromatic aberration */
+.loading-text::before,
+.loading-text::after {
+    content: 'LOADING...';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.loading-text::before {
+    animation: glitch-1 2.5s infinite;
+    color: #ff00ff;
+    z-index: -1;
+}
+
+.loading-text::after {
+    animation: glitch-2 2.5s infinite;
+    color: #00ffff;
+    z-index: -1;
+}
+
+@keyframes glitch-1 {
+    0%, 100% {
+        transform: translate(0);
+    }
+    20% {
+        transform: translate(-2px, 2px);
+    }
+    40% {
+        transform: translate(-2px, -2px);
+    }
+    60% {
+        transform: translate(2px, 2px);
+    }
+    80% {
+        transform: translate(2px, -2px);
+    }
+}
+
+@keyframes glitch-2 {
+    0%, 100% {
+        transform: translate(0);
+    }
+    20% {
+        transform: translate(2px, -2px);
+    }
+    40% {
+        transform: translate(2px, 2px);
+    }
+    60% {
+        transform: translate(-2px, -2px);
+    }
+    80% {
+        transform: translate(-2px, 2px);
+    }
+}
+
+/* Infos de la map dans l'écran de chargement */
+.loading-map-info {
+    margin-top: 40px;
+    text-align: center;
+    animation: fadeInUp 0.8s ease-out 0.5s both;
+}
+
+@keyframes fadeInUp {
+    0% {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.loading-map-name {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    text-shadow: 
+        0 0 10px rgba(236, 72, 153, 0.8),
+        0 0 20px rgba(147, 51, 234, 0.6);
+}
+
+.loading-map-thumbnail {
+    width: 300px;
+    height: 180px;
+    margin: 0 auto;
+    border-radius: 15px;
+    border: 3px solid rgba(78, 205, 196, 0.6);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    box-shadow: 
+        0 0 30px rgba(78, 205, 196, 0.5),
+        inset 0 0 20px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Effet de scan sur le thumbnail */
+.loading-map-thumbnail::before {
+    content: '';
+    position: absolute;
+    top: -100%;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        0deg,
+        transparent 0%,
+        rgba(78, 205, 196, 0.3) 50%,
+        transparent 100%
+    );
+    animation: thumbnailScan 3s linear infinite;
+}
+
+@keyframes thumbnailScan {
+    0% {
+        transform: translateY(-100%);
+    }
+    100% {
+        transform: translateY(200%);
+    }
+}
+
+/* Placeholder si pas d'image */
+.loading-map-thumbnail.placeholder {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4em;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* Effet de lueur pulsante sur le thumbnail */
+.loading-map-thumbnail {
+    animation: thumbnailPulse 2s ease-in-out infinite;
+}
+
+@keyframes thumbnailPulse {
+    0%, 100% {
+        box-shadow: 
+            0 0 30px rgba(78, 205, 196, 0.5),
+            inset 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+    50% {
+        box-shadow: 
+            0 0 50px rgba(78, 205, 196, 0.8),
+            inset 0 0 30px rgba(0, 0, 0, 0.7);
+    }
+}
+
+/* Transition de sortie de l'écran de chargement */
+#loading.fade-out {
+    animation: loadingFadeOut 0.8s ease-out forwards;
+}
+
+@keyframes loadingFadeOut {
+    0% {
+        opacity: 1;
+        filter: blur(0px) brightness(1);
+    }
+    50% {
+        opacity: 1;
+        filter: blur(0px) brightness(1.5);
+    }
+    100% {
+        opacity: 0;
+        filter: blur(10px) brightness(2);
+        transform: scale(1.1);
+    }
+}
+
+/* Effet de flash blanc pour la transition */
+.loading-flash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.9) 0%, rgba(78, 205, 196, 0.6) 50%, transparent 100%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 9999;
+}
+
+.loading-flash.active {
+    animation: flashEffect 0.6s ease-out;
+}
+
+@keyframes flashEffect {
+    0% {
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Transition d'entrée pour l'écran de jeu */
+#game.fade-in {
+    animation: gameFadeIn 1s ease-out;
+}
+
+@keyframes gameFadeIn {
+    0% {
+        opacity: 0;
+        filter: brightness(2) contrast(1.2);
+        transform: scale(1.05);
+    }
+    50% {
+        opacity: 0.5;
+        filter: brightness(1.5) contrast(1.1);
+        transform: scale(1.02);
+    }
+    100% {
+        opacity: 1;
+        filter: brightness(1) contrast(1);
+        transform: scale(1);
+    }
+}
+
+/* Effet de glitch pour la transition */
+#loading.fade-out .loading-container {
+    animation: glitchTransition 0.8s ease-out;
+}
+
+@keyframes glitchTransition {
+    0%, 100% {
+        transform: translate(0);
+    }
+    10% {
+        transform: translate(-2px, 2px);
+    }
+    20% {
+        transform: translate(2px, -2px);
+    }
+    30% {
+        transform: translate(-1px, 1px);
+    }
+    40% {
+        transform: translate(1px, -1px);
+    }
+    50% {
+        transform: translate(-2px, 0) scale(1.02);
+    }
+    60% {
+        transform: translate(2px, 0) scale(1.02);
+    }
+    70% {
+        transform: translate(0, -2px) scale(1.01);
+    }
+    80% {
+        transform: translate(0, 2px) scale(1.01);
+    }
+}

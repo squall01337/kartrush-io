@@ -99,6 +99,27 @@
     </div>
 </div>
 
+<div id="loading" class="screen hidden">
+    <video id="loadingVideo" class="loading-video" muted playsinline>
+        <source src="assets/loading.webm" type="video/webm">
+    </video>
+    <div class="loading-overlay">
+        <div class="loading-container">
+            <h2 class="loading-text">LOADING...</h2>
+            <div class="loading-bar-container">
+                <div class="loading-bar-background"></div>
+                <div class="loading-bar-fill"></div>
+                <div class="loading-bar-glow"></div>
+            </div>
+            <div class="loading-percentage">0%</div>
+            <div class="loading-map-info">
+                <div class="loading-map-name"></div>
+                <div class="loading-map-thumbnail"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
     <div id="game" class="screen hidden">
     <canvas id="gameCanvas"></canvas>
     <div id="gameUI">

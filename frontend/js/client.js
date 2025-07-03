@@ -8,7 +8,7 @@ class GameClient {
         this.roomId = null;
         this.gameEngine = null;
         this.currentScreen = 'splash'; // Commencer sur l'écran d'accueil
-        this.selectedColor = '#ff4444';
+        this.selectedColor = '#ff4444'; // Couleur par défaut
         this.isHost = false;
         this.hostId = null; // Nouveau : ID de l'hôte actuel
         this.rematchVotes = 0; // Nouveau : compteur de votes
@@ -93,17 +93,8 @@ class GameClient {
             });
         }
         
-        // Sélection de couleur
-        document.querySelectorAll('.color-option').forEach(option => {
-            option.addEventListener('click', (e) => {
-                document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
-                e.target.classList.add('selected');
-                this.selectedColor = e.target.dataset.color;
-            });
-        });
-
-        // Sélectionner la première couleur par défaut
-        document.querySelector('.color-option').classList.add('selected');
+        // Sélection de couleur dans le lobby
+        this.initializeLobbyColorSelector();
 
         // Boutons du menu
         document.getElementById('joinGame').addEventListener('click', () => {
@@ -151,6 +142,53 @@ class GameClient {
         
         // Initialiser le sélecteur de maps
         this.initializeMapSelector();
+    }
+
+    // Nouvelle méthode pour gérer le sélecteur de couleur dans le lobby
+    initializeLobbyColorSelector() {
+        // Gérer le sélecteur de couleur dans le lobby
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('lobby-color-option')) {
+                // Retirer la sélection précédente
+                document.querySelectorAll('.lobby-color-option').forEach(opt => 
+                    opt.classList.remove('selected')
+                );
+                
+                // Sélectionner la nouvelle couleur
+                e.target.classList.add('selected');
+                const newColor = e.target.dataset.color;
+                
+                // Si la couleur a changé et qu'on est dans une room
+                if (this.selectedColor !== newColor && this.roomId) {
+                    this.selectedColor = newColor;
+                    
+                    // Envoyer la mise à jour au serveur
+                    this.socket.emit('changeColor', {
+                        color: newColor
+                    });
+                    
+                    // Animation visuelle
+                    e.target.style.animation = 'colorPulse 0.5s ease-out';
+                    setTimeout(() => {
+                        e.target.style.animation = '';
+                    }, 500);
+                } else {
+                    // Si pas encore dans une room, juste mettre à jour la couleur
+                    this.selectedColor = newColor;
+                }
+            }
+        });
+    }
+
+    // Nouvelle méthode pour mettre à jour l'affichage du sélecteur
+    updateLobbyColorSelector() {
+        // Mettre à jour la sélection visuelle
+        document.querySelectorAll('.lobby-color-option').forEach(opt => {
+            opt.classList.remove('selected');
+            if (opt.dataset.color === this.selectedColor) {
+                opt.classList.add('selected');
+            }
+        });
     }
 
     // Nouvelle méthode pour initialiser le sélecteur de maps
@@ -408,6 +446,29 @@ class GameClient {
             }
             
             this.renderMapSelector();
+        });
+
+        // Nouveau : Gérer le changement de couleur
+        this.socket.on('colorChanged', (data) => {
+            // Mettre à jour la couleur du joueur dans la liste
+            const playerItems = document.querySelectorAll('.player-item');
+            playerItems.forEach(item => {
+                const playerName = item.querySelector('span').textContent;
+                // Trouver le joueur par son pseudo (méthode plus fiable)
+                const player = this.lastPlayersData?.find(p => p.id === data.playerId);
+                if (player && item.textContent.includes(player.pseudo)) {
+                    const colorDiv = item.querySelector('.player-color');
+                    if (colorDiv) {
+                        colorDiv.style.backgroundColor = data.color;
+                        
+                        // Animation de changement
+                        colorDiv.style.animation = 'colorFlash 0.5s ease-out';
+                        setTimeout(() => {
+                            colorDiv.style.animation = '';
+                        }, 500);
+                    }
+                }
+            });
         });
 
         this.socket.on('gameStarted', () => {
@@ -676,7 +737,7 @@ class GameClient {
         notification.innerHTML = `
             <div class="share-icon">📋</div>
             <div class="share-text">
-                ${isPrivate ? 'Shrare this private code' : 'Public Room code'} : <strong>${code}</strong>
+                ${isPrivate ? 'Share this private code' : 'Public Room code'} : <strong>${code}</strong>
                 <br><small>Friends can join with this code</small>
             </div>
         `;
@@ -808,7 +869,7 @@ class GameClient {
             timeLeft--;
             if (timeLeft <= 0) {
                 clearInterval(intervalId);
-                timerDiv.textContent = `Reurn to menu...`;
+                timerDiv.textContent = `Return to menu...`;
             } else {
                 timerDiv.textContent = `Return to menu in : ${timeLeft}s`;
             }
@@ -1152,10 +1213,31 @@ class GameClient {
         // Appliquer les données de la map si elles ont déjà été reçues
         if (this.mapData && this.gameEngine) {
             this.gameEngine.setMapData(this.mapData);
+            
+            // NOUVELLE CORRECTION : Démarrer avec un volume bas puis ajuster
+            if (this.gameEngine && this.gameEngine.music) {
+                // Démarrer avec un volume très bas pour éviter le pic sonore
+                this.gameEngine.music.volume = 0.05;
+            }
+            
+            // Puis forcer la mise à jour du volume après un délai
+            setTimeout(() => {
+                if (this.gameEngine && this.gameEngine.music && soundManager) {
+                    this.gameEngine.music.volume = soundManager.getVolumeFor('gameMusic');
+                    soundManager.refreshAudioVolume('gameMusic');
+                }
+            }, 500);
         }
 
         this.canControl = false; // Bloquer les contrôles
         this.gameEngine.start(); // Lancer le rendu pour éviter l'écran noir
+        
+        // NOUVELLE LIGNE : S'assurer que le canvas a le focus
+        const gameCanvas = document.getElementById('gameCanvas');
+        if (gameCanvas) {
+            gameCanvas.tabIndex = 0; // Rendre le canvas focusable
+            gameCanvas.focus();
+        }
 
         const countdown = document.getElementById('countdown');
         countdown.classList.remove('hidden');
@@ -1222,8 +1304,11 @@ class GameClient {
         this.leaveRoom();
     }
 
-    // Modifier updatePlayersList pour afficher l'hôte
+    // Modifier updatePlayersList pour afficher l'hôte et stocker les données
     updatePlayersList(players) {
+        // Stocker les données des joueurs pour la gestion des couleurs
+        this.lastPlayersData = players;
+        
         const playersList = document.getElementById('playersList');
         playersList.innerHTML = '<h3>Online players:</h3>';
         
@@ -1393,6 +1478,11 @@ class GameClient {
             } else {
                 bgVideo.style.display = 'block';
             }
+        }
+        
+        // Si on arrive dans le lobby, initialiser le sélecteur de couleur
+        if (screenName === 'lobby') {
+            this.updateLobbyColorSelector();
         }
         
         // Arrêter le son du moteur si on quitte l'écran de jeu

@@ -1339,6 +1339,28 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Nouveau handler pour le changement de couleur
+    socket.on('changeColor', (data) => {
+        const player = gameState.players.get(socket.id);
+        const room = findPlayerRoom(socket.id);
+        
+        if (player && room && !room.gameStarted) {
+            // Mettre à jour la couleur du joueur
+            player.color = data.color;
+            
+            // Notifier tous les joueurs de la room
+            io.to(room.id).emit('colorChanged', {
+                playerId: player.id,
+                color: data.color
+            });
+            
+            // Mettre à jour la liste des joueurs
+            broadcastPlayersList(room);
+            
+            console.log(`🎨 ${player.pseudo} a changé de couleur : ${data.color}`);
+        }
+    });
+
     // Nouveau handler pour voter rematch
     socket.on('voteRematch', () => {
         const room = findPlayerRoom(socket.id);

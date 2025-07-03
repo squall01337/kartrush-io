@@ -25,17 +25,6 @@
         <h1>KartRush.io</h1>
         <div class="menu-form">
             <input type="text" id="pseudo" placeholder="Enter your nickname" maxlength="15">
-            <div class="color-selector">
-                <label>Kart color</label>
-                <div class="color-options">
-                    <div class="color-option" data-color="#ff4444" style="background: #ff4444;"></div>
-                    <div class="color-option" data-color="#44ff44" style="background: #44ff44;"></div>
-                    <div class="color-option" data-color="#4444ff" style="background: #4444ff;"></div>
-                    <div class="color-option" data-color="#ffff44" style="background: #ffff44;"></div>
-                    <div class="color-option" data-color="#ff44ff" style="background: #ff44ff;"></div>
-                    <div class="color-option" data-color="#44ffff" style="background: #44ffff;"></div>
-                </div>
-            </div>
             
             <!-- Section Partie Publique -->
             <div class="menu-section">
@@ -46,9 +35,8 @@
             <!-- Section Partie Privée -->
             <div class="menu-section">
                 <h3>🔒 Private room</h3>
-                <button id="createRoom">Ceate a private room</button>
+                <button id="createRoom">Create a private room</button>
                 <div class="join-code-section">
-                    <!-- CHANGEMENT ICI : roomCode devient roomCodeInput -->
                     <input type="text" id="roomCodeInput" placeholder="ROOM CODE" maxlength="6" style="text-transform: uppercase;">
                     <button id="joinWithCode">Join with code</button>
                 </div>
@@ -58,7 +46,7 @@
             <h3>Controls:</h3>
             <p>🔼🔽 Accelerate / Break</p>
             <p>◀️▶️ Turn</p>
-            <p>ESPACE Use an item</p>
+            <p>SPACE Use an item</p>
         </div>
     </div>
 </div>
@@ -68,9 +56,22 @@
         <h2>Waiting Room</h2>
         <div id="roomInfo" class="room-info">
             <div id="roomType" class="room-type"></div>
-            <!-- Cet ID reste roomCode pour l'affichage -->
             <div id="roomCode" class="room-code"></div>
         </div>
+        
+        <!-- Nouveau sélecteur de couleur dans le lobby -->
+        <div class="lobby-color-selector">
+            <label>Choose your kart color:</label>
+            <div class="lobby-color-options">
+                <div class="lobby-color-option" data-color="#ff4444" style="background: #ff4444;"></div>
+                <div class="lobby-color-option" data-color="#44ff44" style="background: #44ff44;"></div>
+                <div class="lobby-color-option" data-color="#4444ff" style="background: #4444ff;"></div>
+                <div class="lobby-color-option" data-color="#ffff44" style="background: #ffff44;"></div>
+                <div class="lobby-color-option" data-color="#ff44ff" style="background: #ff44ff;"></div>
+                <div class="lobby-color-option" data-color="#44ffff" style="background: #44ffff;"></div>
+            </div>
+        </div>
+        
         <div id="playersList" class="players-list"></div>
         
         <!-- Map sélectionnée (visible pour tous) -->

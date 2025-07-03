@@ -70,8 +70,65 @@ class SoundManager {
             this.setVolume(e.target.value / 100);
         });
         
-        this.muteButton.addEventListener('click', () => {
+        // NOUVELLE CORRECTION : Empêcher la perte de focus lors du changement de volume
+        this.volumeSlider.addEventListener('mousedown', (e) => {
+            e.preventDefault(); // Empêcher le comportement par défaut
+            
+            // Sauvegarder l'élément actuellement focus
+            const currentFocus = document.activeElement;
+            
+            // Gérer le drag du slider
+            const onMouseMove = (moveEvent) => {
+                const rect = this.volumeSlider.getBoundingClientRect();
+                const x = moveEvent.clientX - rect.left;
+                const width = rect.width;
+                const value = Math.max(0, Math.min(100, (x / width) * 100));
+                
+                this.volumeSlider.value = value;
+                this.setVolume(value / 100);
+            };
+            
+            const onMouseUp = () => {
+                document.removeEventListener('mousemove', onMouseMove);
+                document.removeEventListener('mouseup', onMouseUp);
+                
+                // Restaurer le focus sur l'élément précédent (probablement le canvas)
+                if (currentFocus && currentFocus.id === 'gameCanvas') {
+                    currentFocus.focus();
+                }
+            };
+            
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mouseup', onMouseUp);
+            
+            // Déclencher immédiatement pour le clic initial
+            onMouseMove(e);
+        });
+        
+        // Empêcher le focus sur le slider lors du clic
+        this.volumeSlider.addEventListener('focus', (e) => {
+            // Si on est en jeu, rendre immédiatement le focus au canvas
+            const gameCanvas = document.getElementById('gameCanvas');
+            const gameScreen = document.getElementById('game');
+            
+            if (gameCanvas && gameScreen && !gameScreen.classList.contains('hidden')) {
+                e.preventDefault();
+                gameCanvas.focus();
+            }
+        });
+        
+        // Même chose pour le bouton mute
+        this.muteButton.addEventListener('click', (e) => {
             this.toggleMute();
+            
+            // Rendre le focus au canvas si on est en jeu
+            const gameCanvas = document.getElementById('gameCanvas');
+            const gameScreen = document.getElementById('game');
+            
+            if (gameCanvas && gameScreen && !gameScreen.classList.contains('hidden')) {
+                e.preventDefault();
+                gameCanvas.focus();
+            }
         });
         
         // Raccourcis clavier
@@ -172,11 +229,27 @@ class SoundManager {
             // Appliquer le volume actuel avec le multiplicateur approprié
             const multiplier = this.volumeMultipliers[name] || 1.0;
             audioElement.volume = this.getEffectiveVolume() * multiplier;
+            
+            // NOUVELLE LIGNE : Forcer une mise à jour immédiate
+            setTimeout(() => {
+                if (this.activeAudios.has(name)) {
+                    audioElement.volume = this.getEffectiveVolume() * multiplier;
+                }
+            }, 10);
         }
     }
     
     unregisterAudio(name) {
         this.activeAudios.delete(name);
+    }
+    
+    // Nouvelle méthode pour forcer la mise à jour du volume d'un audio spécifique
+    refreshAudioVolume(name) {
+        const audio = this.activeAudios.get(name);
+        if (audio && audio.volume !== undefined) {
+            const multiplier = this.volumeMultipliers[name] || 1.0;
+            audio.volume = this.getEffectiveVolume() * multiplier;
+        }
     }
     
     setVolume(value) {

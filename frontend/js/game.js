@@ -81,47 +81,48 @@ class GameEngine {
         });
     }
 
-    setMapData(mapData) {
-        this.setTrack(mapData);
+ setMapData(mapData) {
+    this.setTrack(mapData);
 
-        if (this.music) {
-            if (window.soundManager) {
-                window.soundManager.unregisterAudio('gameMusic');
-            }
-            this.music.pause();
-            this.music.currentTime = 0;
-            this.music = null;
+    if (this.music) {
+        if (window.soundManager) {
+            window.soundManager.unregisterAudio('gameMusic');
         }
+        this.music.pause();
+        this.music.currentTime = 0;
+        this.music = null;
+    }
 
-        if (mapData.music) {
-            this.music = new Audio(mapData.music);
-            this.music.loop = true;
-            
-            if (window.soundManager) {
-                this.music.volume = window.soundManager.getVolumeFor('gameMusic');
-                window.soundManager.registerAudio('gameMusic', this.music);
-            } else {
-                this.music.volume = 0.5;
-            }
-            
-            this.music.play().catch(e => {
-                console.warn('🔇 Musique bloquée par l\'autoplay. L\'utilisateur doit interagir avec la page.');
-            });
+    if (mapData.music) {
+        this.music = new Audio(mapData.music);
+        this.music.loop = true;
+        
+        // CORRECTION : Appliquer immédiatement le volume actuel du soundManager
+        if (window.soundManager) {
+            this.music.volume = window.soundManager.getVolumeFor('gameMusic');
+            window.soundManager.registerAudio('gameMusic', this.music);
+        } else {
+            this.music.volume = 0.5;
         }
         
-        if (mapData.background && mapData.background.endsWith('.png')) {
-            const img = new Image();
-            img.onload = () => {
-                this.backgroundImage = img;
-            };
-            img.onerror = () => {
-                this.backgroundImage = null;
-            };
-            img.src = mapData.background;
-        } else {
-            this.backgroundImage = null;
-        }
+        this.music.play().catch(e => {
+            console.warn('🔇 Musique bloquée par l\'autoplay. L\'utilisateur doit interagir avec la page.');
+        });
     }
+    
+    if (mapData.background && mapData.background.endsWith('.png')) {
+        const img = new Image();
+        img.onload = () => {
+            this.backgroundImage = img;
+        };
+        img.onerror = () => {
+            this.backgroundImage = null;
+        };
+        img.src = mapData.background;
+    } else {
+        this.backgroundImage = null;
+    }
+}
 
     cacheProcessedSprite(color, kartSprite) {
         const finalSize = 28;

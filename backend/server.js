@@ -695,7 +695,7 @@ class Room {
                 const remainingTime = Math.ceil((this.raceSettings.maxTime - raceTime) / 1000);
                 io.to(this.id).emit('timeWarning', { 
                     remainingTime: remainingTime,
-                    message: `Attention ! Plus que ${remainingTime} secondes !`
+                    message: `! Only ${remainingTime} seconds remaining !`
                 });
             }
             

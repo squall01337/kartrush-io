@@ -12,7 +12,7 @@ class GameClient {
         this.isHost = false;
         this.hostId = null; // Nouveau : ID de l'hôte actuel
         this.rematchVotes = 0; // Nouveau : compteur de votes
-        this.totalPlayers = 0; // Nouveau : nombre total de joueurs
+        this.totalPlayers = 0; // Nouveau : nombre total de joueursa
         
         // Gestion des maps
         this.availableMaps = [];

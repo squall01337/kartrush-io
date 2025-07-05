@@ -908,6 +908,9 @@ class GameEngine {
     
     // Gérer les événements de dégâts depuis le serveur
     setupDamageEvents() {
+        // Importer soundManager au début de la méthode
+        const soundManager = window.soundManager || (window.gameClient && window.gameClient.soundManager);
+        
         this.socket.on('playerDamaged', (data) => {
             // Ajouter l'effet de dégât
             this.damageEffects.set(data.playerId, {
@@ -918,17 +921,17 @@ class GameEngine {
             // Créer des particules selon le type
             if (data.damageType === 'scrape') {
                 this.particleSystem.createSparks(data.position.x, data.position.y, 10);
-                window.soundManager.playWallScrape();
+                if (soundManager) soundManager.playWallScrape();
             } else if (data.damageType === 'crash') {
                 this.particleSystem.createSparks(data.position.x, data.position.y, 30);
-                window.soundManager.playWallHit();
+                if (soundManager) soundManager.playWallHit();
             }
         });
         
         this.socket.on('playersCollided', (data) => {
             // Créer des particules à l'impact
             this.particleSystem.createSparks(data.position.x, data.position.y, 20);
-            window.soundManager.playPlayerCollision();
+            if (soundManager) soundManager.playPlayerCollision();
         });
         
         this.socket.on('playerDeath', (data) => {
@@ -940,13 +943,13 @@ class GameEngine {
             
             // Créer beaucoup de particules
             this.particleSystem.createExplosion(data.position.x, data.position.y);
-            window.soundManager.playExplosion();
+            if (soundManager) soundManager.playExplosion();
         });
         
         this.socket.on('playerRespawned', (data) => {
             // Effet de respawn
             this.particleSystem.createRespawnEffect(data.position.x, data.position.y);
-            window.soundManager.playRespawn();
+            if (soundManager) soundManager.playRespawn();
         });
     }
 

@@ -708,5 +708,8 @@ class SoundManager {
 // Créer une instance globale
 const soundManager = new SoundManager();
 
+// Rendre soundManager accessible globalement
+window.soundManager = soundManager;
+
 // Export pour les modules
 export default soundManager;

@@ -708,29 +708,34 @@ class Room {
 
         // NOUVEAU : Gérer les respawns
         for (let player of this.players.values()) {
-            if (player.isDead && now >= player.respawnTime) {
-                // Déterminer le point de respawn
-                let spawnPoint;
-                
-                // Si on a validé des checkpoints, respawn au dernier
-                if (player.lastValidatedCheckpoint > 0 && player.checkpointPositions[player.lastValidatedCheckpoint - 1]) {
-                    spawnPoint = player.checkpointPositions[player.lastValidatedCheckpoint - 1];
-                } else {
-                    // Sinon, respawn au point de départ
-                    const spawnPoints = trackData.spawnPoints || [];
-                    const index = Array.from(this.players.values()).indexOf(player);
-                    spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
-                }
-                
-                player.respawn(spawnPoint);
-                
-                // Émettre l'événement de respawn
-                io.to(this.id).emit('playerRespawned', {
-                    playerId: player.id,
-                    position: spawnPoint,
-                    hp: player.hp
-                });
-            }
+    if (player.isDead && now >= player.respawnTime) {
+        // Déterminer le point de respawn
+        let spawnPoint;
+        
+        // Si on a validé au moins 2 checkpoints, respawn à l'avant-dernier
+        if (player.lastValidatedCheckpoint > 1 && player.checkpointPositions[player.lastValidatedCheckpoint - 2]) {
+            spawnPoint = player.checkpointPositions[player.lastValidatedCheckpoint - 2];
+        } else if (player.lastValidatedCheckpoint > 0 && player.checkpointPositions[player.lastValidatedCheckpoint - 1]) {
+            // Si on n'a validé qu'un seul checkpoint, respawn au point de départ
+            const spawnPoints = trackData.spawnPoints || [];
+            const index = Array.from(this.players.values()).indexOf(player);
+            spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+        } else {
+            // Sinon, respawn au point de départ
+            const spawnPoints = trackData.spawnPoints || [];
+            const index = Array.from(this.players.values()).indexOf(player);
+            spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+        }
+        
+        player.respawn(spawnPoint);
+        
+        // Émettre l'événement de respawn
+        io.to(this.id).emit('playerRespawned', {
+            playerId: player.id,
+            position: spawnPoint,
+            hp: player.hp
+        });
+    }
             
             // Mettre à jour seulement si pas mort
             if (!player.finished && !player.isDead) {
@@ -1264,8 +1269,8 @@ class Room {
         // NOUVEAU : Calculer les dégâts selon la vitesse relative
         const impactSpeed = (Math.abs(player1.speed) + Math.abs(player2.speed)) / 2;
         
-        if (impactSpeed > GAME_CONFIG.MAX_SPEED * 0.3) {
-            const damage = Math.floor(10 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 25);
+        if (impactSpeed > GAME_CONFIG.MAX_SPEED * 0.15) {
+            const damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 15);
             
             const result1 = player1.takeDamage(damage, 'player_collision');
             const result2 = player2.takeDamage(damage, 'player_collision');
@@ -1298,170 +1303,174 @@ class Room {
     }
     
     checkWallCollisions(player) {
-        if (player.isDead) return;
+    if (player.isDead) return;
+    
+    const kx = player.x;
+    const ky = player.y;
+    const radius = GAME_CONFIG.KART_SIZE;
+    const minDist = radius + 4;
+    const minDistSq = minDist * minDist;
+
+    const prevX = player.x;
+    const prevY = player.y;
+    const prevSpeed = player.speed;
+
+    for (const curve of trackData.continuousCurves || []) {
+        const points = curve.points;
+        const len = points.length;
         
-        const kx = player.x;
-        const ky = player.y;
-        const radius = GAME_CONFIG.KART_SIZE;
-        const minDist = radius + 4;
-        const minDistSq = minDist * minDist;
+        // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
+        const segmentCount = curve.closed ? len : len - 1;
 
-        const prevX = player.x;
-        const prevY = player.y;
-        const prevSpeed = player.speed;
+        for (let i = 0; i < segmentCount; i++) {
+            const [x1, y1] = points[i];
+            // Pour une courbe fermée, le dernier segment connecte au premier point
+            const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
+            const [x2, y2] = points[nextIndex];
 
-        for (const curve of trackData.continuousCurves || []) {
-            const points = curve.points;
-            const len = points.length;
-            
-            // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
-            const segmentCount = curve.closed ? len : len - 1;
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const segLenSq = dx * dx + dy * dy;
+            if (segLenSq === 0) continue;
 
-            for (let i = 0; i < segmentCount; i++) {
-                const [x1, y1] = points[i];
-                // Pour une courbe fermée, le dernier segment connecte au premier point
-                const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
-                const [x2, y2] = points[nextIndex];
+            // Projection du kart sur le segment
+            let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
+            t = Math.max(0, Math.min(1, t));
 
-                const dx = x2 - x1;
-                const dy = y2 - y1;
-                const segLenSq = dx * dx + dy * dy;
-                if (segLenSq === 0) continue;
+            const closestX = x1 + t * dx;
+            const closestY = y1 + t * dy;
 
-                // Projection du kart sur le segment
-                let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
-                t = Math.max(0, Math.min(1, t));
+            const distX = kx - closestX;
+            const distY = ky - closestY;
+            const distSq = distX * distX + distY * distY;
 
-                const closestX = x1 + t * dx;
-                const closestY = y1 + t * dy;
+            if (distSq < minDistSq) {
+                const dist = Math.sqrt(distSq) || 0.001;
+                const nx = distX / dist;
+                const ny = distY / dist;
 
-                const distX = kx - closestX;
-                const distY = ky - closestY;
-                const distSq = distX * distX + distY * distY;
+                // Repousser le joueur hors du mur (PLUS FORT)
+                const penetration = minDist - dist;
+                player.x += nx * (penetration + 2); // +2 pixels supplémentaires
+                player.y += ny * (penetration + 2);
 
-                if (distSq < minDistSq) {
-                    const dist = Math.sqrt(distSq) || 0.001;
-                    const nx = distX / dist;
-                    const ny = distY / dist;
+                // Vecteur de vitesse du joueur
+                const vx = Math.cos(player.angle) * player.speed;
+                const vy = Math.sin(player.angle) * player.speed;
+                
+                // Produit scalaire pour déterminer l'angle d'impact
+                // dot < 0 signifie qu'on se dirige vers le mur
+                const dot = vx * nx + vy * ny;
+                
+                // Calculer l'angle d'approche par rapport à la normale du mur
+                // Un angle proche de 180° (ou -1 en dot product) = collision frontale
+                // Un angle proche de 90° (ou 0 en dot product) = frottement latéral
+                const angleRatio = Math.abs(dot) / (Math.sqrt(vx * vx + vy * vy) + 0.001); // Éviter division par 0
+                
+                // NOUVEAU : Calculer les dégâts selon l'impact
+                const impactSpeed = Math.abs(player.speed);
+                let damage = 0;
+                let damageType = 'scrape';
 
-                    // Repousser le joueur hors du mur (PLUS FORT)
-                    const penetration = minDist - dist;
-                    player.x += nx * (penetration + 2); // +2 pixels supplémentaires
-                    player.y += ny * (penetration + 2);
-
-                    // Vecteur de vitesse du joueur
-                    const vx = Math.cos(player.angle) * player.speed;
-                    const vy = Math.sin(player.angle) * player.speed;
+                // Déterminer le type de collision basé sur l'angle d'approche
+                if (dot < -0.1 && angleRatio > 0.7) {
+                    // Collision frontale : on fonce vers le mur avec un angle > 45°
+                    damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 10);
+                    damageType = 'crash';
+                    player.speed *= -0.2; // Inverser la vitesse (rebond)
                     
-                    // Produit scalaire pour déterminer l'angle d'impact
-                    const dot = vx * nx + vy * ny;
+                    // Rebond plus prononcé
+                    player.x += nx * 8; // Rebond de 8 pixels
+                    player.y += ny * 8;
                     
-                    // Normaliser le vecteur du mur
+                    // Petite variation aléatoire de l'angle pour le réalisme
+                    player.angle += (Math.random() - 0.5) * 0.2;
+                    
+                } else if (impactSpeed > GAME_CONFIG.MAX_SPEED * 0.2) {
+                    // Frottement latéral : on glisse le long du mur
+                    // Plus la vitesse est élevée, plus on prend de dégâts
+                    damage = Math.floor(1 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 4);
+                    damageType = 'scrape';
+                    
+                    // Calculer la direction du mur
                     const wallLength = Math.sqrt(dx * dx + dy * dy);
                     const wallDirX = dx / wallLength;
                     const wallDirY = dy / wallLength;
                     
-                    // Angle entre la direction du joueur et le mur
-                    const playerDirX = Math.cos(player.angle);
-                    const playerDirY = Math.sin(player.angle);
-                    const wallDot = Math.abs(playerDirX * wallDirX + playerDirY * wallDirY);
+                    // Projeter la vitesse sur la direction du mur
+                    const velocityAlongWall = vx * wallDirX + vy * wallDirY;
                     
-                    // NOUVEAU : Calculer les dégâts selon l'impact
-                    const impactSpeed = Math.abs(player.speed);
-                    let damage = 0;
-                    let damageType = 'scrape';
-
-                    if (dot < -0.5 && wallDot < 0.5) {
-                        // Collision frontale (angle > 60° avec le mur)
-                        damage = Math.floor(20 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 30);
-                        damageType = 'crash';
-                        player.speed *= -0.2; // Inverser la vitesse (rebond)
+                    // Nouvelle vitesse alignée avec le mur (avec friction)
+                    const frictionFactor = 0.85; // Réduire la vitesse de 15%
+                    const newVx = wallDirX * velocityAlongWall * frictionFactor;
+                    const newVy = wallDirY * velocityAlongWall * frictionFactor;
+                    
+                    // Mettre à jour la vitesse et l'angle
+                    player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
+                    
+                    // Ajuster l'angle pour suivre le mur
+                    if (player.speed > 0.1) {
+                        const targetAngle = Math.atan2(newVy, newVx);
+                        const angleDiff = targetAngle - player.angle;
                         
-                        // Rebond plus prononcé
-                        player.x += nx * 8; // Rebond de 8 pixels
-                        player.y += ny * 8;
+                        // Normaliser la différence d'angle entre -PI et PI
+                        let normalizedDiff = angleDiff;
+                        while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
+                        while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
                         
-                        // Petite variation aléatoire de l'angle pour le réalisme
-                        player.angle += (Math.random() - 0.5) * 0.2;
-                        
-                    } else if (Math.abs(dot) < 0.7 && impactSpeed > GAME_CONFIG.MAX_SPEED * 0.3) {
-                        // Frottement latéral (glissement le long du mur)
-                        damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 10);
-                        damageType = 'scrape';
-                        
-                        // Projeter la vitesse sur la direction du mur
-                        const velocityAlongWall = vx * wallDirX + vy * wallDirY;
-                        
-                        // Nouvelle vitesse alignée avec le mur
-                        const newVx = wallDirX * velocityAlongWall * 0.85;
-                        const newVy = wallDirY * velocityAlongWall * 0.85;
-                        
-                        // Mettre à jour la vitesse et l'angle
-                        player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
-                        
-                        // Ajuster légèrement l'angle pour suivre le mur
-                        if (player.speed > 0.1) {
-                            const targetAngle = Math.atan2(newVy, newVx);
-                            const angleDiff = targetAngle - player.angle;
-                            
-                            // Normaliser la différence d'angle entre -PI et PI
-                            let normalizedDiff = angleDiff;
-                            while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
-                            while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
-                            
-                            // Appliquer progressivement le changement d'angle
-                            player.angle += normalizedDiff * 0.3;
-                        }
-                        
-                    } else {
-                        // Collision à angle rasant
-                        player.speed *= 0.95;
+                        // Appliquer progressivement le changement d'angle
+                        player.angle += normalizedDiff * 0.3;
                     }
                     
-                    // Appliquer les dégâts
-                    if (damage > 0) {
-                        const result = player.takeDamage(damage, damageType);
-                        
-                        // Émettre l'événement de dégâts
-                        io.to(this.id).emit('playerDamaged', {
-                            playerId: player.id,
-                            damage: damage,
-                            hp: player.hp,
-                            damageType: damageType,
-                            position: { x: player.x, y: player.y },
-                            isDead: result === 'death'
-                        });
-                        
-                        if (result === 'death') {
-                            io.to(this.id).emit('playerDeath', {
-                                playerId: player.id,
-                                position: { x: player.x, y: player.y }
-                            });
-                        }
-                    }
-                    
-                    // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
-                    const finalDistX = player.x - closestX;
-                    const finalDistY = player.y - closestY;
-                    const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
-                    
-                    if (finalDistSq < minDistSq) {
-                        // Forcer la sortie du mur
-                        const pushDist = Math.sqrt(minDistSq) + 2;
-                        player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
-                        player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
-                    }
-                    
-                    // Limiter la vitesse minimale
-                    if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
-                        player.speed = 0;
-                    }
-                    
-                    break; // Collision traitée
+                } else {
+                    // Collision à très basse vitesse, pas de dégâts
+                    player.speed *= 0.95;
                 }
+                
+                // Appliquer les dégâts
+                if (damage > 0) {
+                    const result = player.takeDamage(damage, damageType);
+                    
+                    // Émettre l'événement de dégâts
+                    io.to(this.id).emit('playerDamaged', {
+                        playerId: player.id,
+                        damage: damage,
+                        hp: player.hp,
+                        damageType: damageType,
+                        position: { x: player.x, y: player.y },
+                        isDead: result === 'death'
+                    });
+                    
+                    if (result === 'death') {
+                        io.to(this.id).emit('playerDeath', {
+                            playerId: player.id,
+                            position: { x: player.x, y: player.y }
+                        });
+                    }
+                }
+                
+                // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
+                const finalDistX = player.x - closestX;
+                const finalDistY = player.y - closestY;
+                const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
+                
+                if (finalDistSq < minDistSq) {
+                    // Forcer la sortie du mur
+                    const pushDist = Math.sqrt(minDistSq) + 2;
+                    player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
+                    player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
+                }
+                
+                // Limiter la vitesse minimale
+                if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
+                    player.speed = 0;
+                }
+                
+                break; // Collision traitée
             }
         }
     }
+}
 
     broadcastGameState() {
         const gameData = {

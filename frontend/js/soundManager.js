@@ -9,7 +9,7 @@ class SoundManager {
         
         // Volumes relatifs pour chaque type de son
         this.volumeMultipliers = {
-            engineLoop: 0.15,
+            engineLoop: 0.05,
             countdown: 1.0,
             backgroundMusic: 0.3,
             gameMusic: 0.5,

@@ -34,6 +34,11 @@ class GameEngine {
         
         this.CHECKPOINT_MARGIN = 20;
         
+        // Nouveau : état des boosters
+        this.boosterEffects = new Map(); // Pour les effets visuels
+        this.boosterSprite = null; // Pour stocker le sprite du booster
+        this.loadBoosterSprite();
+        
         this.setupCanvas();
         this.preprocessSprites();
     }
@@ -70,6 +75,12 @@ class GameEngine {
         this.scale = width / 1280;
     }
 
+    // Nouvelle méthode pour charger le sprite du booster
+    loadBoosterSprite() {
+        this.boosterSprite = new Image();
+        this.boosterSprite.src = 'assets/booster_arrow.png'; // Assurez-vous d'avoir ce fichier
+    }
+
     preprocessSprites() {
         const colors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff', '#44ffff'];
         
@@ -81,48 +92,48 @@ class GameEngine {
         });
     }
 
- setMapData(mapData) {
-    this.setTrack(mapData);
+    setMapData(mapData) {
+        this.setTrack(mapData);
 
-    if (this.music) {
-        if (window.soundManager) {
-            window.soundManager.unregisterAudio('gameMusic');
+        if (this.music) {
+            if (window.soundManager) {
+                window.soundManager.unregisterAudio('gameMusic');
+            }
+            this.music.pause();
+            this.music.currentTime = 0;
+            this.music = null;
         }
-        this.music.pause();
-        this.music.currentTime = 0;
-        this.music = null;
-    }
 
-    if (mapData.music) {
-        this.music = new Audio(mapData.music);
-        this.music.loop = true;
+        if (mapData.music) {
+            this.music = new Audio(mapData.music);
+            this.music.loop = true;
+            
+            // CORRECTION : Appliquer immédiatement le volume actuel du soundManager
+            if (window.soundManager) {
+                this.music.volume = window.soundManager.getVolumeFor('gameMusic');
+                window.soundManager.registerAudio('gameMusic', this.music);
+            } else {
+                this.music.volume = 0.5;
+            }
+            
+            this.music.play().catch(e => {
+                console.warn('🔇 Musique bloquée par l\'autoplay. L\'utilisateur doit interagir avec la page.');
+            });
+        }
         
-        // CORRECTION : Appliquer immédiatement le volume actuel du soundManager
-        if (window.soundManager) {
-            this.music.volume = window.soundManager.getVolumeFor('gameMusic');
-            window.soundManager.registerAudio('gameMusic', this.music);
+        if (mapData.background && mapData.background.endsWith('.png')) {
+            const img = new Image();
+            img.onload = () => {
+                this.backgroundImage = img;
+            };
+            img.onerror = () => {
+                this.backgroundImage = null;
+            };
+            img.src = mapData.background;
         } else {
-            this.music.volume = 0.5;
-        }
-        
-        this.music.play().catch(e => {
-            console.warn('🔇 Musique bloquée par l\'autoplay. L\'utilisateur doit interagir avec la page.');
-        });
-    }
-    
-    if (mapData.background && mapData.background.endsWith('.png')) {
-        const img = new Image();
-        img.onload = () => {
-            this.backgroundImage = img;
-        };
-        img.onerror = () => {
             this.backgroundImage = null;
-        };
-        img.src = mapData.background;
-    } else {
-        this.backgroundImage = null;
+        }
     }
-}
 
     cacheProcessedSprite(color, kartSprite) {
         const finalSize = 28;
@@ -232,6 +243,9 @@ class GameEngine {
         
         this.interpolatePlayers();
         
+        // Mettre à jour les effets de boost
+        this.updateBoosterEffects(deltaTime);
+        
         const player = this.getInterpolatedPlayer(this.playerId);
         if (player) {
             this.camera.x = player.x - (this.canvas.width / this.scale) / 2;
@@ -242,6 +256,17 @@ class GameEngine {
         }
         
         this.updateUI();
+    }
+
+    // Nouvelle méthode pour les effets visuels de boost
+    updateBoosterEffects(deltaTime) {
+        // Nettoyer les effets terminés
+        for (const [playerId, effect] of this.boosterEffects) {
+            effect.duration -= deltaTime * 1000;
+            if (effect.duration <= 0) {
+                this.boosterEffects.delete(playerId);
+            }
+        }
     }
 
     interpolatePlayers() {
@@ -283,6 +308,7 @@ class GameEngine {
         ctx.translate(-this.camera.x, -this.camera.y);
         
         this.renderTrack(ctx);
+        this.renderBoosters(ctx); // NOUVEAU
         this.renderFinishLine(ctx);
         this.renderPlayers(ctx);
         this.renderPlayerInfo(ctx);
@@ -304,6 +330,86 @@ class GameEngine {
             ctx.fillStyle = '#444444';
             ctx.fillRect(0, 0, this.track.width, this.track.height);
         }
+    }
+
+    // Nouvelle méthode pour afficher les boosters
+    renderBoosters(ctx) {
+        if (!this.track || !this.track.boosters) return;
+        
+        ctx.save();
+        
+        this.track.boosters.forEach((booster, index) => {
+            // Calculer le centre et l'angle du booster
+            const cx = (booster.x1 + booster.x2) / 2;
+            const cy = (booster.y1 + booster.y2) / 2;
+            const dx = booster.x2 - booster.x1;
+            const dy = booster.y2 - booster.y1;
+            const angle = Math.atan2(dy, dx);
+            const length = Math.sqrt(dx * dx + dy * dy);
+            
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(angle);
+            
+            // Si on a le sprite, dessiner des flèches
+            if (this.boosterSprite && this.boosterSprite.complete) {
+                // Calculer combien de flèches on peut mettre
+                const spriteSize = 64; // Votre sprite fait 64x64
+                const spacing = 10; // Espace entre les flèches
+                const totalSize = spriteSize + spacing;
+                const arrowCount = Math.max(1, Math.floor(length / totalSize));
+                
+                // Calculer la position de départ pour centrer les flèches
+                const totalWidth = arrowCount * spriteSize + (arrowCount - 1) * spacing;
+                const startX = -totalWidth / 2;
+                
+                for (let i = 0; i < arrowCount; i++) {
+                    const x = startX + i * totalSize + spriteSize/2;
+                    
+                    ctx.save();
+                    ctx.translate(x, 0);
+                    
+                    // Effet de pulsation plus subtile
+                    const pulsePhase = (Date.now() * 0.002 + i * 0.8) % (Math.PI * 2);
+                    const scale = 0.9 + Math.sin(pulsePhase) * 0.1; // De 0.9 à 1.1 au lieu de 0.8 à 1.2
+                    ctx.scale(scale, scale);
+                    
+                    // Opacité constante élevée (jamais en dessous de 0.7)
+                    ctx.globalAlpha = 0.7 + Math.sin(pulsePhase) * 0.3; // De 0.7 à 1.0
+                    
+                    // Dessiner le sprite (déjà orienté vers le haut)
+                    ctx.drawImage(
+                        this.boosterSprite,
+                        -spriteSize/2, -spriteSize/2,
+                        spriteSize, spriteSize
+                    );
+                    
+                    ctx.restore();
+                }
+                
+                ctx.globalAlpha = 1;
+            } else {
+                // Fallback : dessiner des chevrons
+                ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`;
+                ctx.lineWidth = 3;
+                
+                const chevronCount = Math.floor(length / 30);
+                const chevronSpacing = length / (chevronCount + 1);
+                
+                for (let i = 1; i <= chevronCount; i++) {
+                    const x = -length/2 + i * chevronSpacing;
+                    ctx.beginPath();
+                    ctx.moveTo(x - 10, 5);
+                    ctx.lineTo(x, -5);
+                    ctx.lineTo(x + 10, 5);
+                    ctx.stroke();
+                }
+            }
+            
+            ctx.restore();
+        });
+        
+        ctx.restore();
     }
 
     renderFinishLine(ctx) {
@@ -500,6 +606,38 @@ class GameEngine {
         
         const size = 28;
         
+        // Effet de boost si actif
+        const boostEffect = this.boosterEffects.get(player.id);
+        if (boostEffect) {
+            // Traînée de vitesse
+            const trailLength = 40;
+            const gradient = ctx.createLinearGradient(-trailLength, 0, 0, 0);
+            gradient.addColorStop(0, 'rgba(0, 255, 150, 0)');
+            gradient.addColorStop(1, `rgba(0, 255, 150, ${0.6 * (boostEffect.duration / 1500)})`);
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(-trailLength, -size/2, trailLength, size);
+            
+            // Particules
+            ctx.save();
+            const particleCount = 3;
+            for (let i = 0; i < particleCount; i++) {
+                const offset = (Date.now() * 0.01 + i * 120) % 360;
+                const px = -20 - Math.random() * 20;
+                const py = (Math.sin(offset * 0.1) * 10);
+                
+                ctx.fillStyle = `rgba(0, 255, 150, ${0.5 * (boostEffect.duration / 1500)})`;
+                ctx.beginPath();
+                ctx.arc(px, py, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+            
+            // Aura autour du kart
+            ctx.shadowColor = 'rgba(0, 255, 150, 0.8)';
+            ctx.shadowBlur = 20;
+        }
+        
         const cachedSprite = this.spriteCache.get(player.color);
         
         if (cachedSprite) {
@@ -562,7 +700,17 @@ class GameEngine {
     }
 
     updateGameState(gameData) {
-        this.gameState = gameData;      
+        this.gameState = gameData;
+        
+        // Détecter les nouveaux boosts pour les effets visuels uniquement
+        gameData.players.forEach(player => {
+            if (player.isBoosting && !this.boosterEffects.has(player.id)) {
+                this.boosterEffects.set(player.id, {
+                    duration: 1500, // 1.5 secondes d'effet visuel
+                    startTime: Date.now()
+                });
+            }
+        });
         
         const currentIds = new Set(gameData.players.map(p => p.id));
         for (const [id] of this.playerInterpolation) {

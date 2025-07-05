@@ -16,7 +16,8 @@ class SoundManager {
             checkpoint: 0.7,       // 70% du volume global
             lap: 0.8,             // 80% du volume global
             error: 0.5,           // 50% du volume global
-            victory: 0.5          // 50% du volume global
+            victory: 0.5,         // 50% du volume global
+            boost: 0.7            // 70% du volume global
         };
         
         // Sons préchargés
@@ -44,6 +45,9 @@ class SoundManager {
         
         // 🎵 Décompte 3-2-1-GO
         this.sounds.countdown = new Audio('assets/audio/countdown.mp3');
+        
+        // 🚀 Son de boost
+        this.sounds.boost = new Audio('assets/audio/boost.mp3');
     }
     
     initializeUI() {
@@ -171,6 +175,49 @@ class SoundManager {
             countdown.volume = this.getEffectiveVolume() * this.volumeMultipliers.countdown;
             countdown.currentTime = 0;
             countdown.play().catch(e => console.log('Erreur lecture countdown:', e));
+        }
+    }
+    
+    // NOUVEAU : Méthode pour jouer le son de boost
+    playBoost() {
+        const boost = this.sounds.boost;
+        if (boost) {
+            boost.volume = this.getEffectiveVolume() * this.volumeMultipliers.boost;
+            boost.currentTime = 0;
+            boost.play().catch(e => {
+                console.log('Erreur lecture boost:', e);
+                // Fallback avec synthèse sonore
+                this.playBoostSynth();
+            });
+        } else {
+            // Fallback si pas de fichier audio
+            this.playBoostSynth();
+        }
+    }
+    
+    // NOUVEAU : Son de boost synthétisé comme fallback
+    playBoostSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Effet de montée en fréquence
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.2);
+            oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.5);
+            
+            // Volume qui diminue
+            gainNode.gain.setValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+        } catch (e) {
+            console.log('Erreur synthèse boost:', e);
         }
     }
     
@@ -305,6 +352,9 @@ class SoundManager {
         }
         if (this.sounds.countdown) {
             this.sounds.countdown.volume = effectiveVolume * this.volumeMultipliers.countdown;
+        }
+        if (this.sounds.boost) {
+            this.sounds.boost.volume = effectiveVolume * this.volumeMultipliers.boost;
         }
         
         // Appliquer à tous les éléments audio actifs enregistrés

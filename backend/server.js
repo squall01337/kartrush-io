@@ -210,66 +210,109 @@ class Player {
         this.lastCheckpointTime = {};
         this.lastFinishLineTime = 0;
         
-        // NOUVEAU: État des inputs pour éviter le traitement multiple
+        // État des inputs pour éviter le traitement multiple
         this.inputs = {
             up: false,
             down: false,
             left: false,
             right: false
         };
+        
+        // NOUVEAU : gestion du boost
+        this.isBoosting = false;
+        this.boostEndTime = 0;
+        this.lastBoosterIndex = -1; // Pour éviter de déclencher plusieurs fois le même booster
+        this.boostCooldown = 0; // Cooldown entre les boosts
+        this.boostLevel = 0; // Nouveau : niveau de boost (0, 1, 2, 3)
     }
 
     update(deltaTime) {
-    // Sauvegarder la position précédente
-    this.lastX = this.x;
-    this.lastY = this.y;
-    
-    // Traiter les inputs
-    if (this.inputs.up) this.accelerate();
-    if (this.inputs.down) this.brake();
-    if (this.inputs.left) this.turnLeft();
-    if (this.inputs.right) this.turnRight();
-    
-    // Appliquer la friction différemment selon l'état
-    if (this.inputs.up && this.speed > 0) {
-        // Moins de friction en accélération
-        this.speed *= GAME_CONFIG.FRICTION + 0.01;
-    } else if (this.inputs.down && this.speed < 0) {
-        // Moins de friction en marche arrière
-        this.speed *= GAME_CONFIG.FRICTION + 0.01;
-    } else {
-        // Friction normale quand on lâche tout
-        this.speed *= GAME_CONFIG.FRICTION - 0.02;
+        // Sauvegarder la position précédente
+        this.lastX = this.x;
+        this.lastY = this.y;
+        
+        // Vérifier si le boost est terminé
+        if (this.isBoosting && Date.now() > this.boostEndTime) {
+            this.isBoosting = false;
+            this.boostLevel = 0; // Réinitialiser le niveau de boost
+        }
+        
+        // Réduire le cooldown
+        if (this.boostCooldown > 0) {
+            this.boostCooldown -= deltaTime * 1000;
+        }
+        
+        // Traiter les inputs
+        if (this.inputs.up) this.accelerate();
+        if (this.inputs.down) this.brake();
+        if (this.inputs.left) this.turnLeft();
+        if (this.inputs.right) this.turnRight();
+        
+        // Appliquer la friction différemment selon l'état
+        if (this.inputs.up && this.speed > 0) {
+            // Moins de friction en accélération
+            this.speed *= GAME_CONFIG.FRICTION + 0.01;
+        } else if (this.inputs.down && this.speed < 0) {
+            // Moins de friction en marche arrière
+            this.speed *= GAME_CONFIG.FRICTION + 0.01;
+        } else {
+            // Friction normale quand on lâche tout
+            this.speed *= GAME_CONFIG.FRICTION - 0.02;
+        }
+        
+        // Garantir les limites de vitesse
+        let maxSpeedLimit = GAME_CONFIG.MAX_SPEED;
+        if (this.isBoosting) {
+            switch(this.boostLevel) {
+                case 1: maxSpeedLimit *= 1.25; break;
+                case 2: maxSpeedLimit *= 1.50; break;
+                case 3: maxSpeedLimit *= 1.75; break;
+            }
+        }
+        
+        if (this.speed > maxSpeedLimit) {
+            this.speed = maxSpeedLimit;
+        } else if (this.speed < -GAME_CONFIG.MAX_SPEED * 0.5) {
+            this.speed = -GAME_CONFIG.MAX_SPEED * 0.5;
+        }
+        
+        // Arrêt complet si vitesse très faible
+        if (Math.abs(this.speed) < 0.1) {
+            this.speed = 0;
+        }
+        
+        // Mettre à jour la position
+        this.x += Math.cos(this.angle) * this.speed;
+        this.y += Math.sin(this.angle) * this.speed;
+        
+        // Limites de la piste
+        this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
+        this.y = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_HEIGHT - GAME_CONFIG.KART_SIZE, this.y));
     }
-    
-    // Garantir les limites de vitesse
-    if (this.speed > GAME_CONFIG.MAX_SPEED) {
-        this.speed = GAME_CONFIG.MAX_SPEED;
-    } else if (this.speed < -GAME_CONFIG.MAX_SPEED * 0.5) {
-        this.speed = -GAME_CONFIG.MAX_SPEED * 0.5;
-    }
-    
-    // Arrêt complet si vitesse très faible
-    if (Math.abs(this.speed) < 0.1) {
-        this.speed = 0;
-    }
-    
-    // Mettre à jour la position
-    this.x += Math.cos(this.angle) * this.speed;
-    this.y += Math.sin(this.angle) * this.speed;
-    
-    // Limites de la piste
-    this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
-    this.y = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_HEIGHT - GAME_CONFIG.KART_SIZE, this.y));
-}
 
     accelerate() {
-    this.speed = Math.min(this.speed + GAME_CONFIG.ACCELERATION, GAME_CONFIG.MAX_SPEED);
-    // Forcer à la vitesse max si on est très proche
-    if (this.speed > GAME_CONFIG.MAX_SPEED * 0.98) {
-        this.speed = GAME_CONFIG.MAX_SPEED;
+        // Modifier pour prendre en compte le boost avec niveaux
+        let speedMultiplier = 1.0;
+        if (this.isBoosting) {
+            switch(this.boostLevel) {
+                case 1: speedMultiplier = 1.25; break;  // 125%
+                case 2: speedMultiplier = 1.50; break;  // 150%
+                case 3: speedMultiplier = 1.75; break;  // 175%
+                default: speedMultiplier = 1.25; break;
+            }
+        }
+        
+        const maxSpeed = GAME_CONFIG.MAX_SPEED * speedMultiplier;
+        const acceleration = this.isBoosting ? GAME_CONFIG.ACCELERATION * 1.5 : GAME_CONFIG.ACCELERATION;
+        
+        this.speed = Math.min(this.speed + acceleration, maxSpeed);
+        
+        // Forcer à la vitesse max si on est très proche
+        if (this.speed > maxSpeed * 0.98) {
+            this.speed = maxSpeed;
+        }
     }
-}
+    
     brake() {
         // Si on va en avant, freiner normalement
         if (this.speed > 0) {
@@ -395,13 +438,20 @@ class Room {
             player.lastFinishLineTime = 0;
             player.raceTime = 0;
             
-            // NOUVEAU: Réinitialiser les inputs pour éviter le glissement
+            // Réinitialiser les inputs pour éviter le glissement
             player.inputs = {
                 up: false,
                 down: false,
                 left: false,
                 right: false
             };
+            
+            // NOUVEAU : Réinitialiser les états de boost
+            player.isBoosting = false;
+            player.boostEndTime = 0;
+            player.lastBoosterIndex = -1;
+            player.boostCooldown = 0;
+            player.boostLevel = 0;
         }
     }
 
@@ -491,13 +541,19 @@ class Room {
             player.lastCheckpointTime = {};
             player.lastFinishLineTime = 0;
             
-            // NOUVEAU: S'assurer que les inputs sont réinitialisés au démarrage
+            // S'assurer que les inputs sont réinitialisés au démarrage
             player.inputs = {
                 up: false,
                 down: false,
                 left: false,
                 right: false
             };
+            
+            // NOUVEAU : Réinitialiser les états de boost
+            player.isBoosting = false;
+            player.boostEndTime = 0;
+            player.lastBoosterIndex = -1;
+            player.boostCooldown = 0;
             
             index++;
         }
@@ -540,6 +596,9 @@ class Room {
                     
                     // Collision avec murs
                     this.checkWallCollisions(player);
+                    
+                    // NOUVEAU : Vérifier les boosters même avant le démarrage
+                    this.checkBoosterCollisions(player);
                 }
             }
             
@@ -570,7 +629,7 @@ class Room {
             }
         }
 
-        // Mettre à jour tous les joueurs + vérifier collision murs
+        // Mettre à jour tous les joueurs + vérifier collision murs ET BOOSTERS
         for (let player of this.players.values()) {
             if (!player.finished) {
                 player.update(deltaTime);
@@ -578,6 +637,9 @@ class Room {
 
                 // Collision avec murs
                 this.checkWallCollisions(player);
+                
+                // NOUVEAU : Vérifier les boosters
+                this.checkBoosterCollisions(player);
                 
                 // Vérifier les checkpoints et la ligne d'arrivée
                 this.checkRaceProgress(player, now);
@@ -594,6 +656,127 @@ class Room {
         this.checkRaceEnd();
         
         this.broadcastGameState();
+    }
+
+    // Nouvelle méthode pour gérer les collisions avec les boosters
+    checkBoosterCollisions(player) {
+        if (!trackData || !trackData.boosters || player.boostCooldown > 0) return;
+        
+        const playerRadius = GAME_CONFIG.KART_SIZE;
+        
+        trackData.boosters.forEach((booster, index) => {
+            // Ignorer si c'est le même booster que la dernière fois
+            if (index === player.lastBoosterIndex) return;
+            
+            // Calculer la distance du joueur à la ligne du booster
+            const distToLine = this.pointToLineDistance(
+                player.x, player.y,
+                booster.x1, booster.y1,
+                booster.x2, booster.y2
+            );
+            
+            // Zone de détection du booster (5 pixels de chaque côté de la ligne)
+            const boosterWidth = 5;
+            
+            if (distToLine < boosterWidth + playerRadius) {
+                // Vérifier si le joueur est dans les limites du segment
+                const projection = this.projectPointOnLine(
+                    player.x, player.y,
+                    booster.x1, booster.y1,
+                    booster.x2, booster.y2
+                );
+                
+                if (projection.t >= 0 && projection.t <= 1) {
+                    // Activer le boost !
+                    this.activateBoost(player);
+                    player.lastBoosterIndex = index;
+                }
+            } else if (index === player.lastBoosterIndex && distToLine > boosterWidth * 2) {
+                // Réinitialiser quand le joueur s'éloigne suffisamment
+                player.lastBoosterIndex = -1;
+            }
+        });
+    }
+
+    // Méthode pour activer le boost
+    activateBoost(player) {
+        if (player.boostCooldown > 0) return;
+        
+        // Si déjà en boost, augmenter le niveau (max 3)
+        if (player.isBoosting) {
+            player.boostLevel = Math.min(3, player.boostLevel + 1);
+        } else {
+            // Premier boost
+            player.isBoosting = true;
+            player.boostLevel = 1;
+        }
+        
+        player.boostEndTime = Date.now() + 1500; // Réinitialiser la durée à chaque nouveau boost
+        player.boostCooldown = 500; // Cooldown réduit à 0.5 secondes pour permettre l'accumulation
+        
+        // Donner une impulsion immédiate selon le niveau
+        const impulse = 1 + (player.boostLevel * 0.5); // 1.5, 2, 2.5
+        player.speed = Math.min(player.speed + impulse, GAME_CONFIG.MAX_SPEED * (1 + player.boostLevel * 0.25));
+        
+        // Émettre l'événement avec le niveau de boost
+        io.to(player.id).emit('boostActivated', { level: player.boostLevel });
+        
+        console.log(`🚀 ${player.pseudo} - Boost niveau ${player.boostLevel} !`);
+    }
+
+    // Méthode utilitaire pour calculer la distance d'un point à une ligne
+    pointToLineDistance(px, py, x1, y1, x2, y2) {
+        const A = px - x1;
+        const B = py - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+        
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        
+        if (lenSq === 0) {
+            // La ligne est un point
+            return Math.sqrt(A * A + B * B);
+        }
+        
+        const param = dot / lenSq;
+        
+        let xx, yy;
+        
+        if (param < 0) {
+            xx = x1;
+            yy = y1;
+        } else if (param > 1) {
+            xx = x2;
+            yy = y2;
+        } else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+        }
+        
+        const dx = px - xx;
+        const dy = py - yy;
+        
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Méthode pour projeter un point sur une ligne
+    projectPointOnLine(px, py, x1, y1, x2, y2) {
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const lenSq = dx * dx + dy * dy;
+        
+        if (lenSq === 0) {
+            return { x: x1, y: y1, t: 0 };
+        }
+        
+        const t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+        
+        return {
+            x: x1 + t * dx,
+            y: y1 + t * dy,
+            t: t
+        };
     }
 
     forceEndRace() {
@@ -1124,7 +1307,8 @@ class Room {
                 nextCheckpoint: p.nextCheckpoint,
                 hasPassedStartLine: p.hasPassedStartLine,
                 totalCheckpoints: trackData.checkpoints ? trackData.checkpoints.length : 0,
-                lapsToWin: this.raceSettings ? this.raceSettings.laps : 3
+                lapsToWin: this.raceSettings ? this.raceSettings.laps : 3,
+                isBoosting: p.isBoosting // NOUVEAU
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

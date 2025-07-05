@@ -767,6 +767,11 @@ class GameClient {
             this.showLapNotification(data);
         });
 
+        this.socket.on('boostActivated', () => {
+        // Jouer le son du boost
+        soundManager.playBoost();
+        });
+
         this.socket.on('timeWarning', (data) => {
             this.showTimeWarning(data);
         });

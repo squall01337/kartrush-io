@@ -7,12 +7,12 @@ class GameClient {
         this.playerId = null;
         this.roomId = null;
         this.gameEngine = null;
-        this.currentScreen = 'splash';
-        this.selectedColor = '#ff4444';
+        this.currentScreen = 'splash'; // Commencer sur l'écran d'accueil
+        this.selectedColor = '#ff4444'; // Couleur par défaut
         this.isHost = false;
-        this.hostId = null;
-        this.rematchVotes = 0;
-        this.totalPlayers = 0;
+        this.hostId = null; // Nouveau : ID de l'hôte actuel
+        this.rematchVotes = 0; // Nouveau : compteur de votes
+        this.totalPlayers = 0; // Nouveau : nombre total de joueurs
         
         // Gestion des maps
         this.availableMaps = [];
@@ -24,11 +24,13 @@ class GameClient {
         this.backgroundMusic = null;
         
         this.initializeUI();
+        // Ne pas se connecter tout de suite, attendre le clic sur PLAY
     }
 
-    // Charger la liste des maps disponibles
+    // Nouvelle méthode pour charger la liste des maps disponibles
     async loadAvailableMaps() {
         try {
+            // Essayer de charger depuis le serveur
             const response = await fetch('/api/maps');
             if (response.ok) {
                 const data = await response.json();
@@ -37,9 +39,27 @@ class GameClient {
                     name: map.name,
                     thumbnail: map.thumbnail
                 }));
+            } else {
+                throw new Error('Impossible de charger les maps');
             }
         } catch (error) {
-            this.availableMaps = [];
+            this.availableMaps = [
+                { id: 'lava_track', name: 'City', thumbnail: 'assets/track_background.png' },
+                { id: 'ice_circuit', name: 'Lava world', thumbnail: 'assets/track_background.png2' },
+                { id: 'desert_rally', name: 'Rallye du Désert', thumbnail: 'assets/track_background.png3' },
+                { id: 'forest_trail', name: 'Sentier Forestier', thumbnail: 'assets/track_background.png4' },
+                { id: 'space_station', name: 'Station Spatiale', thumbnail: 'assets/space_background.png' },
+                { id: 'underwater_tunnel', name: 'Tunnel Sous-Marin', thumbnail: 'assets/underwater_background.png' },
+                { id: 'volcano_escape', name: 'Évasion du Volcan', thumbnail: 'assets/volcano_background.png' },
+                { id: 'crystal_caves', name: 'Grottes de Cristal', thumbnail: 'assets/crystal_background.png' },
+                { id: 'rainbow_road', name: 'Route Arc-en-ciel', thumbnail: 'assets/rainbow_background.png' },
+                { id: 'cyber_city', name: 'Cyber Cité', thumbnail: 'assets/cyber_background.png' }
+            ];
+        }
+        
+        // Sélectionner la première map par défaut
+        if (this.availableMaps.length > 0) {
+            this.selectedMap = this.availableMaps[0].id;
         }
     }
 
@@ -49,7 +69,9 @@ class GameClient {
         this.backgroundMusic = new Audio('assets/audio/kartrush_theme.mp3');
         this.backgroundMusic.loop = true;
         this.backgroundMusic.volume = soundManager.getVolumeFor('backgroundMusic');
-        this.backgroundMusic.play().catch(e => {});
+        this.backgroundMusic.play().catch(e => {
+            console.log('Musique de fond autorisée par le clic utilisateur');
+        });
         
         // Enregistrer la musique dans le gestionnaire
         soundManager.registerAudio('backgroundMusic', this.backgroundMusic);
@@ -122,7 +144,7 @@ class GameClient {
         this.initializeMapSelector();
     }
 
-    // Gérer le sélecteur de couleur dans le lobby
+    // Nouvelle méthode pour gérer le sélecteur de couleur dans le lobby
     initializeLobbyColorSelector() {
         // Gérer le sélecteur de couleur dans le lobby
         document.addEventListener('click', (e) => {
@@ -158,7 +180,7 @@ class GameClient {
         });
     }
 
-    // Mettre à jour l'affichage du sélecteur
+    // Nouvelle méthode pour mettre à jour l'affichage du sélecteur
     updateLobbyColorSelector() {
         // Mettre à jour la sélection visuelle
         document.querySelectorAll('.lobby-color-option').forEach(opt => {
@@ -169,7 +191,7 @@ class GameClient {
         });
     }
 
-    // Initialiser le sélecteur de maps
+    // Nouvelle méthode pour initialiser le sélecteur de maps
     initializeMapSelector() {
         const prevBtn = document.getElementById('mapPrevBtn');
         const nextBtn = document.getElementById('mapNextBtn');
@@ -289,7 +311,7 @@ class GameClient {
         nextBtn.disabled = this.currentMapPage >= totalPages - 1;
     }
 
-    // Écran de chargement
+    // NOUVELLE MÉTHODE : Écran de chargement
     showLoadingScreen() {
         // Afficher l'écran de chargement
         this.showScreen('loading');
@@ -342,7 +364,7 @@ class GameClient {
         // Promesse pour attendre la fin du chargement
         return new Promise((resolve) => {
             // Démarrer la vidéo
-            video.play().catch(e => {});
+            video.play().catch(e => console.log('Erreur lecture vidéo:', e));
             
             // Animation de la barre de progression
             const updateProgress = () => {
@@ -376,7 +398,7 @@ class GameClient {
         });
     }
 
-    // Transition fluide
+    // Nouvelle méthode pour la transition fluide
     transitionToGame(video) {
         // Créer l'effet de flash
         const flash = document.createElement('div');
@@ -412,6 +434,10 @@ class GameClient {
     connectToServer() {
         this.socket = io();
 
+        this.socket.on('connect', () => {
+            console.log('Connecté au serveur');
+        });
+
         this.socket.on('joinedRoom', (data) => {
             this.playerId = data.playerId;
             this.roomId = data.roomId;
@@ -421,6 +447,7 @@ class GameClient {
             const roomCodeEl = document.getElementById('roomCode');
             
             if (!roomTypeEl || !roomCodeEl) {
+                console.error('❌ Elements roomType ou roomCode introuvables !');
                 return;
             }
             
@@ -464,6 +491,7 @@ class GameClient {
             }
         });
 
+        // Modifier le handler playersUpdate
         this.socket.on('playersUpdate', (data) => {
             this.updatePlayersList(data.players);
             this.hostId = data.hostId;
@@ -515,6 +543,7 @@ class GameClient {
             }
         });
 
+        // Nouveau : Réception de la map sélectionnée
         this.socket.on('mapSelected', (data) => {
             this.selectedMap = data.mapId;
             
@@ -539,6 +568,7 @@ class GameClient {
             this.renderMapSelector();
         });
 
+        // Nouveau : Gérer le changement de couleur
         this.socket.on('colorChanged', (data) => {
             // Mettre à jour la couleur du joueur dans la liste
             const playerItems = document.querySelectorAll('.player-item');
@@ -571,6 +601,7 @@ class GameClient {
             }
         });
 
+        // Nouveau : Changement d'hôte
         this.socket.on('hostChanged', (data) => {
             this.hostId = data.newHostId;
             this.isHost = (data.newHostId === this.playerId);
@@ -597,11 +628,13 @@ class GameClient {
             }
         });
         
+        // Nouveau : Vote de rematch
         this.socket.on('rematchVote', (data) => {
             this.rematchVotes = data.votes;
             this.updateRematchButton();
         });
         
+        // Nouveau : Rematch qui démarre (MODIFIÉ)
         this.socket.on('rematchStarting', async (data) => {
             this.rematchVotes = 0;
             
@@ -625,6 +658,7 @@ class GameClient {
             });
         });
         
+        // Nouveau : Retour au lobby forcé
         this.socket.on('returnToLobby', () => {
             this.rematchVotes = 0;
             
@@ -640,7 +674,7 @@ class GameClient {
 
         // ÉVÉNEMENTS DE COURSE
         this.socket.on('lapStarted', (data) => {
-            // Supprimer toute notification de tour existante
+            // CORRECTION BUG 2: Supprimer toute notification de tour existante
             const existingNotifications = document.querySelectorAll('.lap-notification');
             existingNotifications.forEach(notif => notif.remove());
             
@@ -760,6 +794,7 @@ class GameClient {
             }
         });
 
+        // Modifier raceEnded pour afficher les résultats après un délai
         this.socket.on('raceEnded', (data) => {
             this.showNotification({
                 text: 'Race ended !',
@@ -791,6 +826,32 @@ class GameClient {
             }, 2000);
         });
 
+        // NOUVEAU : Événements de dégâts
+        this.socket.on('playerDamaged', (data) => {
+            // Afficher une notification de dégâts si c'est nous
+            if (data.playerId === this.playerId) {
+                this.showDamageNotification(data);
+            }
+        });
+
+        this.socket.on('playerDeath', (data) => {
+            // Notification de mort
+            if (data.playerId === this.playerId) {
+                this.showDeathNotification();
+            }
+        });
+
+        this.socket.on('playerRespawned', (data) => {
+            // Notification de respawn
+            if (data.playerId === this.playerId) {
+                this.showRespawnNotification();
+            }
+        });
+
+        this.socket.on('playersCollided', (data) => {
+            // Rien de spécial à faire ici, le GameEngine gère déjà l'effet
+        });
+
         this.socket.on('playerJoined', (player) => {
             // Joueur rejoint la partie
         });
@@ -820,7 +881,117 @@ class GameClient {
         });
     }
 
-    // Afficher comment partager le code
+    // Nouvelles méthodes pour les notifications de dégâts
+    showDamageNotification(data) {
+        // Créer un indicateur de dégâts flottant
+        const notification = document.createElement('div');
+        notification.className = 'damage-indicator';
+        notification.textContent = `-${Math.floor(data.damage)} HP`;
+        
+        // Style selon le type de dégâts
+        const colors = {
+            'scrape': '#ffaa44',
+            'crash': '#ff4444',
+            'player_collision': '#ff6666'
+        };
+        
+        notification.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -150%);
+            color: ${colors[data.damageType] || '#ff4444'};
+            font-size: 2em;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+            z-index: 200;
+            animation: damageFloat 1s ease-out forwards;
+            pointer-events: none;
+        `;
+        
+        document.getElementById('game').appendChild(notification);
+        
+        // Retirer après l'animation
+        setTimeout(() => notification.remove(), 1000);
+    }
+
+    showDeathNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'death-notification';
+        notification.innerHTML = `
+            <div class="death-title">DESTROYED!</div>
+            <div class="death-subtitle">Respawning in 3...</div>
+        `;
+        
+        notification.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 300;
+            animation: deathZoom 0.5s ease-out;
+            pointer-events: none;
+        `;
+        
+        const titleStyle = `
+            font-size: 4em;
+            font-weight: bold;
+            color: #ff4444;
+            text-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+            margin-bottom: 10px;
+        `;
+        
+        const subtitleStyle = `
+            font-size: 1.5em;
+            color: #ffffff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+        `;
+        
+        notification.querySelector('.death-title').style.cssText = titleStyle;
+        notification.querySelector('.death-subtitle').style.cssText = subtitleStyle;
+        
+        document.getElementById('game').appendChild(notification);
+        
+        // Compte à rebours
+        let countdown = 3;
+        const interval = setInterval(() => {
+            countdown--;
+            if (countdown > 0) {
+                notification.querySelector('.death-subtitle').textContent = `Respawning in ${countdown}...`;
+            } else {
+                clearInterval(interval);
+                notification.style.animation = 'fadeOut 0.5s ease-out forwards';
+                setTimeout(() => notification.remove(), 500);
+            }
+        }, 1000);
+    }
+
+    showRespawnNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'respawn-notification';
+        notification.textContent = 'RESPAWNED!';
+        
+        notification.style.cssText = `
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #4ecdc4;
+            text-shadow: 0 0 20px rgba(78, 205, 196, 0.8);
+            z-index: 200;
+            animation: respawnPulse 1.5s ease-out forwards;
+            pointer-events: none;
+        `;
+        
+        document.getElementById('game').appendChild(notification);
+        
+        setTimeout(() => notification.remove(), 1500);
+    }
+
+    // Nouvelle méthode pour afficher comment partager le code
     showRoomShareInfo(code, isPrivate) {
         // Créer une notification temporaire
         const notification = document.createElement('div');
@@ -897,6 +1068,7 @@ class GameClient {
         });
     }
 
+    // Nouvelles méthodes
     hostStartGame() {
         this.socket.emit('hostStartGame');
     }
@@ -1157,7 +1329,9 @@ class GameClient {
         if (data.position <= 3) {
             try {
                 soundManager.playVictory();
-            } catch (e) {}
+            } catch (e) {
+                console.log('Son non disponible');
+            }
         }
     }
 
@@ -1169,9 +1343,11 @@ class GameClient {
     }
 
     showRaceResults(results) {
+        // NE PAS arrêter le moteur ici, il a déjà été arrêté
+        
         // Relancer la musique de fond
         if (this.backgroundMusic) {
-            this.backgroundMusic.play().catch(e => {});
+            this.backgroundMusic.play().catch(e => console.log('Reprise de la musique de fond'));
         }
         
         // Remplir le tableau des résultats
@@ -1282,8 +1458,9 @@ class GameClient {
         document.getElementById('startGame').textContent = 'En attente...';
     }
 
+    // MODIFIÉE : Méthode startGameCountdown avec écran de chargement
     async startGameCountdown() {
-        // Afficher l'écran de chargement d'abord
+        // NOUVEAU : Afficher l'écran de chargement d'abord
         await this.showLoadingScreen();
         
         // Attendre un peu pour que la transition se termine
@@ -1307,7 +1484,7 @@ class GameClient {
         if (this.mapData && this.gameEngine) {
             this.gameEngine.setMapData(this.mapData);
             
-            // Démarrer avec un volume bas puis ajuster
+            // NOUVELLE CORRECTION : Démarrer avec un volume bas puis ajuster
             if (this.gameEngine && this.gameEngine.music) {
                 // Démarrer avec un volume très bas pour éviter le pic sonore
                 this.gameEngine.music.volume = 0.05;
@@ -1325,10 +1502,10 @@ class GameClient {
         this.canControl = false; // Bloquer les contrôles
         this.gameEngine.start(); // Lancer le rendu pour éviter l'écran noir
         
-        // S'assurer que le canvas a le focus
+        // NOUVELLE LIGNE : S'assurer que le canvas a le focus
         const gameCanvas = document.getElementById('gameCanvas');
         if (gameCanvas) {
-            gameCanvas.tabIndex = 0;
+            gameCanvas.tabIndex = 0; // Rendre le canvas focusable
             gameCanvas.focus();
         }
 
@@ -1338,7 +1515,7 @@ class GameClient {
         let count = 3;
         countdown.textContent = count;
 
-        soundManager.playCountdown();
+        soundManager.playCountdown(); // Un seul son de décompte
 
         const countdownInterval = setInterval(() => {
             count--;
@@ -1361,15 +1538,16 @@ class GameClient {
         }, 1000);
     }
 
-    // Nettoyer toutes les notifications du jeu
+    // Nouvelle méthode pour nettoyer toutes les notifications du jeu
     cleanupGameNotifications() {
         const gameElement = document.getElementById('game');
         if (!gameElement) return;
         
-        // Sélectionner et supprimer toutes les notifications
+        // Sélectionner et supprimer toutes les notifications (avec les nouveaux types)
         const notifications = gameElement.querySelectorAll(
             '.personal-finish, .finish-notification, .game-notification, ' +
-            '.checkpoint-notification, .lap-notification, .time-warning'
+            '.checkpoint-notification, .lap-notification, .time-warning, ' +
+            '.damage-indicator, .death-notification, .respawn-notification'
         );
         
         notifications.forEach(notification => {
@@ -1397,6 +1575,7 @@ class GameClient {
         this.leaveRoom();
     }
 
+    // Modifier updatePlayersList pour afficher l'hôte et stocker les données
     updatePlayersList(players) {
         // Stocker les données des joueurs pour la gestion des couleurs
         this.lastPlayersData = players;
@@ -1522,7 +1701,7 @@ class GameClient {
                 case 'ArrowUp':
                 case 'KeyW':
                     this.keys.up = false;
-                    soundManager.stopEngine();
+                    soundManager.stopEngine(); // Arrêter la boucle moteur
                     break;
                 case 'ArrowDown':
                 case 'KeyS':
@@ -1588,7 +1767,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await window.assetManager.loadAssets();
     } catch (error) {
-        // Continuer même si le chargement échoue
+        // Continuer sans assets
     }
     
     window.gameClient = new GameClient();

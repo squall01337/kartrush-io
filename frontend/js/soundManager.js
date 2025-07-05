@@ -17,7 +17,12 @@ class SoundManager {
             lap: 0.8,
             error: 0.5,
             victory: 0.5,
-            boost: 0.7
+            boost: 0.7,
+            wallScrape: 0.4,      // 40% du volume global
+            wallHit: 0.8,         // 80% du volume global  
+            playerCollision: 0.7, // 70% du volume global
+            explosion: 0.9,       // 90% du volume global
+            respawn: 0.6         // 60% du volume global
         };
         
         // Sons préchargés
@@ -48,6 +53,12 @@ class SoundManager {
         
         // Son de boost
         this.sounds.boost = new Audio('assets/audio/boost.mp3');
+
+        this.sounds.wallScrape = new Audio('assets/audio/wall_scrape.mp3');
+        this.sounds.wallHit = new Audio('assets/audio/wall_hit.mp3');
+        this.sounds.playerCollision = new Audio('assets/audio/player_collision.mp3');
+        this.sounds.explosion = new Audio('assets/audio/explosion.mp3');
+        this.sounds.respawn = new Audio('assets/audio/respawn.mp3');
     }
     
     initializeUI() {
@@ -148,6 +159,246 @@ class SoundManager {
     }
     
     // === MÉTHODES DE LECTURE DES SONS ===
+
+        playWallScrape() {
+        const scrape = this.sounds.wallScrape;
+        if (scrape) {
+            // Permettre plusieurs instances simultanées en clonant
+            const scrapeClone = scrape.cloneNode();
+            scrapeClone.volume = this.getEffectiveVolume() * this.volumeMultipliers.wallScrape;
+            scrapeClone.play().catch(e => {
+                console.log('Erreur lecture wall_scrape:', e);
+                this.playWallScrapeSynth();
+            });
+        } else {
+            this.playWallScrapeSynth();
+        }
+    }
+    
+    playWallHit() {
+        const hit = this.sounds.wallHit;
+        if (hit) {
+            hit.volume = this.getEffectiveVolume() * this.volumeMultipliers.wallHit;
+            hit.currentTime = 0;
+            hit.play().catch(e => {
+                console.log('Erreur lecture wall_hit:', e);
+                this.playWallHitSynth();
+            });
+        } else {
+            this.playWallHitSynth();
+        }
+    }
+    
+    playPlayerCollision() {
+        const collision = this.sounds.playerCollision;
+        if (collision) {
+            collision.volume = this.getEffectiveVolume() * this.volumeMultipliers.playerCollision;
+            collision.currentTime = 0;
+            collision.play().catch(e => {
+                console.log('Erreur lecture player_collision:', e);
+                this.playCollisionSynth();
+            });
+        } else {
+            this.playCollisionSynth();
+        }
+    }
+    
+    playExplosion() {
+        const explosion = this.sounds.explosion;
+        if (explosion) {
+            explosion.volume = this.getEffectiveVolume() * this.volumeMultipliers.explosion;
+            explosion.currentTime = 0;
+            explosion.play().catch(e => {
+                console.log('Erreur lecture explosion:', e);
+                this.playExplosionSynth();
+            });
+        } else {
+            this.playExplosionSynth();
+        }
+    }
+    
+    playRespawn() {
+        const respawn = this.sounds.respawn;
+        if (respawn) {
+            respawn.volume = this.getEffectiveVolume() * this.volumeMultipliers.respawn;
+            respawn.currentTime = 0;
+            respawn.play().catch(e => {
+                console.log('Erreur lecture respawn:', e);
+                this.playRespawnSynth();
+            });
+        } else {
+            this.playRespawnSynth();
+        }
+    }
+    
+    // Sons synthétisés comme fallback
+    
+    playWallScrapeSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const duration = 0.3;
+            
+            // Bruit blanc pour le frottement
+            const bufferSize = audioContext.sampleRate * duration;
+            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+            const data = buffer.getChannelData(0);
+            
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * 0.1;
+            }
+            
+            const noise = audioContext.createBufferSource();
+            noise.buffer = buffer;
+            
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'bandpass';
+            filter.frequency.value = 1000;
+            filter.Q.value = 10;
+            
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+            
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            noise.start();
+            noise.stop(audioContext.currentTime + duration);
+        } catch (e) {
+            console.log('Erreur synthèse wall_scrape:', e);
+        }
+    }
+    
+    playWallHitSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Impact basse fréquence
+            const oscillator = audioContext.createOscillator();
+            oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(30, audioContext.currentTime + 0.2);
+            
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.8, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.3);
+            
+            // Bruit d'impact
+            this.playNoiseBurst(audioContext, 0.1, 2000);
+        } catch (e) {
+            console.log('Erreur synthèse wall_hit:', e);
+        }
+    }
+    
+    playCollisionSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Double impact
+            for (let i = 0; i < 2; i++) {
+                const delay = i * 0.05;
+                const oscillator = audioContext.createOscillator();
+                oscillator.frequency.setValueAtTime(150 - i * 30, audioContext.currentTime + delay);
+                
+                const gain = audioContext.createGain();
+                gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.6, audioContext.currentTime + delay);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + delay + 0.2);
+                
+                oscillator.connect(gain);
+                gain.connect(audioContext.destination);
+                
+                oscillator.start(audioContext.currentTime + delay);
+                oscillator.stop(audioContext.currentTime + delay + 0.2);
+            }
+        } catch (e) {
+            console.log('Erreur synthèse collision:', e);
+        }
+    }
+    
+    playExplosionSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Explosion basse fréquence
+            const oscillator = audioContext.createOscillator();
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.5);
+            
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.9, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+            
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 1);
+            
+            // Bruit blanc pour l'explosion
+            this.playNoiseBurst(audioContext, 0.8, 500, 0.9);
+        } catch (e) {
+            console.log('Erreur synthèse explosion:', e);
+        }
+    }
+    
+    playRespawnSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Son de téléportation ascendant
+            const oscillator = audioContext.createOscillator();
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1600, audioContext.currentTime + 0.5);
+            
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(0, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(this.getEffectiveVolume() * 0.5, audioContext.currentTime + 0.1);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+        } catch (e) {
+            console.log('Erreur synthèse respawn:', e);
+        }
+    }
+    
+    // Méthode utilitaire pour générer du bruit
+    playNoiseBurst(audioContext, duration, frequency, volume = 0.5) {
+        const bufferSize = audioContext.sampleRate * duration;
+        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        
+        const noise = audioContext.createBufferSource();
+        noise.buffer = buffer;
+        
+        const filter = audioContext.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = frequency;
+        
+        const gain = audioContext.createGain();
+        gain.gain.setValueAtTime(this.getEffectiveVolume() * volume, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioContext.destination);
+        
+        noise.start();
+        noise.stop(audioContext.currentTime + duration);
+    }
     
     playEngine() {
         const engine = this.sounds.engineLoop;
@@ -344,6 +595,22 @@ class SoundManager {
         }
         if (this.sounds.boost) {
             this.sounds.boost.volume = effectiveVolume * this.volumeMultipliers.boost;
+        }
+
+        if (this.sounds.wallScrape) {
+            this.sounds.wallScrape.volume = effectiveVolume * this.volumeMultipliers.wallScrape;
+        }
+        if (this.sounds.wallHit) {
+            this.sounds.wallHit.volume = effectiveVolume * this.volumeMultipliers.wallHit;
+        }
+        if (this.sounds.playerCollision) {
+            this.sounds.playerCollision.volume = effectiveVolume * this.volumeMultipliers.playerCollision;
+        }
+        if (this.sounds.explosion) {
+            this.sounds.explosion.volume = effectiveVolume * this.volumeMultipliers.explosion;
+        }
+        if (this.sounds.respawn) {
+            this.sounds.respawn.volume = effectiveVolume * this.volumeMultipliers.respawn;
         }
         
         // Appliquer à tous les éléments audio actifs enregistrés

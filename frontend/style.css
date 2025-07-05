@@ -1679,3 +1679,99 @@ button:disabled {
         transform: translate(0, 2px) scale(1.01);
     }
 }
+
+/* Animations pour le système d'HP - À ajouter dans style.css */
+
+/* Animation des indicateurs de dégâts */
+@keyframes damageFloat {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -150%);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -250%);
+    }
+}
+
+/* Animation de mort */
+@keyframes deathZoom {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+/* Animation de respawn */
+@keyframes respawnPulse {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    30% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+    }
+    70% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(0.9);
+        opacity: 0;
+    }
+}
+
+/* Styles pour les notifications de dégâts */
+.damage-indicator {
+    font-family: 'Arial Black', sans-serif;
+    user-select: none;
+}
+
+.death-notification {
+    user-select: none;
+}
+
+.death-title {
+    letter-spacing: 3px;
+    animation: deathShake 0.5s ease-out;
+}
+
+@keyframes deathShake {
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-5px); }
+    20% { transform: translateX(5px); }
+    30% { transform: translateX(-5px); }
+    40% { transform: translateX(5px); }
+    50% { transform: translateX(-3px); }
+    60% { transform: translateX(3px); }
+    70% { transform: translateX(-1px); }
+    80% { transform: translateX(1px); }
+}
+
+.respawn-notification {
+    letter-spacing: 2px;
+    user-select: none;
+}
+
+/* Effet de pulsation pour la barre d'HP faible */
+@keyframes hpCritical {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(255, 68, 68, 1);
+    }
+}
+
+/* Appliquer l'animation quand HP < 30% */
+.health-bar-critical {
+    animation: hpCritical 1s ease-in-out infinite;
+}

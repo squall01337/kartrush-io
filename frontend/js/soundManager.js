@@ -11,7 +11,7 @@ class SoundManager {
         this.volumeMultipliers = {
             engineLoop: 0.25,      // 25% du volume global
             countdown: 1.0,        // 100% du volume global
-            backgroundMusic: 0.3,  // 30% du volume global
+            backgroundMusic: 0.5,  // 30% du volume global
             gameMusic: 0.5,        // 50% du volume global
             checkpoint: 0.7,       // 70% du volume global
             lap: 0.8,             // 80% du volume global

@@ -7,12 +7,12 @@ class GameClient {
         this.playerId = null;
         this.roomId = null;
         this.gameEngine = null;
-        this.currentScreen = 'splash'; // Commencer sur l'écran d'accueil
-        this.selectedColor = '#ff4444'; // Couleur par défaut
+        this.currentScreen = 'splash';
+        this.selectedColor = '#ff4444';
         this.isHost = false;
-        this.hostId = null; // Nouveau : ID de l'hôte actuel
-        this.rematchVotes = 0; // Nouveau : compteur de votes
-        this.totalPlayers = 0; // Nouveau : nombre total de joueurs
+        this.hostId = null;
+        this.rematchVotes = 0;
+        this.totalPlayers = 0;
         
         // Gestion des maps
         this.availableMaps = [];
@@ -24,13 +24,11 @@ class GameClient {
         this.backgroundMusic = null;
         
         this.initializeUI();
-        // Ne pas se connecter tout de suite, attendre le clic sur PLAY
     }
 
-    // Nouvelle méthode pour charger la liste des maps disponibles
+    // Charger la liste des maps disponibles
     async loadAvailableMaps() {
         try {
-            // Essayer de charger depuis le serveur
             const response = await fetch('/api/maps');
             if (response.ok) {
                 const data = await response.json();
@@ -39,27 +37,9 @@ class GameClient {
                     name: map.name,
                     thumbnail: map.thumbnail
                 }));
-            } else {
-                throw new Error('Impossible de charger les maps');
             }
         } catch (error) {
-            this.availableMaps = [
-                { id: 'lava_track', name: 'City', thumbnail: 'assets/track_background.png' },
-                { id: 'ice_circuit', name: 'Lava world', thumbnail: 'assets/track_background.png2' },
-                { id: 'desert_rally', name: 'Rallye du Désert', thumbnail: 'assets/track_background.png3' },
-                { id: 'forest_trail', name: 'Sentier Forestier', thumbnail: 'assets/track_background.png4' },
-                { id: 'space_station', name: 'Station Spatiale', thumbnail: 'assets/space_background.png' },
-                { id: 'underwater_tunnel', name: 'Tunnel Sous-Marin', thumbnail: 'assets/underwater_background.png' },
-                { id: 'volcano_escape', name: 'Évasion du Volcan', thumbnail: 'assets/volcano_background.png' },
-                { id: 'crystal_caves', name: 'Grottes de Cristal', thumbnail: 'assets/crystal_background.png' },
-                { id: 'rainbow_road', name: 'Route Arc-en-ciel', thumbnail: 'assets/rainbow_background.png' },
-                { id: 'cyber_city', name: 'Cyber Cité', thumbnail: 'assets/cyber_background.png' }
-            ];
-        }
-        
-        // Sélectionner la première map par défaut
-        if (this.availableMaps.length > 0) {
-            this.selectedMap = this.availableMaps[0].id;
+            this.availableMaps = [];
         }
     }
 
@@ -69,9 +49,7 @@ class GameClient {
         this.backgroundMusic = new Audio('assets/audio/kartrush_theme.mp3');
         this.backgroundMusic.loop = true;
         this.backgroundMusic.volume = soundManager.getVolumeFor('backgroundMusic');
-        this.backgroundMusic.play().catch(e => {
-            console.log('Musique de fond autorisée par le clic utilisateur');
-        });
+        this.backgroundMusic.play().catch(e => {});
         
         // Enregistrer la musique dans le gestionnaire
         soundManager.registerAudio('backgroundMusic', this.backgroundMusic);
@@ -144,7 +122,7 @@ class GameClient {
         this.initializeMapSelector();
     }
 
-    // Nouvelle méthode pour gérer le sélecteur de couleur dans le lobby
+    // Gérer le sélecteur de couleur dans le lobby
     initializeLobbyColorSelector() {
         // Gérer le sélecteur de couleur dans le lobby
         document.addEventListener('click', (e) => {
@@ -180,7 +158,7 @@ class GameClient {
         });
     }
 
-    // Nouvelle méthode pour mettre à jour l'affichage du sélecteur
+    // Mettre à jour l'affichage du sélecteur
     updateLobbyColorSelector() {
         // Mettre à jour la sélection visuelle
         document.querySelectorAll('.lobby-color-option').forEach(opt => {
@@ -191,7 +169,7 @@ class GameClient {
         });
     }
 
-    // Nouvelle méthode pour initialiser le sélecteur de maps
+    // Initialiser le sélecteur de maps
     initializeMapSelector() {
         const prevBtn = document.getElementById('mapPrevBtn');
         const nextBtn = document.getElementById('mapNextBtn');
@@ -311,7 +289,7 @@ class GameClient {
         nextBtn.disabled = this.currentMapPage >= totalPages - 1;
     }
 
-    // NOUVELLE MÉTHODE : Écran de chargement
+    // Écran de chargement
     showLoadingScreen() {
         // Afficher l'écran de chargement
         this.showScreen('loading');
@@ -364,7 +342,7 @@ class GameClient {
         // Promesse pour attendre la fin du chargement
         return new Promise((resolve) => {
             // Démarrer la vidéo
-            video.play().catch(e => console.log('Erreur lecture vidéo:', e));
+            video.play().catch(e => {});
             
             // Animation de la barre de progression
             const updateProgress = () => {
@@ -398,7 +376,7 @@ class GameClient {
         });
     }
 
-    // Nouvelle méthode pour la transition fluide
+    // Transition fluide
     transitionToGame(video) {
         // Créer l'effet de flash
         const flash = document.createElement('div');
@@ -434,10 +412,6 @@ class GameClient {
     connectToServer() {
         this.socket = io();
 
-        this.socket.on('connect', () => {
-            console.log('Connecté au serveur');
-        });
-
         this.socket.on('joinedRoom', (data) => {
             this.playerId = data.playerId;
             this.roomId = data.roomId;
@@ -447,7 +421,6 @@ class GameClient {
             const roomCodeEl = document.getElementById('roomCode');
             
             if (!roomTypeEl || !roomCodeEl) {
-                console.error('❌ Elements roomType ou roomCode introuvables !');
                 return;
             }
             
@@ -491,7 +464,6 @@ class GameClient {
             }
         });
 
-        // Modifier le handler playersUpdate
         this.socket.on('playersUpdate', (data) => {
             this.updatePlayersList(data.players);
             this.hostId = data.hostId;
@@ -543,7 +515,6 @@ class GameClient {
             }
         });
 
-        // Nouveau : Réception de la map sélectionnée
         this.socket.on('mapSelected', (data) => {
             this.selectedMap = data.mapId;
             
@@ -568,7 +539,6 @@ class GameClient {
             this.renderMapSelector();
         });
 
-        // Nouveau : Gérer le changement de couleur
         this.socket.on('colorChanged', (data) => {
             // Mettre à jour la couleur du joueur dans la liste
             const playerItems = document.querySelectorAll('.player-item');
@@ -601,7 +571,6 @@ class GameClient {
             }
         });
 
-        // Nouveau : Changement d'hôte
         this.socket.on('hostChanged', (data) => {
             this.hostId = data.newHostId;
             this.isHost = (data.newHostId === this.playerId);
@@ -628,13 +597,11 @@ class GameClient {
             }
         });
         
-        // Nouveau : Vote de rematch
         this.socket.on('rematchVote', (data) => {
             this.rematchVotes = data.votes;
             this.updateRematchButton();
         });
         
-        // Nouveau : Rematch qui démarre (MODIFIÉ)
         this.socket.on('rematchStarting', async (data) => {
             this.rematchVotes = 0;
             
@@ -658,7 +625,6 @@ class GameClient {
             });
         });
         
-        // Nouveau : Retour au lobby forcé
         this.socket.on('returnToLobby', () => {
             this.rematchVotes = 0;
             
@@ -674,7 +640,7 @@ class GameClient {
 
         // ÉVÉNEMENTS DE COURSE
         this.socket.on('lapStarted', (data) => {
-            // CORRECTION BUG 2: Supprimer toute notification de tour existante
+            // Supprimer toute notification de tour existante
             const existingNotifications = document.querySelectorAll('.lap-notification');
             existingNotifications.forEach(notif => notif.remove());
             
@@ -768,8 +734,8 @@ class GameClient {
         });
 
         this.socket.on('boostActivated', () => {
-        // Jouer le son du boost
-        soundManager.playBoost();
+            // Jouer le son du boost
+            soundManager.playBoost();
         });
 
         this.socket.on('timeWarning', (data) => {
@@ -794,7 +760,6 @@ class GameClient {
             }
         });
 
-        // Modifier raceEnded pour afficher les résultats après un délai
         this.socket.on('raceEnded', (data) => {
             this.showNotification({
                 text: 'Race ended !',
@@ -855,7 +820,7 @@ class GameClient {
         });
     }
 
-    // Nouvelle méthode pour afficher comment partager le code
+    // Afficher comment partager le code
     showRoomShareInfo(code, isPrivate) {
         // Créer une notification temporaire
         const notification = document.createElement('div');
@@ -932,7 +897,6 @@ class GameClient {
         });
     }
 
-    // Nouvelles méthodes
     hostStartGame() {
         this.socket.emit('hostStartGame');
     }
@@ -1193,9 +1157,7 @@ class GameClient {
         if (data.position <= 3) {
             try {
                 soundManager.playVictory();
-            } catch (e) {
-                console.log('Son non disponible');
-            }
+            } catch (e) {}
         }
     }
 
@@ -1207,11 +1169,9 @@ class GameClient {
     }
 
     showRaceResults(results) {
-        // NE PAS arrêter le moteur ici, il a déjà été arrêté
-        
         // Relancer la musique de fond
         if (this.backgroundMusic) {
-            this.backgroundMusic.play().catch(e => console.log('Reprise de la musique de fond'));
+            this.backgroundMusic.play().catch(e => {});
         }
         
         // Remplir le tableau des résultats
@@ -1322,9 +1282,8 @@ class GameClient {
         document.getElementById('startGame').textContent = 'En attente...';
     }
 
-    // MODIFIÉE : Méthode startGameCountdown avec écran de chargement
     async startGameCountdown() {
-        // NOUVEAU : Afficher l'écran de chargement d'abord
+        // Afficher l'écran de chargement d'abord
         await this.showLoadingScreen();
         
         // Attendre un peu pour que la transition se termine
@@ -1348,7 +1307,7 @@ class GameClient {
         if (this.mapData && this.gameEngine) {
             this.gameEngine.setMapData(this.mapData);
             
-            // NOUVELLE CORRECTION : Démarrer avec un volume bas puis ajuster
+            // Démarrer avec un volume bas puis ajuster
             if (this.gameEngine && this.gameEngine.music) {
                 // Démarrer avec un volume très bas pour éviter le pic sonore
                 this.gameEngine.music.volume = 0.05;
@@ -1366,10 +1325,10 @@ class GameClient {
         this.canControl = false; // Bloquer les contrôles
         this.gameEngine.start(); // Lancer le rendu pour éviter l'écran noir
         
-        // NOUVELLE LIGNE : S'assurer que le canvas a le focus
+        // S'assurer que le canvas a le focus
         const gameCanvas = document.getElementById('gameCanvas');
         if (gameCanvas) {
-            gameCanvas.tabIndex = 0; // Rendre le canvas focusable
+            gameCanvas.tabIndex = 0;
             gameCanvas.focus();
         }
 
@@ -1379,7 +1338,7 @@ class GameClient {
         let count = 3;
         countdown.textContent = count;
 
-        soundManager.playCountdown(); // Un seul son de décompte
+        soundManager.playCountdown();
 
         const countdownInterval = setInterval(() => {
             count--;
@@ -1402,7 +1361,7 @@ class GameClient {
         }, 1000);
     }
 
-    // Nouvelle méthode pour nettoyer toutes les notifications du jeu
+    // Nettoyer toutes les notifications du jeu
     cleanupGameNotifications() {
         const gameElement = document.getElementById('game');
         if (!gameElement) return;
@@ -1438,7 +1397,6 @@ class GameClient {
         this.leaveRoom();
     }
 
-    // Modifier updatePlayersList pour afficher l'hôte et stocker les données
     updatePlayersList(players) {
         // Stocker les données des joueurs pour la gestion des couleurs
         this.lastPlayersData = players;
@@ -1564,7 +1522,7 @@ class GameClient {
                 case 'ArrowUp':
                 case 'KeyW':
                     this.keys.up = false;
-                    soundManager.stopEngine(); // Arrêter la boucle moteur
+                    soundManager.stopEngine();
                     break;
                 case 'ArrowDown':
                 case 'KeyS':
@@ -1630,7 +1588,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await window.assetManager.loadAssets();
     } catch (error) {
-        // Continuer sans assets
+        // Continuer même si le chargement échoue
     }
     
     window.gameClient = new GameClient();

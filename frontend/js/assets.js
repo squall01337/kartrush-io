@@ -9,12 +9,10 @@ class AssetManager {
 
     async loadAssets() {
         try {
-            // Charger les images de base avec timeout
             const timeout = 10000; // 10 secondes
             
             await Promise.race([
                 Promise.all([
-                    // Ne plus charger track_background par défaut
                     this.loadImage('kart_sprites', 'assets/kart_sprites.png'),
                     this.loadImage('item_icons', 'assets/item_icons.png')
                 ]),
@@ -25,8 +23,8 @@ class AssetManager {
             
             this.loaded = true;
         } catch (error) {
-            console.warn('Erreur lors du chargement des assets:', error);
             this.loaded = false;
+            throw error;
         }
     }
 
@@ -38,7 +36,6 @@ class AssetManager {
                 resolve(img);
             };
             img.onerror = () => {
-                console.error(`Erreur de chargement: ${name}`);
                 reject(new Error(`Failed to load ${path}`));
             };
             img.src = path;
@@ -49,7 +46,6 @@ class AssetManager {
         return this.images.get(name);
     }
     
-    // Nouvelle méthode pour obtenir le background d'une map
     getMapBackground(mapId) {
         return this.getImage(`map_background_${mapId}`);
     }
@@ -72,9 +68,9 @@ class AssetManager {
 
         const pos = colorMap[color] || { x: 0, y: 0 };
         
-        // Dimensions réelles de l'image (pas hardcodées)
-        const spriteWidth = Math.floor(spriteSheet.width / 3);  // ~113px
-        const spriteHeight = Math.floor(spriteSheet.height / 2); // ~256px
+        // Dimensions réelles de l'image
+        const spriteWidth = Math.floor(spriteSheet.width / 3);
+        const spriteHeight = Math.floor(spriteSheet.height / 2);
         
         const sprite = {
             image: spriteSheet,
@@ -100,7 +96,7 @@ class AssetManager {
         const pos = iconMap[itemType] || { x: 0, y: 0 };
         return {
             image: iconSheet,
-            sx: pos.x * 200, // Approximativement 200px par icône
+            sx: pos.x * 200,
             sy: pos.y * 200,
             sw: 200,
             sh: 200
@@ -114,4 +110,3 @@ class AssetManager {
 
 // Instance globale du gestionnaire d'assets
 window.assetManager = new AssetManager();
-

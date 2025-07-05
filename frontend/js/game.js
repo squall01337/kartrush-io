@@ -34,9 +34,9 @@ class GameEngine {
         
         this.CHECKPOINT_MARGIN = 20;
         
-        // Nouveau : état des boosters
-        this.boosterEffects = new Map(); // Pour les effets visuels
-        this.boosterSprite = null; // Pour stocker le sprite du booster
+        // État des boosters
+        this.boosterEffects = new Map();
+        this.boosterSprite = null;
         this.loadBoosterSprite();
         
         this.setupCanvas();
@@ -75,10 +75,9 @@ class GameEngine {
         this.scale = width / 1280;
     }
 
-    // Nouvelle méthode pour charger le sprite du booster
     loadBoosterSprite() {
         this.boosterSprite = new Image();
-        this.boosterSprite.src = 'assets/booster_arrow.png'; // Assurez-vous d'avoir ce fichier
+        this.boosterSprite.src = 'assets/booster_arrow.png';
     }
 
     preprocessSprites() {
@@ -108,7 +107,6 @@ class GameEngine {
             this.music = new Audio(mapData.music);
             this.music.loop = true;
             
-            // CORRECTION : Appliquer immédiatement le volume actuel du soundManager
             if (window.soundManager) {
                 this.music.volume = window.soundManager.getVolumeFor('gameMusic');
                 window.soundManager.registerAudio('gameMusic', this.music);
@@ -116,9 +114,7 @@ class GameEngine {
                 this.music.volume = 0.5;
             }
             
-            this.music.play().catch(e => {
-                console.warn('🔇 Musique bloquée par l\'autoplay. L\'utilisateur doit interagir avec la page.');
-            });
+            this.music.play().catch(e => {});
         }
         
         if (mapData.background && mapData.background.endsWith('.png')) {
@@ -258,7 +254,6 @@ class GameEngine {
         this.updateUI();
     }
 
-    // Nouvelle méthode pour les effets visuels de boost
     updateBoosterEffects(deltaTime) {
         // Nettoyer les effets terminés
         for (const [playerId, effect] of this.boosterEffects) {
@@ -308,7 +303,7 @@ class GameEngine {
         ctx.translate(-this.camera.x, -this.camera.y);
         
         this.renderTrack(ctx);
-        this.renderBoosters(ctx); // NOUVEAU
+        this.renderBoosters(ctx);
         this.renderFinishLine(ctx);
         this.renderPlayers(ctx);
         this.renderPlayerInfo(ctx);
@@ -332,7 +327,6 @@ class GameEngine {
         }
     }
 
-    // Nouvelle méthode pour afficher les boosters
     renderBoosters(ctx) {
         if (!this.track || !this.track.boosters) return;
         
@@ -354,8 +348,8 @@ class GameEngine {
             // Si on a le sprite, dessiner des flèches
             if (this.boosterSprite && this.boosterSprite.complete) {
                 // Calculer combien de flèches on peut mettre
-                const spriteSize = 64; // Votre sprite fait 64x64
-                const spacing = 10; // Espace entre les flèches
+                const spriteSize = 64;
+                const spacing = 10;
                 const totalSize = spriteSize + spacing;
                 const arrowCount = Math.max(1, Math.floor(length / totalSize));
                 
@@ -371,13 +365,13 @@ class GameEngine {
                     
                     // Effet de pulsation plus subtile
                     const pulsePhase = (Date.now() * 0.002 + i * 0.8) % (Math.PI * 2);
-                    const scale = 0.9 + Math.sin(pulsePhase) * 0.1; // De 0.9 à 1.1 au lieu de 0.8 à 1.2
+                    const scale = 0.9 + Math.sin(pulsePhase) * 0.1;
                     ctx.scale(scale, scale);
                     
-                    // Opacité constante élevée (jamais en dessous de 0.7)
-                    ctx.globalAlpha = 0.7 + Math.sin(pulsePhase) * 0.3; // De 0.7 à 1.0
+                    // Opacité constante élevée
+                    ctx.globalAlpha = 0.7 + Math.sin(pulsePhase) * 0.3;
                     
-                    // Dessiner le sprite (déjà orienté vers le haut)
+                    // Dessiner le sprite
                     ctx.drawImage(
                         this.boosterSprite,
                         -spriteSize/2, -spriteSize/2,
@@ -420,7 +414,7 @@ class GameEngine {
         const fl = this.track.finishLine;
         
         if (fl.x1 !== undefined && fl.y1 !== undefined) {
-            // NOUVEAU FORMAT : Ligne
+            // Format ligne
             ctx.globalAlpha = 0.8;
             
             // Ligne principale épaisse
@@ -451,35 +445,6 @@ class GameEngine {
                     ctx.stroke();
                 }
             }
-            
-            // PAS DE TEXTE "FINISH" - SUPPRIMÉ
-            
-        } else {
-            // ANCIEN FORMAT : Rectangle
-            const cx = fl.x + fl.width / 2;
-            const cy = fl.y + fl.height / 2;
-            
-            ctx.translate(cx, cy);
-            ctx.rotate((fl.angle || 0) * Math.PI / 180);
-            
-            ctx.globalAlpha = 0.8;
-            
-            // Pattern damier
-            const squareSize = 10;
-            const rows = Math.ceil(fl.height / squareSize);
-            const cols = Math.ceil(fl.width / squareSize);
-            
-            for (let i = 0; i < rows; i++) {
-                for (let j = 0; j < cols; j++) {
-                    ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
-                    ctx.fillRect(
-                        -fl.width/2 + j * squareSize, 
-                        -fl.height/2 + i * squareSize, 
-                        squareSize, 
-                        squareSize
-                    );
-                }
-            }
         }
         
         ctx.restore();
@@ -493,8 +458,8 @@ class GameEngine {
         ctx.resetTransform();
         
         // Ajuster les positions et largeurs pour mieux centrer le texte
-        const boxWidth = 220 * this.scale;  // Largeur augmentée pour le temps restant
-        const boxHeight = 85 * this.scale;  // Hauteur augmentée pour la position
+        const boxWidth = 220 * this.scale;
+        const boxHeight = 85 * this.scale;
         const padding = 10 * this.scale;
         const infoX = this.canvas.width - boxWidth - (20 * this.scale);
         const infoY = 20 * this.scale;
@@ -642,13 +607,6 @@ class GameEngine {
         
         if (cachedSprite) {
             ctx.drawImage(cachedSprite, -size/2, -size/2);
-        } else {
-            ctx.fillStyle = player.color;
-            ctx.fillRect(-size/2, -size/2, size, size);
-            
-            ctx.strokeStyle = '#000000';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-size/2, -size/2, size, size);
         }
         
         ctx.restore();
@@ -706,7 +664,7 @@ class GameEngine {
         gameData.players.forEach(player => {
             if (player.isBoosting && !this.boosterEffects.has(player.id)) {
                 this.boosterEffects.set(player.id, {
-                    duration: 1500, // 1.5 secondes d'effet visuel
+                    duration: 1500,
                     startTime: Date.now()
                 });
             }

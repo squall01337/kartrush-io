@@ -3,21 +3,21 @@
 class SoundManager {
     constructor() {
         // Volume global
-        this.globalVolume = 0.3; // Volume par défaut (30%)
+        this.globalVolume = 0.3;
         this.isMuted = false;
-        this.previousVolume = 0.3; // Pour restaurer après unmute
+        this.previousVolume = 0.3;
         
         // Volumes relatifs pour chaque type de son
         this.volumeMultipliers = {
-            engineLoop: 0.25,      // 25% du volume global
-            countdown: 1.0,        // 100% du volume global
-            backgroundMusic: 0.3,  // 30% du volume global
-            gameMusic: 0.5,        // 50% du volume global
-            checkpoint: 0.7,       // 70% du volume global
-            lap: 0.8,             // 80% du volume global
-            error: 0.5,           // 50% du volume global
-            victory: 0.5,         // 50% du volume global
-            boost: 0.7            // 70% du volume global
+            engineLoop: 0.25,
+            countdown: 1.0,
+            backgroundMusic: 0.3,
+            gameMusic: 0.5,
+            checkpoint: 0.7,
+            lap: 0.8,
+            error: 0.5,
+            victory: 0.5,
+            boost: 0.7
         };
         
         // Sons préchargés
@@ -39,14 +39,14 @@ class SoundManager {
     }
     
     initializeSounds() {
-        // 🔁 Moteur
+        // Moteur
         this.sounds.engineLoop = new Audio('assets/audio/engine_loop.mp3');
         this.sounds.engineLoop.loop = true;
         
-        // 🎵 Décompte 3-2-1-GO
+        // Décompte 3-2-1-GO
         this.sounds.countdown = new Audio('assets/audio/countdown.mp3');
         
-        // 🚀 Son de boost
+        // Son de boost
         this.sounds.boost = new Audio('assets/audio/boost.mp3');
     }
     
@@ -57,7 +57,6 @@ class SoundManager {
         this.volumeIcon = document.getElementById('volumeIcon');
         
         if (!this.volumeSlider || !this.muteButton) {
-            console.error('Éléments de contrôle de volume non trouvés');
             return;
         }
         
@@ -74,9 +73,9 @@ class SoundManager {
             this.setVolume(e.target.value / 100);
         });
         
-        // NOUVELLE CORRECTION : Empêcher la perte de focus lors du changement de volume
+        // Empêcher la perte de focus lors du changement de volume
         this.volumeSlider.addEventListener('mousedown', (e) => {
-            e.preventDefault(); // Empêcher le comportement par défaut
+            e.preventDefault();
             
             // Sauvegarder l'élément actuellement focus
             const currentFocus = document.activeElement;
@@ -155,7 +154,7 @@ class SoundManager {
         if (engine && engine.paused) {
             engine.volume = this.getEffectiveVolume() * this.volumeMultipliers.engineLoop;
             engine.currentTime = 0;
-            engine.play().catch(e => console.log('Erreur lecture moteur:', e));
+            engine.play().catch(e => {});
             this.activeAudios.set('engineLoop', engine);
         }
     }
@@ -174,18 +173,16 @@ class SoundManager {
         if (countdown) {
             countdown.volume = this.getEffectiveVolume() * this.volumeMultipliers.countdown;
             countdown.currentTime = 0;
-            countdown.play().catch(e => console.log('Erreur lecture countdown:', e));
+            countdown.play().catch(e => {});
         }
     }
     
-    // NOUVEAU : Méthode pour jouer le son de boost
     playBoost() {
         const boost = this.sounds.boost;
         if (boost) {
             boost.volume = this.getEffectiveVolume() * this.volumeMultipliers.boost;
             boost.currentTime = 0;
             boost.play().catch(e => {
-                console.log('Erreur lecture boost:', e);
                 // Fallback avec synthèse sonore
                 this.playBoostSynth();
             });
@@ -195,7 +192,6 @@ class SoundManager {
         }
     }
     
-    // NOUVEAU : Son de boost synthétisé comme fallback
     playBoostSynth() {
         try {
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -216,18 +212,14 @@ class SoundManager {
             
             oscillator.start();
             oscillator.stop(audioContext.currentTime + 0.5);
-        } catch (e) {
-            console.log('Erreur synthèse boost:', e);
-        }
+        } catch (e) {}
     }
     
     // Méthode générique pour jouer un son temporaire
     playSound(soundPath, volumeMultiplier = 1.0) {
         const audio = new Audio(soundPath);
         audio.volume = this.getEffectiveVolume() * volumeMultiplier;
-        audio.play().catch(e => {
-            console.log(`Erreur lecture ${soundPath}:`, e);
-        });
+        audio.play().catch(e => {});
         return audio;
     }
     
@@ -263,9 +255,7 @@ class SoundManager {
             
             oscillator.start();
             oscillator.stop(audioContext.currentTime + duration);
-        } catch (e) {
-            console.log('Erreur Web Audio API:', e);
-        }
+        } catch (e) {}
     }
     
     // === GESTION DU VOLUME ===
@@ -277,7 +267,7 @@ class SoundManager {
             const multiplier = this.volumeMultipliers[name] || 1.0;
             audioElement.volume = this.getEffectiveVolume() * multiplier;
             
-            // NOUVELLE LIGNE : Forcer une mise à jour immédiate
+            // Forcer une mise à jour immédiate
             setTimeout(() => {
                 if (this.activeAudios.has(name)) {
                     audioElement.volume = this.getEffectiveVolume() * multiplier;
@@ -290,7 +280,6 @@ class SoundManager {
         this.activeAudios.delete(name);
     }
     
-    // Nouvelle méthode pour forcer la mise à jour du volume d'un audio spécifique
     refreshAudioVolume(name) {
         const audio = this.activeAudios.get(name);
         if (audio && audio.volume !== undefined) {
@@ -419,9 +408,7 @@ class SoundManager {
         try {
             localStorage.setItem('kartrush_volume', this.globalVolume.toString());
             localStorage.setItem('kartrush_muted', this.isMuted.toString());
-        } catch (e) {
-            console.warn('Impossible de sauvegarder les préférences de volume');
-        }
+        } catch (e) {}
     }
     
     loadPreferences() {
@@ -436,9 +423,7 @@ class SoundManager {
             if (savedMuted !== null) {
                 this.isMuted = savedMuted === 'true';
             }
-        } catch (e) {
-            console.warn('Impossible de charger les préférences de volume');
-        }
+        } catch (e) {}
     }
     
     // Méthode pour obtenir le volume effectif actuel

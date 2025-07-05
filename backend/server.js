@@ -35,28 +35,17 @@ function loadAvailableMaps() {
         availableMaps = files
             .filter(file => file.endsWith('.json'))
             .map(file => file.replace('.json', ''));
-        
-        console.log('📁 Maps disponibles:', availableMaps);
     } catch (error) {
-        console.error('❌ Erreur lors du chargement des maps:', error);
-        availableMaps = ['lava_track']; // Map par défaut
+        availableMaps = [];
     }
 }
 
 function loadMapData(mapName = 'lava_track') {
     try {
-        // Construire le chemin de la map
-        let mapPath = path.join(__dirname, '../maps', `${mapName}.json`);
+        const mapPath = path.join(__dirname, '../maps', `${mapName}.json`);
         
-        // Si la map n'existe pas, charger la map par défaut
         if (!fs.existsSync(mapPath)) {
-            console.log(`⚠️ Map ${mapName} non trouvée, chargement de lava_track`);
-            mapPath = path.join(__dirname, '../maps/lava_track.json');
-            
-            // Si même la map par défaut n'existe pas, utiliser oval_track
-            if (!fs.existsSync(mapPath)) {
-                mapPath = path.join(__dirname, '../maps/oval_track.json');
-            }
+            return false;
         }
         
         const data = fs.readFileSync(mapPath, 'utf-8');
@@ -65,37 +54,9 @@ function loadMapData(mapName = 'lava_track') {
         // Convertir les anciens rectangles en lignes si nécessaire
         convertRectsToLines(trackData);
         
-        console.log('✅ Map chargée :', trackData.name);
-        console.log('📍 Checkpoints:', trackData.checkpoints ? trackData.checkpoints.length : 0);
-        console.log('🏁 Ligne d\'arrivée:', trackData.finishLine ? 'Oui' : 'Non');
-        
         return true;
         
     } catch (error) {
-        console.error('❌ Erreur de chargement de la map :', error);
-        
-        // Map de secours minimale pour éviter les crashes
-        trackData = {
-            name: "default_track",
-            width: 1280,
-            height: 720,
-            background: "#333333",
-            spawnPoints: [{ x: 400, y: 500, angle: 0 }],
-            walls: [],
-            curves: [],
-            continuousCurves: [],
-            checkpoints: [],
-            finishLine: null,
-            boosters: [],
-            items: [],
-            raceSettings: {
-                laps: 3,
-                maxTime: 300000,
-                maxTimeWarning: 240000
-            }
-        };
-        
-        console.log('⚠️ Map de secours chargée');
         return false;
     }
 }
@@ -104,7 +65,6 @@ function loadMapData(mapName = 'lava_track') {
 function convertRectsToLines(data) {
     // Convertir les checkpoints rectangulaires en lignes
     if (data.checkpoints && data.checkpoints.length > 0 && data.checkpoints[0].width !== undefined) {
-        console.log('🔄 Conversion des checkpoints rectangulaires en lignes...');
         data.checkpoints = data.checkpoints.map(cp => {
             const cx = cp.x + cp.width / 2;
             const cy = cp.y + cp.height / 2;
@@ -127,7 +87,6 @@ function convertRectsToLines(data) {
     
     // Convertir la ligne d'arrivée
     if (data.finishLine && data.finishLine.width !== undefined) {
-        console.log('🔄 Conversion de la ligne d\'arrivée rectangulaire en ligne...');
         const fl = data.finishLine;
         const cx = fl.x + fl.width / 2;
         const cy = fl.y + fl.height / 2;
@@ -174,9 +133,9 @@ const GAME_CONFIG = {
     TRACK_WIDTH: 1280,
     TRACK_HEIGHT: 720,
     KART_SIZE: 20,
-    MAX_SPEED: 4,        // Augmenté de 12 à 15 (+25%)
-    ACCELERATION: 0.2,    // Augmenté pour compenser la friction
-    FRICTION: 0.98,       // Moins de friction (était 0.94)
+    MAX_SPEED: 4,
+    ACCELERATION: 0.2,
+    FRICTION: 0.98,
     TURN_SPEED: 0.075,
     COLLISION_GRID_SIZE: 100
 };
@@ -200,7 +159,7 @@ class Player {
         this.finishTime = null;
         this.finished = false;
         this.ready = false;
-        this.isHost = false; // Nouveau : marquer si c'est l'hôte
+        this.isHost = false;
         
         // Position précédente pour la détection de franchissement
         this.lastX = this.x;
@@ -218,12 +177,12 @@ class Player {
             right: false
         };
         
-        // NOUVEAU : gestion du boost
+        // Gestion du boost
         this.isBoosting = false;
         this.boostEndTime = 0;
-        this.lastBoosterIndex = -1; // Pour éviter de déclencher plusieurs fois le même booster
-        this.boostCooldown = 0; // Cooldown entre les boosts
-        this.boostLevel = 0; // Nouveau : niveau de boost (0, 1, 2, 3)
+        this.lastBoosterIndex = -1;
+        this.boostCooldown = 0;
+        this.boostLevel = 0;
     }
 
     update(deltaTime) {
@@ -234,7 +193,7 @@ class Player {
         // Vérifier si le boost est terminé
         if (this.isBoosting && Date.now() > this.boostEndTime) {
             this.isBoosting = false;
-            this.boostLevel = 0; // Réinitialiser le niveau de boost
+            this.boostLevel = 0;
         }
         
         // Réduire le cooldown
@@ -295,9 +254,9 @@ class Player {
         let speedMultiplier = 1.0;
         if (this.isBoosting) {
             switch(this.boostLevel) {
-                case 1: speedMultiplier = 1.25; break;  // 125%
-                case 2: speedMultiplier = 1.50; break;  // 150%
-                case 3: speedMultiplier = 1.75; break;  // 175%
+                case 1: speedMultiplier = 1.25; break;
+                case 2: speedMultiplier = 1.50; break;
+                case 3: speedMultiplier = 1.75; break;
                 default: speedMultiplier = 1.25; break;
             }
         }
@@ -340,7 +299,7 @@ class Room {
     constructor(id, isPrivate = false) {
         this.id = id;
         this.isPrivate = isPrivate;
-        this.host = null; // ID de l'hôte
+        this.host = null;
         this.players = new Map();
         this.gameStarted = false;
         this.gameStartTime = null;
@@ -348,13 +307,12 @@ class Room {
         this.gameLoop = null;
         this.warningShown = false;
         this.raceSettings = null;
-        this.mapName = 'lava_track'; // Map par défaut
-        this.rematchVotes = new Set(); // Nouveaux votes pour rejouer
-        this.rematchTimer = null; // Timer pour le rematch
-        this.selectedMap = 'lava_track'; // Map sélectionnée par l'hôte
+        this.mapName = 'lava_track';
+        this.rematchVotes = new Set();
+        this.rematchTimer = null;
+        this.selectedMap = 'lava_track';
     }
 
-    // Nouvelle méthode pour vérifier si l'hôte peut démarrer
     canHostStart() {
         if (this.host && this.players.size >= GAME_CONFIG.MIN_PLAYERS_TO_START && !this.gameStarted) {
             // L'hôte est toujours considéré comme prêt
@@ -376,7 +334,7 @@ class Room {
         if (!this.host && this.players.size === 1) {
             this.host = player.id;
             player.isHost = true;
-            player.ready = true; // L'hôte est toujours prêt
+            player.ready = true;
         }
         
         return true;
@@ -404,7 +362,7 @@ class Room {
             const newHostPlayer = this.players.get(newHost);
             if (newHostPlayer) {
                 newHostPlayer.isHost = true;
-                newHostPlayer.ready = true; // Le nouvel hôte est automatiquement prêt
+                newHostPlayer.ready = true;
             }
             
             // Notifier le nouveau hôte
@@ -417,14 +375,11 @@ class Room {
                !this.gameStarted;
     }
 
-    // Nouvelle méthode pour réinitialiser la room après une course
     resetForNewRace() {
         this.gameStarted = false;
         this.gameStartTime = null;
         this.warningShown = false;
         this.rematchVotes.clear();
-        
-        // NE PAS réinitialiser la selectedMap ici, elle doit persister
         
         // Réinitialiser l'état ready de tous les joueurs (sauf l'hôte)
         for (let player of this.players.values()) {
@@ -446,7 +401,7 @@ class Room {
                 right: false
             };
             
-            // NOUVEAU : Réinitialiser les états de boost
+            // Réinitialiser les états de boost
             player.isBoosting = false;
             player.boostEndTime = 0;
             player.lastBoosterIndex = -1;
@@ -455,7 +410,6 @@ class Room {
         }
     }
 
-    // Nouvelle méthode pour gérer les votes de rematch
     voteRematch(playerId) {
         if (!this.players.has(playerId)) return;
         
@@ -470,7 +424,7 @@ class Room {
         
         // Si tous ont voté pour rejouer
         if (this.rematchVotes.size === this.players.size) {
-            // IMPORTANT: Annuler le timer de kick avant de démarrer le rematch
+            // Annuler le timer de kick avant de démarrer le rematch
             if (this.rematchTimer) {
                 clearTimeout(this.rematchTimer);
                 this.rematchTimer = null;
@@ -479,7 +433,6 @@ class Room {
         }
     }
 
-    // Nouvelle méthode pour démarrer le rematch
     startRematch() {
         // S'assurer que le timer est bien annulé
         if (this.rematchTimer) {
@@ -501,14 +454,13 @@ class Room {
     startGame() {
         if (!this.canStart()) return false;
         
-        // IMPORTANT: Annuler le timer de rematch si une nouvelle partie démarre
+        // Annuler le timer de rematch si une nouvelle partie démarre
         if (this.rematchTimer) {
             clearTimeout(this.rematchTimer);
             this.rematchTimer = null;
         }
         
         this.gameStarted = true;
-        // NE PAS définir gameStartTime ici, attendre 3 secondes
         this.gameStartTime = null;
         
         // Charger la map sélectionnée
@@ -549,7 +501,7 @@ class Room {
                 right: false
             };
             
-            // NOUVEAU : Réinitialiser les états de boost
+            // Réinitialiser les états de boost
             player.isBoosting = false;
             player.boostEndTime = 0;
             player.lastBoosterIndex = -1;
@@ -566,7 +518,6 @@ class Room {
         // Démarrer le timer après 3 secondes (temps du countdown)
         setTimeout(() => {
             this.gameStartTime = Date.now();
-            console.log('⏱️ Timer de course démarré !');
         }, 8800);
         
         return true;
@@ -592,12 +543,12 @@ class Room {
             for (let player of this.players.values()) {
                 if (!player.finished) {
                     player.update(deltaTime);
-                    player.raceTime = 0; // Garder à 0 tant que le timer n'a pas démarré
+                    player.raceTime = 0;
                     
                     // Collision avec murs
                     this.checkWallCollisions(player);
                     
-                    // NOUVEAU : Vérifier les boosters même avant le démarrage
+                    // Vérifier les boosters même avant le démarrage
                     this.checkBoosterCollisions(player);
                 }
             }
@@ -623,7 +574,6 @@ class Room {
             }
             
             if (raceTime >= this.raceSettings.maxTime) {
-                console.log('⏱️ Temps limite atteint !');
                 this.forceEndRace();
                 return;
             }
@@ -638,7 +588,7 @@ class Room {
                 // Collision avec murs
                 this.checkWallCollisions(player);
                 
-                // NOUVEAU : Vérifier les boosters
+                // Vérifier les boosters
                 this.checkBoosterCollisions(player);
                 
                 // Vérifier les checkpoints et la ligne d'arrivée
@@ -658,7 +608,6 @@ class Room {
         this.broadcastGameState();
     }
 
-    // Nouvelle méthode pour gérer les collisions avec les boosters
     checkBoosterCollisions(player) {
         if (!trackData || !trackData.boosters || player.boostCooldown > 0) return;
         
@@ -698,7 +647,6 @@ class Room {
         });
     }
 
-    // Méthode pour activer le boost
     activateBoost(player) {
         if (player.boostCooldown > 0) return;
         
@@ -711,20 +659,17 @@ class Room {
             player.boostLevel = 1;
         }
         
-        player.boostEndTime = Date.now() + 1500; // Réinitialiser la durée à chaque nouveau boost
-        player.boostCooldown = 500; // Cooldown réduit à 0.5 secondes pour permettre l'accumulation
+        player.boostEndTime = Date.now() + 1500;
+        player.boostCooldown = 500;
         
         // Donner une impulsion immédiate selon le niveau
-        const impulse = 1 + (player.boostLevel * 0.5); // 1.5, 2, 2.5
+        const impulse = 1 + (player.boostLevel * 0.5);
         player.speed = Math.min(player.speed + impulse, GAME_CONFIG.MAX_SPEED * (1 + player.boostLevel * 0.25));
         
         // Émettre l'événement avec le niveau de boost
         io.to(player.id).emit('boostActivated', { level: player.boostLevel });
-        
-        console.log(`🚀 ${player.pseudo} - Boost niveau ${player.boostLevel} !`);
     }
 
-    // Méthode utilitaire pour calculer la distance d'un point à une ligne
     pointToLineDistance(px, py, x1, y1, x2, y2) {
         const A = px - x1;
         const B = py - y1;
@@ -760,7 +705,6 @@ class Room {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    // Méthode pour projeter un point sur une ligne
     projectPointOnLine(px, py, x1, y1, x2, y2) {
         const dx = x2 - x1;
         const dy = y2 - y1;
@@ -780,8 +724,6 @@ class Room {
     }
 
     forceEndRace() {
-        console.log('⏱️ Course terminée - Temps limite atteint !');
-        
         // Marquer tous les joueurs non finis comme DNF (Did Not Finish)
         for (let player of this.players.values()) {
             if (!player.finished) {
@@ -833,8 +775,6 @@ class Room {
                         player.lap = 1;
                         player.nextCheckpoint = 0;
                         
-                        console.log(`🚦 ${player.pseudo} - Tour 1 commencé !`);
-                        
                         io.to(player.id).emit('lapStarted', {
                             message: '1st Lap',
                             lap: 1,
@@ -845,8 +785,6 @@ class Room {
                     else if (player.nextCheckpoint === (trackData.checkpoints ? trackData.checkpoints.length : 0)) {
                         player.lap++;
                         player.nextCheckpoint = 0;
-                        
-                        console.log(`🏁 ${player.pseudo} - Lap ${player.lap}/${this.raceSettings.laps} !`);
                         
                         if (player.lap > this.raceSettings.laps) {
                             player.finished = true;
@@ -907,8 +845,6 @@ class Room {
                     if (dot > 0) {
                         player.nextCheckpoint++;
                         
-                        console.log(`✅ ${player.pseudo} - Checkpoint ${player.nextCheckpoint}/${trackData.checkpoints.length}`);
-                        
                         io.to(player.id).emit('checkpointPassed', {
                             checkpoint: player.nextCheckpoint,
                             total: trackData.checkpoints.length,
@@ -921,7 +857,6 @@ class Room {
         }
     }
 
-    // Algorithme d'intersection de segments optimisé
     lineSegmentsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
         const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
         
@@ -967,14 +902,11 @@ class Room {
         
         // Si tous ont terminé et qu'au moins un a commencé
         if (allFinished && hasActivePlayer) {
-            // Ne PAS attendre ici, endRace directement
             this.endRace();
         }
     }
 
     endRace() {
-        console.log('🏁 Course terminée !');
-        
         // Arrêter la boucle de jeu
         this.stopGame();
         
@@ -1016,7 +948,7 @@ class Room {
                     broadcastPlayersList(this);
                 }
             }, 10000);
-        }, 3000); // Attendre 3 secondes pour parfaite synchronisation
+        }, 3000);
     }
 
     formatTime(ms) {
@@ -1170,7 +1102,7 @@ class Room {
             const points = curve.points;
             const len = points.length;
             
-            // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
+            // Pour une courbe fermée, on connecte le dernier au premier
             const segmentCount = curve.closed ? len : len - 1;
 
             for (let i = 0; i < segmentCount; i++) {
@@ -1202,7 +1134,7 @@ class Room {
 
                     // Repousser le joueur hors du mur (PLUS FORT)
                     const penetration = minDist - dist;
-                    player.x += nx * (penetration + 2); // +2 pixels supplémentaires
+                    player.x += nx * (penetration + 2);
                     player.y += ny * (penetration + 2);
 
                     // Vecteur de vitesse du joueur
@@ -1224,10 +1156,10 @@ class Room {
 
                     if (dot < -0.5 && wallDot < 0.5) {
                         // Collision frontale (angle > 60° avec le mur)
-                        player.speed *= -0.2; // Inverser la vitesse (rebond)
+                        player.speed *= -0.2;
                         
                         // Rebond plus prononcé
-                        player.x += nx * 8; // Rebond de 8 pixels
+                        player.x += nx * 8;
                         player.y += ny * 8;
                         
                         // Petite variation aléatoire de l'angle pour le réalisme
@@ -1282,7 +1214,7 @@ class Room {
                         player.speed = 0;
                     }
                     
-                    break; // Collision traitée
+                    break;
                 }
             }
         }
@@ -1308,7 +1240,7 @@ class Room {
                 hasPassedStartLine: p.hasPassedStartLine,
                 totalCheckpoints: trackData.checkpoints ? trackData.checkpoints.length : 0,
                 lapsToWin: this.raceSettings ? this.raceSettings.laps : 3,
-                isBoosting: p.isBoosting // NOUVEAU
+                isBoosting: p.isBoosting
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,
@@ -1330,7 +1262,7 @@ class Room {
             finishTime: player.finishTime,
             lap: player.lap,
             position: player.position,
-            dnf: player.finishTime === null && player.finished // Did Not Finish
+            dnf: player.finishTime === null && player.finished
         }));
         
         // Trier par position finale
@@ -1364,8 +1296,6 @@ class Room {
 
 // Gestion des connexions Socket.io
 io.on('connection', (socket) => {
-    console.log(`Joueur connecté: ${socket.id}`);
-
     socket.on('joinGame', (data) => {
         const { pseudo, color } = data;
         
@@ -1379,9 +1309,8 @@ io.on('connection', (socket) => {
             // Créer une nouvelle room publique avec un code court
             const roomCode = generateRoomCode();
             room = new Room(roomCode, false);
-            room.host = player.id; // Le créateur devient l'hôte
+            room.host = player.id;
             gameState.rooms.set(roomCode, room);
-            console.log('🌍 Room publique créée - Code:', roomCode);
         }
         
         // Ajouter le joueur à la room
@@ -1425,20 +1354,18 @@ io.on('connection', (socket) => {
         
         // Créer une room privée avec un code court
         const roomCode = generateRoomCode();
-        const room = new Room(roomCode, true); // L'ID de la room EST le code
-        room.host = player.id; // Marquer l'hôte
-        gameState.rooms.set(roomCode, room); // Utiliser le code comme clé
+        const room = new Room(roomCode, true);
+        room.host = player.id;
+        gameState.rooms.set(roomCode, room);
         
         room.addPlayer(player);
-        socket.join(roomCode); // Joindre avec le code
-        
-        console.log('🔑 Room privée créée - Code:', roomCode);
+        socket.join(roomCode);
         
         socket.emit('joinedRoom', {
-            roomId: roomCode,     // L'ID est le code
+            roomId: roomCode,
             playerId: player.id,
             isPrivate: true,
-            roomCode: roomCode,   // Le code explicite pour l'affichage
+            roomCode: roomCode,
             isHost: true
         });
         
@@ -1450,7 +1377,6 @@ io.on('connection', (socket) => {
         broadcastPlayersList(room);
     });
 
-    // Nouveau handler pour rejoindre avec un code
     socket.on('joinRoomWithCode', (data) => {
         const { pseudo, color, roomCode } = data;
         
@@ -1513,14 +1439,10 @@ io.on('connection', (socket) => {
             const room = findPlayerRoom(socket.id);
             if (room) {
                 broadcastPlayersList(room);
-                
-                // Ne plus démarrer automatiquement
-                // L'hôte doit cliquer sur le bouton démarrer
             }
         }
     });
 
-    // Nouveau handler pour l'hôte qui démarre la partie
     socket.on('hostStartGame', () => {
         const room = findPlayerRoom(socket.id);
         if (!room) return;
@@ -1556,7 +1478,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Nouveau handler pour la sélection de map
     socket.on('selectMap', (data) => {
         const room = findPlayerRoom(socket.id);
         if (!room) return;
@@ -1569,13 +1490,11 @@ io.on('connection', (socket) => {
         
         // Vérifier que la map existe
         if (!availableMaps.includes(data.mapId) && data.mapId !== 'lava_track') {
-            console.log(`⚠️ Map ${data.mapId} non trouvée dans la liste`);
             return;
         }
         
         // Mettre à jour la map sélectionnée
         room.selectedMap = data.mapId;
-        console.log(`🗺️ Room ${room.id} - Map changée : ${data.mapId}`);
         
         // Notifier tous les joueurs de la room
         io.to(room.id).emit('mapSelected', {
@@ -1583,7 +1502,6 @@ io.on('connection', (socket) => {
         });
     });
 
-    // Nouveau handler pour le changement de couleur
     socket.on('changeColor', (data) => {
         const player = gameState.players.get(socket.id);
         const room = findPlayerRoom(socket.id);
@@ -1600,12 +1518,9 @@ io.on('connection', (socket) => {
             
             // Mettre à jour la liste des joueurs
             broadcastPlayersList(room);
-            
-            console.log(`🎨 ${player.pseudo} a changé de couleur : ${data.color}`);
         }
     });
 
-    // Nouveau handler pour voter rematch
     socket.on('voteRematch', () => {
         const room = findPlayerRoom(socket.id);
         if (room) {
@@ -1613,7 +1528,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Nouveau handler pour quitter les résultats
     socket.on('leaveResults', () => {
         const room = findPlayerRoom(socket.id);
         if (room) {
@@ -1632,7 +1546,7 @@ io.on('connection', (socket) => {
         const room = findPlayerRoom(socket.id);
         
         if (player && room && room.gameStarted && !player.finished) {
-            // NOUVEAU: Juste mettre à jour l'état des inputs
+            // Juste mettre à jour l'état des inputs
             player.inputs.up = input.up;
             player.inputs.down = input.down;
             player.inputs.left = input.left;
@@ -1646,8 +1560,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log(`Joueur déconnecté: ${socket.id}`);
-        
         const room = findPlayerRoom(socket.id);
         if (room) {
             room.removePlayer(socket.id);
@@ -1694,7 +1606,7 @@ function broadcastPlayersList(room) {
     
     io.to(room.id).emit('playersUpdate', {
         players: playersList,
-        canStart: room.canHostStart(), // Utiliser la nouvelle méthode
+        canStart: room.canHostStart(),
         hostId: room.host
     });
 }
@@ -1726,7 +1638,7 @@ app.get('/api/maps', (req, res) => {
             return {
                 id: mapId,
                 name: data.name || mapId,
-                thumbnail: data.background || 'assets/track_background.png' // Utiliser directement background
+                thumbnail: data.background || 'assets/track_background.png'
             };
         } catch (e) {
             return {
@@ -1746,7 +1658,4 @@ app.get('/', (req, res) => {
 });
 
 // Démarrage du serveur
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🏁 Serveur KartRush.io démarré sur le port ${PORT}`);
-    console.log(`🌐 Accès: http://localhost:${PORT}`);
-});
+server.listen(PORT, '0.0.0.0', () => {});

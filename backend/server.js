@@ -1401,7 +1401,7 @@ class Room {
                     const velocityAlongWall = vx * wallDirX + vy * wallDirY;
                     
                     // Nouvelle vitesse alignée avec le mur (avec friction)
-                    const frictionFactor = 0.85; // Réduire la vitesse de 15%
+                    const frictionFactor = 0.70; // Réduire la vitesse de 15%
                     const newVx = wallDirX * velocityAlongWall * frictionFactor;
                     const newVy = wallDirY * velocityAlongWall * frictionFactor;
                     

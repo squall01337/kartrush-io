@@ -13,6 +13,7 @@ class GameClient {
         this.hostId = null; // Nouveau : ID de l'hôte actuel
         this.rematchVotes = 0; // Nouveau : compteur de votes
         this.totalPlayers = 0; // Nouveau : nombre total de joueurs
+        this.hasUsedSpace = false; // Pour éviter le spam de la touche espace
         
         // Gestion des maps
         this.availableMaps = [];
@@ -1640,7 +1641,7 @@ class GameClient {
         });
     }
 
-    setupKeyboardControls() {
+          setupKeyboardControls() {
         this.keys = {
             up: false,
             down: false,
@@ -1690,7 +1691,10 @@ class GameClient {
                     e.preventDefault();
                     break;
                 case 'Space':
-                    this.keys.space = true;
+                    if (!this.keys.space) {
+                        this.keys.space = true;
+                        this.hasUsedSpace = false; // Réinitialiser pour permettre une nouvelle utilisation
+                    }
                     e.preventDefault();
                     break;
             }
@@ -1717,6 +1721,7 @@ class GameClient {
                     break;
                 case 'Space':
                     this.keys.space = false;
+                    this.hasUsedSpace = false; // Réinitialiser quand on relâche
                     break;
             }
         });
@@ -1724,12 +1729,19 @@ class GameClient {
 
     sendInput() {
         if (!this.canControl) return;
+        
+        // Envoyer l'état de la touche espace seulement une fois par appui
+        const spacePressed = this.keys.space && !this.hasUsedSpace;
+        if (spacePressed) {
+            this.hasUsedSpace = true;
+        }
+        
         this.socket.emit('playerInput', {
             up: this.keys.up,
             down: this.keys.down,
             left: this.keys.left,
             right: this.keys.right,
-            space: this.keys.space
+            space: spacePressed // Envoyer true seulement au premier frame
         });
     }
 

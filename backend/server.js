@@ -178,8 +178,164 @@ const GAME_CONFIG = {
     ACCELERATION: 0.2,    // Augmenté pour compenser la friction
     FRICTION: 0.98,       // Moins de friction (était 0.94)
     TURN_SPEED: 0.075,
-    COLLISION_GRID_SIZE: 100
+    COLLISION_GRID_SIZE: 100,
+    ITEM_SPAWN_INTERVAL: 10000, // Spawn d'objets toutes les 10 secondes
+    MAX_ITEMS_ON_TRACK: 5,     // Maximum d'objets sur la piste
+    ITEM_BOX_SIZE: 30          // Taille des boîtes d'objets
 };
+
+// Classes des objets
+class Item {
+    constructor(type) {
+        this.type = type;
+    }
+}
+
+class ItemBox {
+    constructor(x, y) {
+        this.id = uuidv4();
+        this.x = x;
+        this.y = y;
+        this.active = true;
+        this.respawnTime = 0;
+    }
+    
+    collect() {
+        this.active = false;
+        this.respawnTime = Date.now() + 5000; // Respawn après 5 secondes
+    }
+    
+    update() {
+        if (!this.active && Date.now() >= this.respawnTime) {
+            this.active = true;
+        }
+    }
+}
+
+// Projectiles et effets
+class Projectile {
+    constructor(type, owner, target = null) {
+        this.id = uuidv4();
+        this.type = type;
+        this.owner = owner;
+        this.x = owner.x;
+        this.y = owner.y;
+        this.angle = owner.angle;
+        this.speed = 0;
+        this.lifetime = 0;
+        this.target = target;
+        this.active = true;
+        
+        switch(type) {
+            case 'bomb':
+                // Position derrière le kart
+                this.x -= Math.cos(owner.angle) * 30;
+                this.y -= Math.sin(owner.angle) * 30;
+                this.lifetime = 2000; // 2 secondes
+                this.radius = 50;
+                this.damage = 50;
+                break;
+                
+            case 'rocket':
+                // Position devant le kart
+                this.x += Math.cos(owner.angle) * 30;
+                this.y += Math.sin(owner.angle) * 30;
+                this.speed = 8; // Rapide
+                this.lifetime = 5000; // 5 secondes max
+                this.radius = 20;
+                this.damage = 75;
+                break;
+        }
+    }
+    
+    update(deltaTime, players, walls) {
+        if (!this.active) return;
+        
+        this.lifetime -= deltaTime * 1000;
+        
+        if (this.lifetime <= 0) {
+            this.explode();
+            return;
+        }
+        
+        switch(this.type) {
+            case 'rocket':
+                this.updateRocket(deltaTime, players, walls);
+                break;
+        }
+    }
+    
+    updateRocket(deltaTime, players, walls) {
+        if (this.target && players.has(this.target)) {
+            const target = players.get(this.target);
+            if (!target.isDead) {
+                // Calculer l'angle vers la cible
+                const dx = target.x - this.x;
+                const dy = target.y - this.y;
+                const targetAngle = Math.atan2(dy, dx);
+                
+                // Tourner progressivement vers la cible
+                let angleDiff = targetAngle - this.angle;
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                
+                this.angle += angleDiff * 0.1; // Vitesse de rotation
+                
+                // Vérifier la distance
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < this.radius) {
+                    this.explode();
+                    return;
+                }
+            }
+        }
+        
+        // Déplacer la roquette
+        const oldX = this.x;
+        const oldY = this.y;
+        this.x += Math.cos(this.angle) * this.speed;
+        this.y += Math.sin(this.angle) * this.speed;
+        
+        // Vérifier collision avec les murs
+        if (this.checkWallCollision(oldX, oldY, this.x, this.y, walls)) {
+            this.explode();
+        }
+    }
+    
+    checkWallCollision(x1, y1, x2, y2, walls) {
+        // Vérifier si la trajectoire croise un mur
+        for (const curve of walls) {
+            const points = curve.points;
+            const len = points.length;
+            const segmentCount = curve.closed ? len : len - 1;
+            
+            for (let i = 0; i < segmentCount; i++) {
+                const [wx1, wy1] = points[i];
+                const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
+                const [wx2, wy2] = points[nextIndex];
+                
+                if (this.lineIntersectsLine(x1, y1, x2, y2, wx1, wy1, wx2, wy2)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+        const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (Math.abs(denom) < 0.0001) return false;
+        
+        const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+        const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+        
+        return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+    }
+    
+    explode() {
+        this.active = false;
+    }
+}
 
 // Classes du jeu
 class Player {
@@ -236,11 +392,20 @@ class Player {
         // Pour le respawn au checkpoint
         this.lastValidatedCheckpoint = 0;
         this.checkpointPositions = []; // Stocker les positions des checkpoints validés
+        
+        // NOUVEAU : Système d'objets
+        this.itemSlotAnimation = null; // Pour l'animation du casino
+        this.isStunned = false;
+        this.stunnedUntil = 0;
+        
+        // Super booster
+        this.isSuperBoosting = false;
+        this.superBoostEndTime = 0;
     }
 
     // Nouvelle méthode pour infliger des dégâts
     takeDamage(amount, damageType = 'collision') {
-        if (this.invulnerableTime > Date.now() || this.isDead) return false;
+        if (this.invulnerableTime > Date.now() || this.isDead || this.isSuperBoosting) return false;
         
         const now = Date.now();
         // Cooldown de dégâts pour éviter le spam (200ms)
@@ -262,6 +427,9 @@ class Player {
         this.isDead = true;
         this.speed = 0;
         this.respawnTime = Date.now() + 3000; // Respawn dans 3 secondes
+        this.item = null; // Perdre l'objet en mourant
+        this.isStunned = false;
+        this.isSuperBoosting = false;
     }
     
     // Méthode pour respawn
@@ -280,11 +448,32 @@ class Player {
         this.isBoosting = false;
         this.boostEndTime = 0;
         this.boostLevel = 0;
+        this.isSuperBoosting = false;
+        this.superBoostEndTime = 0;
+        this.isStunned = false;
+    }
+    
+    stun(duration) {
+        if (this.isSuperBoosting || this.invulnerableTime > Date.now()) return;
+        
+        this.isStunned = true;
+        this.stunnedUntil = Date.now() + duration;
+        this.speed = 0;
     }
 
     update(deltaTime) {
         // Si mort, ne pas update
         if (this.isDead) return;
+        
+        // Gérer le stun
+        if (this.isStunned) {
+            if (Date.now() > this.stunnedUntil) {
+                this.isStunned = false;
+            } else {
+                this.speed *= 0.9; // Ralentir progressivement
+                return; // Ne pas traiter les inputs
+            }
+        }
         
         // Sauvegarder la position précédente
         this.lastX = this.x;
@@ -294,6 +483,11 @@ class Player {
         if (this.isBoosting && Date.now() > this.boostEndTime) {
             this.isBoosting = false;
             this.boostLevel = 0; // Réinitialiser le niveau de boost
+        }
+        
+        // Vérifier si le super boost est terminé
+        if (this.isSuperBoosting && Date.now() > this.superBoostEndTime) {
+            this.isSuperBoosting = false;
         }
         
         // Réduire le cooldown
@@ -329,6 +523,10 @@ class Player {
             }
         }
         
+        if (this.isSuperBoosting) {
+            maxSpeedLimit *= 1.5; // 150% de vitesse avec super booster
+        }
+        
         if (this.speed > maxSpeedLimit) {
             this.speed = maxSpeedLimit;
         } else if (this.speed < -GAME_CONFIG.MAX_SPEED * 0.5) {
@@ -361,8 +559,12 @@ class Player {
             }
         }
         
+        if (this.isSuperBoosting) {
+            speedMultiplier = 1.5;
+        }
+        
         const maxSpeed = GAME_CONFIG.MAX_SPEED * speedMultiplier;
-        const acceleration = this.isBoosting ? GAME_CONFIG.ACCELERATION * 1.5 : GAME_CONFIG.ACCELERATION;
+        const acceleration = (this.isBoosting || this.isSuperBoosting) ? GAME_CONFIG.ACCELERATION * 1.5 : GAME_CONFIG.ACCELERATION;
         
         this.speed = Math.min(this.speed + acceleration, maxSpeed);
         
@@ -411,6 +613,11 @@ class Room {
         this.rematchVotes = new Set(); // Nouveaux votes pour rejouer
         this.rematchTimer = null; // Timer pour le rematch
         this.selectedMap = 'lava_track'; // Map sélectionnée par l'hôte
+        
+        // NOUVEAU : Système d'objets
+        this.itemBoxes = [];
+        this.projectiles = new Map();
+        this.lastItemSpawn = 0;
     }
 
     // Nouvelle méthode pour vérifier si l'hôte peut démarrer
@@ -483,6 +690,11 @@ class Room {
         this.warningShown = false;
         this.rematchVotes.clear();
         
+        // Réinitialiser les objets
+        this.itemBoxes = [];
+        this.projectiles.clear();
+        this.lastItemSpawn = 0;
+        
         // NE PAS réinitialiser la selectedMap ici, elle doit persister
         
         // Réinitialiser l'état ready de tous les joueurs (sauf l'hôte)
@@ -496,6 +708,9 @@ class Room {
             player.lastCheckpointTime = {};
             player.lastFinishLineTime = 0;
             player.raceTime = 0;
+            player.item = null; // Réinitialiser les objets
+            player.isStunned = false;
+            player.isSuperBoosting = false;
             
             // Réinitialiser les inputs pour éviter le glissement
             player.inputs = {
@@ -588,6 +803,9 @@ class Room {
             maxTimeWarning: 240000
         };
         
+        // Initialiser les boîtes d'objets
+        this.initializeItemBoxes();
+        
         const spawnPoints = (trackData && trackData.spawnPoints) || [];
 
         let index = 0;
@@ -603,6 +821,7 @@ class Room {
             player.finished = false;
             player.raceTime = 0;
             player.finishTime = null;
+            player.item = null;
             
             player.nextCheckpoint = 0;
             player.hasPassedStartLine = false;
@@ -622,6 +841,8 @@ class Room {
             player.boostEndTime = 0;
             player.lastBoosterIndex = -1;
             player.boostCooldown = 0;
+            player.isSuperBoosting = false;
+            player.superBoostEndTime = 0;
             
             // NOUVEAU : Réinitialiser les HP
             player.hp = player.maxHp;
@@ -647,6 +868,25 @@ class Room {
         }, 8800);
         
         return true;
+    }
+    
+    // Nouvelle méthode pour initialiser les boîtes d'objets
+    initializeItemBoxes() {
+        this.itemBoxes = [];
+        
+        // Placer des boîtes d'objets le long de la piste
+        // Pour l'instant, on les place à des positions fixes
+        const itemPositions = [
+            { x: 640, y: 360 },
+            { x: 200, y: 400 },
+            { x: 1000, y: 300 },
+            { x: 400, y: 200 },
+            { x: 800, y: 500 }
+        ];
+        
+        itemPositions.forEach(pos => {
+            this.itemBoxes.push(new ItemBox(pos.x, pos.y));
+        });
     }
 
     stopGame() {
@@ -676,6 +916,9 @@ class Room {
                     
                     // NOUVEAU : Vérifier les boosters même avant le démarrage
                     this.checkBoosterCollisions(player);
+                    
+                    // NOUVEAU : Vérifier les objets
+                    this.checkItemBoxCollisions(player);
                 }
             }
             
@@ -706,36 +949,50 @@ class Room {
             }
         }
 
+        // Mettre à jour les boîtes d'objets
+        this.itemBoxes.forEach(box => box.update());
+        
+        // Mettre à jour les projectiles
+        for (const [id, projectile] of this.projectiles) {
+            projectile.update(deltaTime, this.players, trackData.continuousCurves || []);
+            
+            if (!projectile.active) {
+                // Explosion !
+                this.handleProjectileExplosion(projectile);
+                this.projectiles.delete(id);
+            }
+        }
+
         // NOUVEAU : Gérer les respawns
         for (let player of this.players.values()) {
-    if (player.isDead && now >= player.respawnTime) {
-        // Déterminer le point de respawn
-        let spawnPoint;
-        
-        // Si on a validé au moins 2 checkpoints, respawn à l'avant-dernier
-        if (player.lastValidatedCheckpoint > 1 && player.checkpointPositions[player.lastValidatedCheckpoint - 2]) {
-            spawnPoint = player.checkpointPositions[player.lastValidatedCheckpoint - 2];
-        } else if (player.lastValidatedCheckpoint > 0 && player.checkpointPositions[player.lastValidatedCheckpoint - 1]) {
-            // Si on n'a validé qu'un seul checkpoint, respawn au point de départ
-            const spawnPoints = trackData.spawnPoints || [];
-            const index = Array.from(this.players.values()).indexOf(player);
-            spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
-        } else {
-            // Sinon, respawn au point de départ
-            const spawnPoints = trackData.spawnPoints || [];
-            const index = Array.from(this.players.values()).indexOf(player);
-            spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
-        }
-        
-        player.respawn(spawnPoint);
-        
-        // Émettre l'événement de respawn
-        io.to(this.id).emit('playerRespawned', {
-            playerId: player.id,
-            position: spawnPoint,
-            hp: player.hp
-        });
-    }
+            if (player.isDead && now >= player.respawnTime) {
+                // Déterminer le point de respawn
+                let spawnPoint;
+                
+                // Si on a validé au moins 2 checkpoints, respawn à l'avant-dernier
+                if (player.lastValidatedCheckpoint > 1 && player.checkpointPositions[player.lastValidatedCheckpoint - 2]) {
+                    spawnPoint = player.checkpointPositions[player.lastValidatedCheckpoint - 2];
+                } else if (player.lastValidatedCheckpoint > 0 && player.checkpointPositions[player.lastValidatedCheckpoint - 1]) {
+                    // Si on n'a validé qu'un seul checkpoint, respawn au point de départ
+                    const spawnPoints = trackData.spawnPoints || [];
+                    const index = Array.from(this.players.values()).indexOf(player);
+                    spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+                } else {
+                    // Sinon, respawn au point de départ
+                    const spawnPoints = trackData.spawnPoints || [];
+                    const index = Array.from(this.players.values()).indexOf(player);
+                    spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+                }
+                
+                player.respawn(spawnPoint);
+                
+                // Émettre l'événement de respawn
+                io.to(this.id).emit('playerRespawned', {
+                    playerId: player.id,
+                    position: spawnPoint,
+                    hp: player.hp
+                });
+            }
             
             // Mettre à jour seulement si pas mort
             if (!player.finished && !player.isDead) {
@@ -744,6 +1001,7 @@ class Room {
                 
                 this.checkWallCollisions(player);
                 this.checkBoosterCollisions(player);
+                this.checkItemBoxCollisions(player);
                 this.checkRaceProgress(player, now);
             }
         }
@@ -758,6 +1016,196 @@ class Room {
         this.checkRaceEnd();
         
         this.broadcastGameState();
+    }
+    
+    // Nouvelle méthode pour gérer les collisions avec les boîtes d'objets
+    checkItemBoxCollisions(player) {
+        if (player.item !== null || player.isDead) return; // Déjà un objet ou mort
+        
+        const playerRadius = GAME_CONFIG.KART_SIZE;
+        const boxRadius = GAME_CONFIG.ITEM_BOX_SIZE / 2;
+        
+        for (const box of this.itemBoxes) {
+            if (!box.active) continue;
+            
+            const dx = player.x - box.x;
+            const dy = player.y - box.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < playerRadius + boxRadius) {
+                box.collect();
+                
+                // Déterminer l'objet aléatoire
+                const rand = Math.random();
+                let itemType;
+                
+                if (rand < 0.6) {
+                    itemType = 'bomb'; // 60%
+                } else if (rand < 0.9) {
+                    itemType = 'rocket'; // 30%
+                } else {
+                    itemType = 'superboost'; // 10%
+                }
+                
+                // Donner l'objet au joueur
+                player.item = itemType;
+                
+                // Envoyer l'événement de ramassage avec animation de casino
+                io.to(player.id).emit('itemCollected', {
+                    itemType: itemType,
+                    animation: true
+                });
+                
+                console.log(`📦 ${player.pseudo} a ramassé ${itemType}`);
+                break;
+            }
+        }
+    }
+    
+    // Nouvelle méthode pour utiliser un objet
+    useItem(player) {
+        if (!player.item || player.isDead || player.isStunned) return;
+        
+        const itemType = player.item;
+        player.item = null; // Consommer l'objet
+        
+        switch (itemType) {
+            case 'bomb':
+                this.useBomb(player);
+                break;
+                
+            case 'rocket':
+                this.useRocket(player);
+                break;
+                
+            case 'superboost':
+                this.useSuperBoost(player);
+                break;
+        }
+        
+        // Informer le joueur que l'objet a été utilisé
+        io.to(player.id).emit('itemUsed', { itemType: itemType });
+    }
+    
+    useBomb(player) {
+        const bomb = new Projectile('bomb', player);
+        this.projectiles.set(bomb.id, bomb);
+        
+        // Envoyer l'événement de création de bombe
+        io.to(this.id).emit('bombDropped', {
+            id: bomb.id,
+            x: bomb.x,
+            y: bomb.y,
+            ownerId: player.id
+        });
+        
+        console.log(`💣 ${player.pseudo} a posé une bombe !`);
+    }
+    
+    useRocket(player) {
+        // Trouver la cible (joueur devant)
+        let target = null;
+        let minDistance = Infinity;
+        
+        for (const [id, otherPlayer] of this.players) {
+            if (id === player.id || otherPlayer.isDead || otherPlayer.finished) continue;
+            
+            // Vérifier si le joueur est devant
+            const dx = otherPlayer.x - player.x;
+            const dy = otherPlayer.y - player.y;
+            const angle = Math.atan2(dy, dx);
+            
+            let angleDiff = angle - player.angle;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            // Si le joueur est dans un cône de 90° devant
+            if (Math.abs(angleDiff) < Math.PI / 2) {
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    target = id;
+                }
+            }
+        }
+        
+        const rocket = new Projectile('rocket', player, target);
+        this.projectiles.set(rocket.id, rocket);
+        
+        // Envoyer l'événement de création de roquette
+        io.to(this.id).emit('rocketLaunched', {
+            id: rocket.id,
+            x: rocket.x,
+            y: rocket.y,
+            angle: rocket.angle,
+            ownerId: player.id,
+            targetId: target
+        });
+        
+        console.log(`🚀 ${player.pseudo} a lancé une roquette${target ? ' sur ' + this.players.get(target).pseudo : ''} !`);
+    }
+    
+    useSuperBoost(player) {
+        player.isSuperBoosting = true;
+        player.superBoostEndTime = Date.now() + 10000; // 10 secondes
+        player.invulnerableTime = Date.now() + 10000; // Invulnérable pendant le boost
+        player.speed = Math.min(player.speed + 2, GAME_CONFIG.MAX_SPEED * 1.5);
+        
+        // Envoyer l'événement d'activation
+        io.to(this.id).emit('superBoostActivated', {
+            playerId: player.id,
+            duration: 10000
+        });
+        
+        console.log(`⚡ ${player.pseudo} a activé le super booster !`);
+    }
+    
+    // Gérer l'explosion d'un projectile
+    handleProjectileExplosion(projectile) {
+        // Vérifier les joueurs dans le rayon
+        for (const [id, player] of this.players) {
+            if (player.isDead) continue;
+            
+            const dx = player.x - projectile.x;
+            const dy = player.y - projectile.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance < projectile.radius) {
+                // Infliger les dégâts
+                const result = player.takeDamage(projectile.damage, projectile.type);
+                
+                // Stun si pas mort
+                if (result !== 'death') {
+                    const stunDuration = projectile.type === 'bomb' ? 2000 : 3000;
+                    player.stun(stunDuration);
+                }
+                
+                // Envoyer l'événement de dégâts
+                io.to(this.id).emit('projectileHit', {
+                    projectileId: projectile.id,
+                    projectileType: projectile.type,
+                    playerId: player.id,
+                    damage: projectile.damage,
+                    position: { x: projectile.x, y: projectile.y }
+                });
+                
+                if (result === 'death') {
+                    io.to(this.id).emit('playerDeath', {
+                        playerId: player.id,
+                        position: { x: player.x, y: player.y }
+                    });
+                }
+            }
+        }
+        
+        // Envoyer l'événement d'explosion
+        io.to(this.id).emit('projectileExploded', {
+            id: projectile.id,
+            type: projectile.type,
+            x: projectile.x,
+            y: projectile.y,
+            radius: projectile.radius
+        });
     }
 
     // Nouvelle méthode pour gérer les collisions avec les boosters
@@ -1206,6 +1654,23 @@ class Room {
     resolvePlayerCollision(player1, player2, dx, dy, distance) {
         if (player1.isDead || player2.isDead) return;
         
+        // Gérer le super booster qui repousse
+        if (player1.isSuperBoosting && !player2.isSuperBoosting) {
+            // Player1 repousse player2
+            const pushForce = 10;
+            player2.x += (dx / distance) * pushForce;
+            player2.y += (dy / distance) * pushForce;
+            player2.speed = -player2.speed * 0.5; // Inverser et réduire la vitesse
+            return;
+        } else if (player2.isSuperBoosting && !player1.isSuperBoosting) {
+            // Player2 repousse player1
+            const pushForce = 10;
+            player1.x -= (dx / distance) * pushForce;
+            player1.y -= (dy / distance) * pushForce;
+            player1.speed = -player1.speed * 0.5;
+            return;
+        }
+        
         // Éviter la division par zéro
         if (distance === 0) {
             dx = 1;
@@ -1303,174 +1768,174 @@ class Room {
     }
     
     checkWallCollisions(player) {
-    if (player.isDead) return;
-    
-    const kx = player.x;
-    const ky = player.y;
-    const radius = GAME_CONFIG.KART_SIZE;
-    const minDist = radius + 4;
-    const minDistSq = minDist * minDist;
-
-    const prevX = player.x;
-    const prevY = player.y;
-    const prevSpeed = player.speed;
-
-    for (const curve of trackData.continuousCurves || []) {
-        const points = curve.points;
-        const len = points.length;
+        if (player.isDead) return;
         
-        // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
-        const segmentCount = curve.closed ? len : len - 1;
+        const kx = player.x;
+        const ky = player.y;
+        const radius = GAME_CONFIG.KART_SIZE;
+        const minDist = radius + 4;
+        const minDistSq = minDist * minDist;
 
-        for (let i = 0; i < segmentCount; i++) {
-            const [x1, y1] = points[i];
-            // Pour une courbe fermée, le dernier segment connecte au premier point
-            const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
-            const [x2, y2] = points[nextIndex];
+        const prevX = player.x;
+        const prevY = player.y;
+        const prevSpeed = player.speed;
 
-            const dx = x2 - x1;
-            const dy = y2 - y1;
-            const segLenSq = dx * dx + dy * dy;
-            if (segLenSq === 0) continue;
+        for (const curve of trackData.continuousCurves || []) {
+            const points = curve.points;
+            const len = points.length;
+            
+            // IMPORTANT: Pour une courbe fermée, on connecte le dernier au premier
+            const segmentCount = curve.closed ? len : len - 1;
 
-            // Projection du kart sur le segment
-            let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
-            t = Math.max(0, Math.min(1, t));
+            for (let i = 0; i < segmentCount; i++) {
+                const [x1, y1] = points[i];
+                // Pour une courbe fermée, le dernier segment connecte au premier point
+                const nextIndex = curve.closed ? ((i + 1) % len) : (i + 1);
+                const [x2, y2] = points[nextIndex];
 
-            const closestX = x1 + t * dx;
-            const closestY = y1 + t * dy;
+                const dx = x2 - x1;
+                const dy = y2 - y1;
+                const segLenSq = dx * dx + dy * dy;
+                if (segLenSq === 0) continue;
 
-            const distX = kx - closestX;
-            const distY = ky - closestY;
-            const distSq = distX * distX + distY * distY;
+                // Projection du kart sur le segment
+                let t = ((kx - x1) * dx + (ky - y1) * dy) / segLenSq;
+                t = Math.max(0, Math.min(1, t));
 
-            if (distSq < minDistSq) {
-                const dist = Math.sqrt(distSq) || 0.001;
-                const nx = distX / dist;
-                const ny = distY / dist;
+                const closestX = x1 + t * dx;
+                const closestY = y1 + t * dy;
 
-                // Repousser le joueur hors du mur (PLUS FORT)
-                const penetration = minDist - dist;
-                player.x += nx * (penetration + 2); // +2 pixels supplémentaires
-                player.y += ny * (penetration + 2);
+                const distX = kx - closestX;
+                const distY = ky - closestY;
+                const distSq = distX * distX + distY * distY;
 
-                // Vecteur de vitesse du joueur
-                const vx = Math.cos(player.angle) * player.speed;
-                const vy = Math.sin(player.angle) * player.speed;
-                
-                // Produit scalaire pour déterminer l'angle d'impact
-                // dot < 0 signifie qu'on se dirige vers le mur
-                const dot = vx * nx + vy * ny;
-                
-                // Calculer l'angle d'approche par rapport à la normale du mur
-                // Un angle proche de 180° (ou -1 en dot product) = collision frontale
-                // Un angle proche de 90° (ou 0 en dot product) = frottement latéral
-                const angleRatio = Math.abs(dot) / (Math.sqrt(vx * vx + vy * vy) + 0.001); // Éviter division par 0
-                
-                // NOUVEAU : Calculer les dégâts selon l'impact
-                const impactSpeed = Math.abs(player.speed);
-                let damage = 0;
-                let damageType = 'scrape';
+                if (distSq < minDistSq) {
+                    const dist = Math.sqrt(distSq) || 0.001;
+                    const nx = distX / dist;
+                    const ny = distY / dist;
 
-                // Déterminer le type de collision basé sur l'angle d'approche
-                if (dot < -0.1 && angleRatio > 0.7) {
-                    // Collision frontale : on fonce vers le mur avec un angle > 45°
-                    damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 10);
-                    damageType = 'crash';
-                    player.speed *= -0.2; // Inverser la vitesse (rebond)
+                    // Repousser le joueur hors du mur (PLUS FORT)
+                    const penetration = minDist - dist;
+                    player.x += nx * (penetration + 2); // +2 pixels supplémentaires
+                    player.y += ny * (penetration + 2);
+
+                    // Vecteur de vitesse du joueur
+                    const vx = Math.cos(player.angle) * player.speed;
+                    const vy = Math.sin(player.angle) * player.speed;
                     
-                    // Rebond plus prononcé
-                    player.x += nx * 8; // Rebond de 8 pixels
-                    player.y += ny * 8;
+                    // Produit scalaire pour déterminer l'angle d'impact
+                    // dot < 0 signifie qu'on se dirige vers le mur
+                    const dot = vx * nx + vy * ny;
                     
-                    // Petite variation aléatoire de l'angle pour le réalisme
-                    player.angle += (Math.random() - 0.5) * 0.2;
+                    // Calculer l'angle d'approche par rapport à la normale du mur
+                    // Un angle proche de 180° (ou -1 en dot product) = collision frontale
+                    // Un angle proche de 90° (ou 0 en dot product) = frottement latéral
+                    const angleRatio = Math.abs(dot) / (Math.sqrt(vx * vx + vy * vy) + 0.001); // Éviter division par 0
                     
-                } else if (impactSpeed > GAME_CONFIG.MAX_SPEED * 0.2) {
-                    // Frottement latéral : on glisse le long du mur
-                    // Plus la vitesse est élevée, plus on prend de dégâts
-                    damage = Math.floor(1 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 4);
-                    damageType = 'scrape';
-                    
-                    // Calculer la direction du mur
-                    const wallLength = Math.sqrt(dx * dx + dy * dy);
-                    const wallDirX = dx / wallLength;
-                    const wallDirY = dy / wallLength;
-                    
-                    // Projeter la vitesse sur la direction du mur
-                    const velocityAlongWall = vx * wallDirX + vy * wallDirY;
-                    
-                    // Nouvelle vitesse alignée avec le mur (avec friction)
-                    const frictionFactor = 0.70; // Réduire la vitesse de 15%
-                    const newVx = wallDirX * velocityAlongWall * frictionFactor;
-                    const newVy = wallDirY * velocityAlongWall * frictionFactor;
-                    
-                    // Mettre à jour la vitesse et l'angle
-                    player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
-                    
-                    // Ajuster l'angle pour suivre le mur
-                    if (player.speed > 0.1) {
-                        const targetAngle = Math.atan2(newVy, newVx);
-                        const angleDiff = targetAngle - player.angle;
+                    // NOUVEAU : Calculer les dégâts selon l'impact
+                    const impactSpeed = Math.abs(player.speed);
+                    let damage = 0;
+                    let damageType = 'scrape';
+
+                    // Déterminer le type de collision basé sur l'angle d'approche
+                    if (dot < -0.1 && angleRatio > 0.7) {
+                        // Collision frontale : on fonce vers le mur avec un angle > 45°
+                        damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 10);
+                        damageType = 'crash';
+                        player.speed *= -0.2; // Inverser la vitesse (rebond)
                         
-                        // Normaliser la différence d'angle entre -PI et PI
-                        let normalizedDiff = angleDiff;
-                        while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
-                        while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
+                        // Rebond plus prononcé
+                        player.x += nx * 8; // Rebond de 8 pixels
+                        player.y += ny * 8;
                         
-                        // Appliquer progressivement le changement d'angle
-                        player.angle += normalizedDiff * 0.3;
+                        // Petite variation aléatoire de l'angle pour le réalisme
+                        player.angle += (Math.random() - 0.5) * 0.2;
+                        
+                    } else if (impactSpeed > GAME_CONFIG.MAX_SPEED * 0.2) {
+                        // Frottement latéral : on glisse le long du mur
+                        // Plus la vitesse est élevée, plus on prend de dégâts
+                        damage = Math.floor(1 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 4);
+                        damageType = 'scrape';
+                        
+                        // Calculer la direction du mur
+                        const wallLength = Math.sqrt(dx * dx + dy * dy);
+                        const wallDirX = dx / wallLength;
+                        const wallDirY = dy / wallLength;
+                        
+                        // Projeter la vitesse sur la direction du mur
+                        const velocityAlongWall = vx * wallDirX + vy * wallDirY;
+                        
+                        // Nouvelle vitesse alignée avec le mur (avec friction)
+                        const frictionFactor = 0.70; // Réduire la vitesse de 15%
+                        const newVx = wallDirX * velocityAlongWall * frictionFactor;
+                        const newVy = wallDirY * velocityAlongWall * frictionFactor;
+                        
+                        // Mettre à jour la vitesse et l'angle
+                        player.speed = Math.sqrt(newVx * newVx + newVy * newVy);
+                        
+                        // Ajuster l'angle pour suivre le mur
+                        if (player.speed > 0.1) {
+                            const targetAngle = Math.atan2(newVy, newVx);
+                            const angleDiff = targetAngle - player.angle;
+                            
+                            // Normaliser la différence d'angle entre -PI et PI
+                            let normalizedDiff = angleDiff;
+                            while (normalizedDiff > Math.PI) normalizedDiff -= 2 * Math.PI;
+                            while (normalizedDiff < -Math.PI) normalizedDiff += 2 * Math.PI;
+                            
+                            // Appliquer progressivement le changement d'angle
+                            player.angle += normalizedDiff * 0.3;
+                        }
+                        
+                    } else {
+                        // Collision à très basse vitesse, pas de dégâts
+                        player.speed *= 0.95;
                     }
                     
-                } else {
-                    // Collision à très basse vitesse, pas de dégâts
-                    player.speed *= 0.95;
-                }
-                
-                // Appliquer les dégâts
-                if (damage > 0) {
-                    const result = player.takeDamage(damage, damageType);
-                    
-                    // Émettre l'événement de dégâts
-                    io.to(this.id).emit('playerDamaged', {
-                        playerId: player.id,
-                        damage: damage,
-                        hp: player.hp,
-                        damageType: damageType,
-                        position: { x: player.x, y: player.y },
-                        isDead: result === 'death'
-                    });
-                    
-                    if (result === 'death') {
-                        io.to(this.id).emit('playerDeath', {
+                    // Appliquer les dégâts
+                    if (damage > 0 && !player.isSuperBoosting) {
+                        const result = player.takeDamage(damage, damageType);
+                        
+                        // Émettre l'événement de dégâts
+                        io.to(this.id).emit('playerDamaged', {
                             playerId: player.id,
-                            position: { x: player.x, y: player.y }
+                            damage: damage,
+                            hp: player.hp,
+                            damageType: damageType,
+                            position: { x: player.x, y: player.y },
+                            isDead: result === 'death'
                         });
+                        
+                        if (result === 'death') {
+                            io.to(this.id).emit('playerDeath', {
+                                playerId: player.id,
+                                position: { x: player.x, y: player.y }
+                            });
+                        }
                     }
+                    
+                    // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
+                    const finalDistX = player.x - closestX;
+                    const finalDistY = player.y - closestY;
+                    const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
+                    
+                    if (finalDistSq < minDistSq) {
+                        // Forcer la sortie du mur
+                        const pushDist = Math.sqrt(minDistSq) + 2;
+                        player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
+                        player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
+                    }
+                    
+                    // Limiter la vitesse minimale
+                    if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
+                        player.speed = 0;
+                    }
+                    
+                    break; // Collision traitée
                 }
-                
-                // SÉCURITÉ SUPPLÉMENTAIRE: Vérifier qu'on est vraiment sorti du mur
-                const finalDistX = player.x - closestX;
-                const finalDistY = player.y - closestY;
-                const finalDistSq = finalDistX * finalDistX + finalDistY * finalDistY;
-                
-                if (finalDistSq < minDistSq) {
-                    // Forcer la sortie du mur
-                    const pushDist = Math.sqrt(minDistSq) + 2;
-                    player.x = closestX + (finalDistX / Math.sqrt(finalDistSq)) * pushDist;
-                    player.y = closestY + (finalDistY / Math.sqrt(finalDistSq)) * pushDist;
-                }
-                
-                // Limiter la vitesse minimale
-                if (Math.abs(player.speed) < 0.5 && Math.abs(player.speed) > 0) {
-                    player.speed = 0;
-                }
-                
-                break; // Collision traitée
             }
         }
     }
-}
 
     broadcastGameState() {
         const gameData = {
@@ -1497,14 +1962,31 @@ class Room {
                 hp: p.hp,
                 maxHp: p.maxHp,
                 isDead: p.isDead,
-                isInvulnerable: p.invulnerableTime > Date.now()
+                isInvulnerable: p.invulnerableTime > Date.now(),
+                // NOUVEAU : États des objets
+                isStunned: p.isStunned,
+                isSuperBoosting: p.isSuperBoosting
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,
             maxTime: this.raceSettings ? this.raceSettings.maxTime : null,
             remainingTime: this.gameStartTime && this.raceSettings ? 
                 Math.max(0, this.raceSettings.maxTime - (Date.now() - this.gameStartTime)) : 
-                (this.raceSettings ? this.raceSettings.maxTime : null)
+                (this.raceSettings ? this.raceSettings.maxTime : null),
+            // NOUVEAU : Objets sur la piste
+            itemBoxes: this.itemBoxes.filter(box => box.active).map(box => ({
+                id: box.id,
+                x: box.x,
+                y: box.y
+            })),
+            projectiles: Array.from(this.projectiles.values()).filter(p => p.active).map(p => ({
+                id: p.id,
+                type: p.type,
+                x: p.x,
+                y: p.y,
+                angle: p.angle,
+                ownerId: p.owner.id
+            }))
         };
 
         io.to(this.id).emit('gameUpdate', gameData);
@@ -1829,7 +2311,7 @@ io.on('connection', (socket) => {
             
             // Traiter l'item séparément
             if (input.space && player.item) {
-                useItem(player, room);
+                room.useItem(player);
             }
         }
     });
@@ -1886,23 +2368,6 @@ function broadcastPlayersList(room) {
         canStart: room.canHostStart(), // Utiliser la nouvelle méthode
         hostId: room.host
     });
-}
-
-function useItem(player, room) {
-    switch (player.item) {
-        case 'boost':
-            player.speed = Math.min(player.speed + 3, GAME_CONFIG.MAX_SPEED * 1.5);
-            break;
-        case 'slow':
-            // Ralentir les autres joueurs
-            for (let otherPlayer of room.players.values()) {
-                if (otherPlayer.id !== player.id) {
-                    otherPlayer.speed *= 0.5;
-                }
-            }
-            break;
-    }
-    player.item = null;
 }
 
 // Route pour obtenir la liste des maps disponibles

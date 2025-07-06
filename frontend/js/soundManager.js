@@ -22,7 +22,14 @@ class SoundManager {
             wallHit: 0.8,         // 80% du volume global  
             playerCollision: 0.7, // 70% du volume global
             explosion: 0.9,       // 90% du volume global
-            respawn: 0.6         // 60% du volume global
+            respawn: 0.6,        // 60% du volume global
+            itemPickup: 0.5,
+            bombDrop: 0.6,
+            bombExplode: 0.9,
+            rocketLaunch: 0.7,
+            rocketExplode: 0.8,
+            superboost: 0.8
+
         };
         
         // Sons préchargés
@@ -59,6 +66,13 @@ class SoundManager {
         this.sounds.playerCollision = new Audio('assets/audio/player_collision.mp3');
         this.sounds.explosion = new Audio('assets/audio/explosion.mp3');
         this.sounds.respawn = new Audio('assets/audio/respawn.mp3');
+        this.sounds.itemPickup = new Audio('assets/audio/item_pickup.mp3');
+        this.sounds.bombDrop = new Audio('assets/audio/bomb_drop.mp3');
+        this.sounds.bombExplode = new Audio('assets/audio/bomb_explode.mp3');
+        this.sounds.rocketLaunch = new Audio('assets/audio/rocket_launch.mp3');
+        this.sounds.rocketExplode = new Audio('assets/audio/rocket_explode.mp3');
+        this.sounds.superboost = new Audio('assets/audio/superboost.mp3');
+
     }
     
     initializeUI() {
@@ -228,6 +242,204 @@ class SoundManager {
             });
         } else {
             this.playRespawnSynth();
+        }
+    }
+
+       playItemPickup() {
+        const pickup = this.sounds.itemPickup;
+        if (pickup) {
+            pickup.volume = this.getEffectiveVolume() * this.volumeMultipliers.itemPickup;
+            pickup.currentTime = 0;
+            pickup.play().catch(e => {
+                console.log('Erreur lecture item_pickup:', e);
+                this.playItemPickupSynth();
+            });
+        } else {
+            this.playItemPickupSynth();
+        }
+    }
+    
+    playBombDrop() {
+        const drop = this.sounds.bombDrop;
+        if (drop) {
+            drop.volume = this.getEffectiveVolume() * this.volumeMultipliers.bombDrop;
+            drop.currentTime = 0;
+            drop.play().catch(e => {
+                console.log('Erreur lecture bomb_drop:', e);
+                this.playBombDropSynth();
+            });
+        } else {
+            this.playBombDropSynth();
+        }
+    }
+    
+    playBombExplode() {
+        const explode = this.sounds.bombExplode;
+        if (explode) {
+            explode.volume = this.getEffectiveVolume() * this.volumeMultipliers.bombExplode;
+            explode.currentTime = 0;
+            explode.play().catch(e => {
+                console.log('Erreur lecture bomb_explode:', e);
+                this.playExplosionSynth();
+            });
+        } else {
+            this.playExplosionSynth();
+        }
+    }
+    
+    playRocketLaunch() {
+        const launch = this.sounds.rocketLaunch;
+        if (launch) {
+            launch.volume = this.getEffectiveVolume() * this.volumeMultipliers.rocketLaunch;
+            launch.currentTime = 0;
+            launch.play().catch(e => {
+                console.log('Erreur lecture rocket_launch:', e);
+                this.playRocketLaunchSynth();
+            });
+        } else {
+            this.playRocketLaunchSynth();
+        }
+    }
+    
+    playRocketExplode() {
+        const explode = this.sounds.rocketExplode;
+        if (explode) {
+            explode.volume = this.getEffectiveVolume() * this.volumeMultipliers.rocketExplode;
+            explode.currentTime = 0;
+            explode.play().catch(e => {
+                console.log('Erreur lecture rocket_explode:', e);
+                this.playExplosionSynth();
+            });
+        } else {
+            this.playExplosionSynth();
+        }
+    }
+    
+    playSuperBoost() {
+        const boost = this.sounds.superboost;
+        if (boost) {
+            boost.volume = this.getEffectiveVolume() * this.volumeMultipliers.superboost;
+            boost.currentTime = 0;
+            boost.play().catch(e => {
+                console.log('Erreur lecture superboost:', e);
+                this.playSuperBoostSynth();
+            });
+        } else {
+            this.playSuperBoostSynth();
+        }
+    }
+    
+    // Sons synthétisés de fallback pour les objets
+    
+    playItemPickupSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Son de collecte agréable
+            for (let i = 0; i < 3; i++) {
+                const oscillator = audioContext.createOscillator();
+                oscillator.frequency.setValueAtTime(400 + i * 200, audioContext.currentTime + i * 0.1);
+                
+                const gain = audioContext.createGain();
+                gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime + i * 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + i * 0.1 + 0.2);
+                
+                oscillator.connect(gain);
+                gain.connect(audioContext.destination);
+                
+                oscillator.start(audioContext.currentTime + i * 0.1);
+                oscillator.stop(audioContext.currentTime + i * 0.1 + 0.2);
+            }
+        } catch (e) {
+            console.log('Erreur synthèse item_pickup:', e);
+        }
+    }
+    
+    playBombDropSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Son grave de chute
+            const oscillator = audioContext.createOscillator();
+            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
+            
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.5, audioContext.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.3);
+        } catch (e) {
+            console.log('Erreur synthèse bomb_drop:', e);
+        }
+    }
+    
+    playRocketLaunchSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Sifflement ascendant
+            const oscillator = audioContext.createOscillator();
+            oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(2000, audioContext.currentTime + 0.5);
+            
+            const gain = audioContext.createGain();
+            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.6, audioContext.currentTime);
+            gain.gain.linearRampToValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime + 0.5);
+            
+            // Filtre pour le sifflement
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'highpass';
+            filter.frequency.value = 1000;
+            
+            oscillator.connect(filter);
+            filter.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.5);
+            
+            // Bruit de propulsion
+            this.playNoiseBurst(audioContext, 0.5, 3000, 0.4);
+        } catch (e) {
+            console.log('Erreur synthèse rocket_launch:', e);
+        }
+    }
+    
+    playSuperBoostSynth() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Son électrique puissant
+            for (let i = 0; i < 5; i++) {
+                const oscillator = audioContext.createOscillator();
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(100 + i * 100, audioContext.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(1000 + i * 200, audioContext.currentTime + 0.5);
+                
+                const gain = audioContext.createGain();
+                gain.gain.setValueAtTime(0, audioContext.currentTime);
+                gain.gain.linearRampToValueAtTime(this.getEffectiveVolume() * 0.2, audioContext.currentTime + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
+                
+                const filter = audioContext.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 500 + i * 200;
+                filter.Q.value = 5;
+                
+                oscillator.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioContext.destination);
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 1);
+            }
+        } catch (e) {
+            console.log('Erreur synthèse superboost:', e);
         }
     }
     
@@ -611,6 +823,25 @@ class SoundManager {
         }
         if (this.sounds.respawn) {
             this.sounds.respawn.volume = effectiveVolume * this.volumeMultipliers.respawn;
+        }
+
+         if (this.sounds.itemPickup) {
+            this.sounds.itemPickup.volume = effectiveVolume * this.volumeMultipliers.itemPickup;
+        }
+        if (this.sounds.bombDrop) {
+            this.sounds.bombDrop.volume = effectiveVolume * this.volumeMultipliers.bombDrop;
+        }
+        if (this.sounds.bombExplode) {
+            this.sounds.bombExplode.volume = effectiveVolume * this.volumeMultipliers.bombExplode;
+        }
+        if (this.sounds.rocketLaunch) {
+            this.sounds.rocketLaunch.volume = effectiveVolume * this.volumeMultipliers.rocketLaunch;
+        }
+        if (this.sounds.rocketExplode) {
+            this.sounds.rocketExplode.volume = effectiveVolume * this.volumeMultipliers.rocketExplode;
+        }
+        if (this.sounds.superboost) {
+            this.sounds.superboost.volume = effectiveVolume * this.volumeMultipliers.superboost;
         }
         
         // Appliquer à tous les éléments audio actifs enregistrés

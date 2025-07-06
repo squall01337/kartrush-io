@@ -1775,3 +1775,199 @@ button:disabled {
 .health-bar-critical {
     animation: hpCritical 1s ease-in-out infinite;
 }
+
+@keyframes damageFloat {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, -150%);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -250%);
+    }
+}
+
+@keyframes deathZoom {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.2);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes respawnPulse {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+    }
+    30% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+    }
+    70% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(0.9);
+        opacity: 0;
+    }
+}
+
+@keyframes deathShake {
+    0%, 100% { transform: translateX(0); }
+    10% { transform: translateX(-5px); }
+    20% { transform: translateX(5px); }
+    30% { transform: translateX(-5px); }
+    40% { transform: translateX(5px); }
+    50% { transform: translateX(-3px); }
+    60% { transform: translateX(3px); }
+    70% { transform: translateX(-1px); }
+    80% { transform: translateX(1px); }
+}
+
+/* Styles pour l'animation casino des objets */
+@keyframes itemSlotSpin {
+    0% {
+        transform: translateY(0);
+    }
+    100% {
+        transform: translateY(-100%);
+    }
+}
+
+/* Effet de super boost */
+@keyframes superBoostGlow {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 165, 0, 0.6);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(255, 165, 0, 1);
+    }
+}
+
+/* Animation de projectile */
+@keyframes projectilePulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Flash d'écran pour les hits */
+.screen-flash {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1000;
+    animation: screenFlashFade 0.3s ease-out;
+}
+
+@keyframes screenFlashFade {
+    0% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Notification de dégâts */
+.damage-indicator {
+    font-family: 'Arial Black', sans-serif;
+    user-select: none;
+    text-shadow: 
+        2px 2px 4px rgba(0, 0, 0, 0.8),
+        0 0 10px currentColor;
+}
+
+.death-notification {
+    user-select: none;
+}
+
+.death-title {
+    letter-spacing: 3px;
+}
+
+.respawn-notification {
+    letter-spacing: 2px;
+    user-select: none;
+}
+
+/* Effet de pulsation pour la barre d'HP faible */
+@keyframes hpCritical {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 68, 68, 0.6);
+    }
+    50% {
+        box-shadow: 0 0 40px rgba(255, 68, 68, 1);
+    }
+}
+
+/* Animation des boîtes d'objets */
+@keyframes itemBoxFloat {
+    0%, 100% {
+        transform: translateY(0) rotate(0deg);
+    }
+    50% {
+        transform: translateY(-10px) rotate(180deg);
+    }
+}
+
+@keyframes itemBoxGlow {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+    }
+    50% {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 1);
+    }
+}
+
+/* Effet de stun */
+@keyframes stunStars {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Animation d'explosion de projectile */
+@keyframes explosionRing {
+    0% {
+        transform: scale(0);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(3);
+        opacity: 0;
+    }
+}
+
+/* Interface d'objet dans le canvas */
+.item-slot-active {
+    animation: itemSlotGlow 1s ease-in-out infinite;
+}
+
+@keyframes itemSlotGlow {
+    0%, 100% {
+        border-color: #ffd700;
+        box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+    50% {
+        border-color: #ffed4e;
+        box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+    }
+}

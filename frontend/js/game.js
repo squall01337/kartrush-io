@@ -365,6 +365,149 @@ class GameEngine {
         }
     }
 
+       // NOUVEAU : Rendre les boîtes d'objets
+    renderItemBoxes(ctx) {
+        if (!this.gameState.itemBoxes) return;
+        
+        const time = Date.now() * 0.001;
+        
+        this.gameState.itemBoxes.forEach(box => {
+            ctx.save();
+            ctx.translate(box.x, box.y);
+            
+            // Animation de rotation et flottement
+            const float = Math.sin(time * 2) * 5;
+            ctx.translate(0, float);
+            ctx.rotate(time);
+            
+            // Dessiner la boîte
+            if (this.itemBoxSprite) {
+                ctx.drawImage(this.itemBoxSprite, -32, -32, 64, 64);
+            } else {
+                // Fallback
+                ctx.fillStyle = '#ffd700';
+                ctx.fillRect(-30, -30, 60, 60);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(-30, -30, 60, 60);
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('?', 0, 0);
+            }
+            
+            ctx.restore();
+        });
+    }
+    
+    // NOUVEAU : Rendre les projectiles
+    renderProjectiles(ctx) {
+        if (!this.gameState.projectiles) return;
+        
+        this.gameState.projectiles.forEach(projectile => {
+            ctx.save();
+            ctx.translate(projectile.x, projectile.y);
+            
+            switch(projectile.type) {
+                case 'bomb':
+                    this.renderBomb(ctx, projectile);
+                    break;
+                case 'rocket':
+                    this.renderRocket(ctx, projectile);
+                    break;
+            }
+            
+            ctx.restore();
+        });
+    }
+    
+    // Rendre une bombe
+    renderBomb(ctx, bomb) {
+        const anim = this.projectileAnimations.get(bomb.id);
+        const time = anim ? anim.time / 1000 : 0;
+        
+        // Effet de pulsation
+        const scale = 1 + Math.sin(time * 10) * 0.1;
+        ctx.scale(scale, scale);
+        
+        // Corps de la bombe
+        ctx.fillStyle = '#333';
+        ctx.beginPath();
+        ctx.arc(0, 0, 20, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Reflets
+        ctx.fillStyle = '#666';
+        ctx.beginPath();
+        ctx.arc(-5, -5, 5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Mèche
+        ctx.strokeStyle = '#ff6600';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, -20);
+        ctx.lineTo(0, -30);
+        ctx.stroke();
+        
+        // Étincelle
+        const sparkSize = 3 + Math.random() * 3;
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(0, -30, sparkSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Compte à rebours visuel
+        if (anim) {
+            const timeLeft = Math.max(0, 2 - time);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(timeLeft.toFixed(1), 0, 0);
+        }
+    }
+    
+    // Rendre une roquette
+    renderRocket(ctx, rocket) {
+        ctx.rotate(rocket.angle);
+        
+        // Traînée de fumée
+        const gradient = ctx.createLinearGradient(-30, 0, 0, 0);
+        gradient.addColorStop(0, 'rgba(150, 150, 150, 0)');
+        gradient.addColorStop(1, 'rgba(100, 100, 100, 0.8)');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(-30, -5, 30, 10);
+        
+        // Corps de la roquette
+        ctx.fillStyle = '#ff4444';
+        ctx.fillRect(-15, -8, 30, 16);
+        
+        // Pointe
+        ctx.fillStyle = '#ff6666';
+        ctx.beginPath();
+        ctx.moveTo(15, -8);
+        ctx.lineTo(25, 0);
+        ctx.lineTo(15, 8);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Flamme du propulseur
+        const flameSize = Math.random() * 10 + 10;
+        const flameGradient = ctx.createRadialGradient(-15, 0, 0, -15, 0, flameSize);
+        flameGradient.addColorStop(0, '#ffff00');
+        flameGradient.addColorStop(0.5, '#ff8800');
+        flameGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        
+        ctx.fillStyle = flameGradient;
+        ctx.beginPath();
+        ctx.arc(-15, 0, flameSize, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     // Nouvelle méthode pour afficher les boosters
     renderBoosters(ctx) {
         if (!this.track || !this.track.boosters) return;

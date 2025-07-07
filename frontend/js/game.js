@@ -319,7 +319,7 @@ class GameEngine {
         return interpolated ? { ...player, ...interpolated } : player;
     }
 
-    render() {
+        render() {
         if (!this.track) return;
         const ctx = this.offscreenCtx;
         
@@ -332,11 +332,13 @@ class GameEngine {
         
         this.renderTrack(ctx);
         this.renderBoosters(ctx); // NOUVEAU
+        this.renderItemBoxes(ctx); // AJOUT : Rendre les boîtes d'objets
         this.renderFinishLine(ctx);
         
         // NOUVEAU : Rendre les effets de particules en dessous des joueurs
         this.particleSystem.render(ctx);
         
+        this.renderProjectiles(ctx); // AJOUT : Rendre les projectiles
         this.renderPlayers(ctx);
         this.renderPlayerInfo(ctx);
         

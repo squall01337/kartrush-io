@@ -853,6 +853,57 @@ class GameClient {
             // Rien de spécial à faire ici, le GameEngine gère déjà l'effet
         });
 
+                // NOUVEAU : Événements des objets
+        this.socket.on('itemCollected', (data) => {
+            // L'animation casino est gérée par le GameEngine
+            if (data.playerId === this.playerId && data.animation) {
+                // Jouer le son de ramassage
+                soundManager.playItemPickup();
+            }
+        });
+        
+        this.socket.on('itemUsed', (data) => {
+            // Rien de spécial, juste pour la confirmation
+        });
+        
+        this.socket.on('bombDropped', (data) => {
+            // Le GameEngine gère l'affichage
+            soundManager.playBombDrop();
+        });
+        
+        this.socket.on('rocketLaunched', (data) => {
+            // Le GameEngine gère l'affichage
+            soundManager.playRocketLaunch();
+        });
+        
+        this.socket.on('superBoostActivated', (data) => {
+            if (data.playerId === this.playerId) {
+                soundManager.playSuperBoost();
+                // Effet de flash sur l'écran
+                this.showScreenFlash('#ff8800');
+            }
+        });
+        
+        this.socket.on('projectileExploded', (data) => {
+            // Le GameEngine gère les particules
+            if (data.type === 'bomb') {
+                soundManager.playBombExplode();
+            } else if (data.type === 'rocket') {
+                soundManager.playRocketExplode();
+            }
+        });
+        
+        this.socket.on('projectileHit', (data) => {
+            if (data.playerId === this.playerId) {
+                // Flash d'écran selon le type
+                if (data.projectileType === 'bomb') {
+                    this.showScreenFlash('#ff4444');
+                } else if (data.projectileType === 'rocket') {
+                    this.showScreenFlash('#ff8844');
+                }
+            }
+        });
+
         this.socket.on('playerJoined', (player) => {
             // Joueur rejoint la partie
         });

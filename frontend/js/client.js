@@ -601,6 +601,7 @@ class GameClient {
                 this.gameEngine.updateGameState(gameData);
             }
         });
+        
 
         // Nouveau : Changement d'hôte
         this.socket.on('hostChanged', (data) => {

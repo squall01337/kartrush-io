@@ -12,7 +12,9 @@ class GameEngine {
             gameTime: 0,
             totalLaps: 3,
             maxTime: null,
-            remainingTime: null
+            remainingTime: null,
+            itemBoxes: [],
+            projectiles: []
         };
         
         this.track = null;
@@ -42,6 +44,13 @@ class GameEngine {
         // NOUVEAU : Gestion des effets visuels
         this.damageEffects = new Map(); // Effets de dégâts
         this.particleSystem = new ParticleSystem(); // Système de particules
+        
+        // NOUVEAU : Initialisation projectileAnimations
+        this.projectileAnimations = new Map();
+        
+        // NOUVEAU : Sprite des boîtes d'objets
+        this.itemBoxSprite = new Image();
+        this.itemBoxSprite.src = 'assets/item_box.png';
         
         // Charger les sprites d'effets
         this.loadEffectSprites();
@@ -85,7 +94,7 @@ class GameEngine {
     // Nouvelle méthode pour charger le sprite du booster
     loadBoosterSprite() {
         this.boosterSprite = new Image();
-        this.boosterSprite.src = 'assets/booster_arrow.png'; // Assurez-vous d'avoir ce fichier
+        this.boosterSprite.src = 'assets/booster_arrow.png';
     }
     
     // Nouvelle méthode pour charger les sprites d'effets
@@ -96,8 +105,6 @@ class GameEngine {
         
         this.explosionSprite = new Image();
         this.explosionSprite.src = 'assets/explosion.png';
-        
-        // Si les sprites n'existent pas, on utilisera des effets générés
     }
 
     preprocessSprites() {
@@ -233,7 +240,7 @@ class GameEngine {
     start() {
         this.isRunning = true;
         this.then = Date.now();
-        this.setupDamageEvents(); // NOUVEAU
+        this.setupDamageEvents();
         this.gameLoop();
     }
 
@@ -319,7 +326,7 @@ class GameEngine {
         return interpolated ? { ...player, ...interpolated } : player;
     }
 
-        render() {
+    render() {
         if (!this.track) return;
         const ctx = this.offscreenCtx;
         
@@ -331,14 +338,14 @@ class GameEngine {
         ctx.translate(-this.camera.x, -this.camera.y);
         
         this.renderTrack(ctx);
-        this.renderBoosters(ctx); // NOUVEAU
-        this.renderItemBoxes(ctx); // AJOUT : Rendre les boîtes d'objets
+        this.renderBoosters(ctx);
+        this.renderItemBoxes(ctx);
         this.renderFinishLine(ctx);
         
         // NOUVEAU : Rendre les effets de particules en dessous des joueurs
         this.particleSystem.render(ctx);
         
-        this.renderProjectiles(ctx); // AJOUT : Rendre les projectiles
+        this.renderProjectiles(ctx);
         this.renderPlayers(ctx);
         this.renderPlayerInfo(ctx);
         
@@ -367,7 +374,7 @@ class GameEngine {
         }
     }
 
-       // NOUVEAU : Rendre les boîtes d'objets
+    // NOUVEAU : Rendre les boîtes d'objets
     renderItemBoxes(ctx) {
         if (!this.gameState.itemBoxes) return;
         
@@ -382,22 +389,9 @@ class GameEngine {
             ctx.translate(0, float);
             ctx.rotate(time);
             
-            // Dessiner la boîte
-            if (this.itemBoxSprite) {
-                ctx.drawImage(this.itemBoxSprite, -32, -32, 64, 64);
-            } else {
-                // Fallback
-                ctx.fillStyle = '#ffd700';
-                ctx.fillRect(-30, -30, 60, 60);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 3;
-                ctx.strokeRect(-30, -30, 60, 60);
-                
-                ctx.fillStyle = '#fff';
-                ctx.font = 'bold 36px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText('?', 0, 0);
+            // Dessiner le sprite
+            if (this.itemBoxSprite && this.itemBoxSprite.complete) {
+                ctx.drawImage(this.itemBoxSprite, -30, -30, 60, 60);
             }
             
             ctx.restore();
@@ -427,8 +421,17 @@ class GameEngine {
     
     // Rendre une bombe
     renderBomb(ctx, bomb) {
+        // Initialiser l'animation si elle n'existe pas
+        if (!this.projectileAnimations.has(bomb.id)) {
+            this.projectileAnimations.set(bomb.id, {
+                time: 0,
+                startTime: Date.now()
+            });
+        }
+        
         const anim = this.projectileAnimations.get(bomb.id);
-        const time = anim ? anim.time / 1000 : 0;
+        anim.time = Date.now() - anim.startTime;
+        const time = anim.time / 1000;
         
         // Effet de pulsation
         const scale = 1 + Math.sin(time * 10) * 0.1;
@@ -549,13 +552,13 @@ class GameEngine {
                     
                     // Effet de pulsation plus subtile
                     const pulsePhase = (Date.now() * 0.002 + i * 0.8) % (Math.PI * 2);
-                    const scale = 0.9 + Math.sin(pulsePhase) * 0.1; // De 0.9 à 1.1 au lieu de 0.8 à 1.2
+                    const scale = 0.9 + Math.sin(pulsePhase) * 0.1;
                     ctx.scale(scale, scale);
                     
-                    // Opacité constante élevée (jamais en dessous de 0.7)
-                    ctx.globalAlpha = 0.7 + Math.sin(pulsePhase) * 0.3; // De 0.7 à 1.0
+                    // Opacité constante élevée
+                    ctx.globalAlpha = 0.7 + Math.sin(pulsePhase) * 0.3;
                     
-                    // Dessiner le sprite (déjà orienté vers le haut)
+                    // Dessiner le sprite
                     ctx.drawImage(
                         this.boosterSprite,
                         -spriteSize/2, -spriteSize/2,
@@ -566,22 +569,6 @@ class GameEngine {
                 }
                 
                 ctx.globalAlpha = 1;
-            } else {
-                // Fallback : dessiner des chevrons
-                ctx.strokeStyle = `rgba(255, 255, 255, 0.9)`;
-                ctx.lineWidth = 3;
-                
-                const chevronCount = Math.floor(length / 30);
-                const chevronSpacing = length / (chevronCount + 1);
-                
-                for (let i = 1; i <= chevronCount; i++) {
-                    const x = -length/2 + i * chevronSpacing;
-                    ctx.beginPath();
-                    ctx.moveTo(x - 10, 5);
-                    ctx.lineTo(x, -5);
-                    ctx.lineTo(x + 10, 5);
-                    ctx.stroke();
-                }
             }
             
             ctx.restore();
@@ -629,35 +616,6 @@ class GameEngine {
                     ctx.stroke();
                 }
             }
-            
-            // PAS DE TEXTE "FINISH" - SUPPRIMÉ
-            
-        } else {
-            // ANCIEN FORMAT : Rectangle
-            const cx = fl.x + fl.width / 2;
-            const cy = fl.y + fl.height / 2;
-            
-            ctx.translate(cx, cy);
-            ctx.rotate((fl.angle || 0) * Math.PI / 180);
-            
-            ctx.globalAlpha = 0.8;
-            
-            // Pattern damier
-            const squareSize = 10;
-            const rows = Math.ceil(fl.height / squareSize);
-            const cols = Math.ceil(fl.width / squareSize);
-            
-            for (let i = 0; i < rows; i++) {
-                for (let j = 0; j < cols; j++) {
-                    ctx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#000000';
-                    ctx.fillRect(
-                        -fl.width/2 + j * squareSize, 
-                        -fl.height/2 + i * squareSize, 
-                        squareSize, 
-                        squareSize
-                    );
-                }
-            }
         }
         
         ctx.restore();
@@ -671,8 +629,8 @@ class GameEngine {
         ctx.resetTransform();
         
         // Ajuster les positions et largeurs pour mieux centrer le texte
-        const boxWidth = 220 * this.scale;  // Largeur augmentée pour le temps restant
-        const boxHeight = 85 * this.scale;  // Hauteur augmentée pour la position
+        const boxWidth = 220 * this.scale;
+        const boxHeight = 85 * this.scale;
         const padding = 10 * this.scale;
         const infoX = this.canvas.width - boxWidth - (20 * this.scale);
         const infoY = 20 * this.scale;
@@ -910,6 +868,40 @@ class GameEngine {
             ctx.fill();
         }
         
+        // Effet de super boost
+        if (player.isSuperBoosting) {
+            // Aura orangée
+            const auraGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 2);
+            auraGradient.addColorStop(0, 'rgba(255, 136, 0, 0.6)');
+            auraGradient.addColorStop(0.5, 'rgba(255, 136, 0, 0.3)');
+            auraGradient.addColorStop(1, 'rgba(255, 136, 0, 0)');
+            
+            ctx.fillStyle = auraGradient;
+            ctx.fillRect(-size * 2, -size * 2, size * 4, size * 4);
+        }
+        
+        // Effet de stun
+        if (player.isStunned) {
+            // Étoiles tournantes
+            ctx.save();
+            const starCount = 3;
+            const starRadius = 25;
+            const rotation = Date.now() * 0.003;
+            
+            for (let i = 0; i < starCount; i++) {
+                const angle = rotation + (i * Math.PI * 2 / starCount);
+                const x = Math.cos(angle) * starRadius;
+                const y = Math.sin(angle) * starRadius;
+                
+                ctx.fillStyle = '#ffff00';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('⭐', x, y);
+            }
+            ctx.restore();
+        }
+        
         // Effet de dégâts (rouge clignotant)
         const damageEffect = this.damageEffects.get(player.id);
         if (damageEffect && damageEffect.time > Date.now()) {
@@ -918,7 +910,7 @@ class GameEngine {
             ctx.fillRect(-size/2 - 2, -size/2 - 2, size + 4, size + 4);
         }
         
-        // Ne pas rendre le kart si mort (sera remplacé par l'explosion)
+        // Ne pas rendre le kart si mort
         if (!player.isDead) {
             // Effet de boost si actif
             const boostEffect = this.boosterEffects.get(player.id);
@@ -1108,24 +1100,61 @@ class GameEngine {
         
         // Gérer uniquement l'item slot
         const itemSlot = document.getElementById('itemSlot');
-        if (player.item && !itemSlot.dataset.item) {
-            itemSlot.textContent = this.getItemIcon(player.item);
-            itemSlot.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
-            itemSlot.dataset.item = player.item;
-        } else if (!player.item && itemSlot.dataset.item) {
-            itemSlot.textContent = '';
+        if (player.item) {
+            const itemIcons = {
+                'bomb': '💣',
+                'rocket': '🚀',
+                'superboost': '⚡'
+            };
+            
+            if (!itemSlot.dataset.item || itemSlot.dataset.item !== player.item) {
+                itemSlot.innerHTML = `<span style="font-size: 32px;">${itemIcons[player.item] || '?'}</span>`;
+                itemSlot.style.backgroundColor = 'rgba(255, 215, 0, 0.3)';
+                itemSlot.dataset.item = player.item;
+                
+                // Animation de nouveau item
+                itemSlot.style.animation = 'itemPulse 0.5s ease-out';
+                setTimeout(() => {
+                    itemSlot.style.animation = '';
+                }, 500);
+            }
+        } else if (itemSlot.dataset.item) {
+            itemSlot.innerHTML = '';
             itemSlot.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
             delete itemSlot.dataset.item;
         }
     }
 
-    getItemIcon(itemType) {
-        switch(itemType) {
-            case 'boost': return '🚀';
-            case 'slow': return '🐌';
-            case 'missile': return '💥';
-            default: return '?';
-        }
+    // Animation casino pour les objets
+    startItemSlotAnimation(finalItem) {
+        const itemSlot = document.getElementById('itemSlot');
+        const items = ['bomb', 'rocket', 'superboost'];
+        const itemIcons = {
+            'bomb': '💣',
+            'rocket': '🚀',
+            'superboost': '⚡'
+        };
+        
+        let animationTime = 0;
+        const animationDuration = 2000; // 2 secondes
+        
+        const animate = () => {
+            animationTime += 16; // ~60fps
+            
+            if (animationTime < animationDuration) {
+                // Faire défiler les items
+                const index = Math.floor((animationTime / 100) % items.length);
+                itemSlot.innerHTML = `<span style="font-size: 32px; opacity: 0.7;">${itemIcons[items[index]]}</span>`;
+                requestAnimationFrame(animate);
+            } else {
+                // Afficher l'item final
+                itemSlot.innerHTML = `<span style="font-size: 32px;">${itemIcons[finalItem]}</span>`;
+                itemSlot.style.backgroundColor = 'rgba(255, 215, 0, 0.3)';
+                itemSlot.dataset.item = finalItem;
+            }
+        };
+        
+        animate();
     }
 
     updateGameState(gameData) {
@@ -1135,7 +1164,7 @@ class GameEngine {
         gameData.players.forEach(player => {
             if (player.isBoosting && !this.boosterEffects.has(player.id)) {
                 this.boosterEffects.set(player.id, {
-                    duration: 1500, // 1.5 secondes d'effet visuel
+                    duration: 1500,
                     startTime: Date.now()
                 });
             }

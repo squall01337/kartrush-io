@@ -77,8 +77,8 @@ function loadMapData(mapName = 'lava_track') {
         // Map de secours minimale pour éviter les crashes
         trackData = {
             name: "default_track",
-            width: 1280,
-            height: 720,
+            width: 1536,
+            height: 1024,
             background: "#333333",
             spawnPoints: [{ x: 400, y: 500, angle: 0 }],
             walls: [],
@@ -171,8 +171,8 @@ const GAME_CONFIG = {
     MAX_PLAYERS_PER_ROOM: 8,
     MIN_PLAYERS_TO_START: 1,
     TICK_RATE: 60,
-    TRACK_WIDTH: 1280,
-    TRACK_HEIGHT: 720,
+    TRACK_WIDTH: 1536,
+    TRACK_HEIGHT: 1024,
     KART_SIZE: 20,
     MAX_SPEED: 4,        // Augmenté de 12 à 15 (+25%)
     ACCELERATION: 0.2,    // Augmenté pour compenser la friction

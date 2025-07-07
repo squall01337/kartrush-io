@@ -88,9 +88,9 @@ class GameEngine {
         const maxWidth = window.innerWidth - 40;
         const maxHeight = window.innerHeight - 100;
         
-        const aspectRatio = 16 / 9;
+        const aspectRatio = 3 / 2;
         
-        let width = Math.min(maxWidth, 1280);
+        let width = Math.min(maxWidth, 1536);
         let height = width / aspectRatio;
         
         if (height > maxHeight) {
@@ -104,7 +104,7 @@ class GameEngine {
         this.offscreenCanvas.width = width;
         this.offscreenCanvas.height = height;
         
-        this.scale = width / 1280;
+        this.scale = width / 1536;
     }
 
     // Nouvelle méthode pour charger le sprite du booster

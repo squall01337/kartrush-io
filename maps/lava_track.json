@@ -1,8 +1,8 @@
 {
   "id": "lava_track",
   "name": "Lava World",
-  "width": 1280,
-  "height": 720,
+  "width": 1536,
+  "height": 1024,
   "music": "assets/audio/lava_theme2.mp3",
   "background": "assets/track_background2.png",
   "raceSettings": {

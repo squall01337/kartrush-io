@@ -700,7 +700,7 @@ class SoundManager {
     }
     
     playVictory() {
-        return this.playSound('assets/audio/victory.mp3', this.volumeMultipliers.victory);
+        return this.playSound('assets/audio/victory.wav', this.volumeMultipliers.victory);
     }
     
     // Méthode de fallback avec Web Audio API

@@ -8,25 +8,25 @@ class AssetManager {
     }
 
     async loadAssets() {
-        try {
-            const timeout = 10000; // 10 secondes
-            
-            await Promise.race([
-                Promise.all([
-                    this.loadImage('kart_sprites', 'assets/kart_sprites.png'),
-                    this.loadImage('item_icons', 'assets/item_icons.png')
-                ]),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Timeout de chargement des assets')), timeout)
-                )
-            ]);
-            
-            this.loaded = true;
-        } catch (error) {
-            this.loaded = false;
-            throw error;
-        }
+    try {
+        const timeout = 10000; // 10 secondes
+        
+        await Promise.race([
+            Promise.all([
+                this.loadImage('kart_sprites', 'assets/kart_sprites.png'),
+                this.loadImage('item_icons', 'assets/items_icons.png') // IMPORTANT
+            ]),
+            new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Timeout de chargement des assets')), timeout)
+            )
+        ]);
+        
+        this.loaded = true;
+    } catch (error) {
+        this.loaded = false;
+        throw error;
     }
+}
 
     loadImage(name, path) {
         return new Promise((resolve, reject) => {

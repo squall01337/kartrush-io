@@ -432,6 +432,44 @@ class GameClient {
         }, 800);
     }
 
+    // Méthode showScreenFlash à ajouter
+    showScreenFlash(color) {
+        // Créer un div de flash
+        const flash = document.createElement('div');
+        flash.className = 'screen-flash';
+        flash.style.backgroundColor = color;
+        
+        // Style inline pour le flash
+        flash.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.5;
+            mix-blend-mode: screen;
+        `;
+        
+        document.body.appendChild(flash);
+        
+        // Animation de fondu
+        let opacity = 0.5;
+        const fadeOut = () => {
+            opacity -= 0.05;
+            flash.style.opacity = opacity;
+            
+            if (opacity > 0) {
+                requestAnimationFrame(fadeOut);
+            } else {
+                flash.remove();
+            }
+        };
+        
+        requestAnimationFrame(fadeOut);
+    }
+
     connectToServer() {
         this.socket = io();
 
@@ -601,7 +639,6 @@ class GameClient {
                 this.gameEngine.updateGameState(gameData);
             }
         });
-        
 
         // Nouveau : Changement d'hôte
         this.socket.on('hostChanged', (data) => {
@@ -854,14 +891,12 @@ class GameClient {
             // Rien de spécial à faire ici, le GameEngine gère déjà l'effet
         });
 
-                // NOUVEAU : Événements des objets
+        // NOUVEAU : Événements des objets
         this.socket.on('itemCollected', (data) => {
-            // L'animation casino est gérée par le GameEngine
             if (data.playerId === this.playerId && data.animation) {
-                // Jouer le son de ramassage
-                soundManager.playItemPickup();
+            soundManager.playItemPickup();            
             }
-        });
+            });
         
         this.socket.on('itemUsed', (data) => {
             // Rien de spécial, juste pour la confirmation
@@ -880,7 +915,7 @@ class GameClient {
         this.socket.on('superBoostActivated', (data) => {
             if (data.playerId === this.playerId) {
                 soundManager.playSuperBoost();
-                // Effet de flash sur l'écran
+                // Utiliser la méthode showScreenFlash maintenant qu'elle existe
                 this.showScreenFlash('#ff8800');
             }
         });
@@ -1693,7 +1728,7 @@ class GameClient {
         });
     }
 
-          setupKeyboardControls() {
+    setupKeyboardControls() {
         this.keys = {
             up: false,
             down: false,
@@ -1780,22 +1815,25 @@ class GameClient {
     }
 
     sendInput() {
-        if (!this.canControl) return;
-        
-        // Envoyer l'état de la touche espace seulement une fois par appui
-        const spacePressed = this.keys.space && !this.hasUsedSpace;
-        if (spacePressed) {
-            this.hasUsedSpace = true;
-        }
-        
-        this.socket.emit('playerInput', {
-            up: this.keys.up,
-            down: this.keys.down,
-            left: this.keys.left,
-            right: this.keys.right,
-            space: spacePressed // Envoyer true seulement au premier frame
-        });
+    if (!this.canControl) return;
+    
+    // Vérifier si on est en train d'animer un objet
+    const isAnimatingItem = this.gameEngine && this.gameEngine.isAnimatingItem;
+    
+    // Envoyer l'état de la touche espace seulement une fois par appui ET si pas d'animation
+    const spacePressed = this.keys.space && !this.hasUsedSpace && !isAnimatingItem;
+    if (spacePressed) {
+        this.hasUsedSpace = true;
     }
+    
+    this.socket.emit('playerInput', {
+        up: this.keys.up,
+        down: this.keys.down,
+        left: this.keys.left,
+        right: this.keys.right,
+        space: spacePressed // Ne sera true que si pas d'animation en cours
+    });
+}
 
     showScreen(screenName) {
         document.querySelectorAll('.screen').forEach(screen => {

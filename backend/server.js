@@ -872,22 +872,25 @@ class Room {
     
     // Nouvelle méthode pour initialiser les boîtes d'objets
     initializeItemBoxes() {
-        this.itemBoxes = [];
-        
-        // Placer des boîtes d'objets le long de la piste
-        // Pour l'instant, on les place à des positions fixes
-        const itemPositions = [
-            { x: 640, y: 360 },
-            { x: 200, y: 400 },
-            { x: 1000, y: 300 },
-            { x: 400, y: 200 },
-            { x: 800, y: 500 }
-        ];
-        
-        itemPositions.forEach(pos => {
-            this.itemBoxes.push(new ItemBox(pos.x, pos.y));
+    this.itemBoxes = [];
+    
+    // Vérifier si la map a des positions d'objets définies
+    if (trackData && trackData.items && trackData.items.length > 0) {
+        // Utiliser les positions définies dans le fichier JSON de la map
+        trackData.items.forEach(item => {
+            // Les items dans le JSON ont des coordonnées x1,y1,x2,y2 (ligne)
+            // On prend le centre de la ligne comme position de la boîte
+            const centerX = (item.x1 + item.x2) / 2;
+            const centerY = (item.y1 + item.y2) / 2;
+            
+            this.itemBoxes.push(new ItemBox(centerX, centerY));
+            
+            console.log(`📦 Boîte d'objet placée à (${centerX.toFixed(0)}, ${centerY.toFixed(0)})`);
         });
+        
+        console.log(`✅ ${this.itemBoxes.length} boîtes d'objets chargées depuis la map ${this.selectedMap}`);
     }
+}
 
     stopGame() {
         if (this.gameLoop) {

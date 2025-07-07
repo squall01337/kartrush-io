@@ -51,6 +51,22 @@ class GameEngine {
         // NOUVEAU : Sprite des boîtes d'objets
         this.itemBoxSprite = new Image();
         this.itemBoxSprite.src = 'assets/item_box.png';
+
+        // NOUVEAU : Sprite sheet des objets
+        this.itemIconsSprite = new Image();
+        this.itemIconsSprite.src = 'assets/items_icons.png';
+        this.itemIconsLoaded = false;
+        this.itemIconsSprite.onload = () => {
+            this.itemIconsLoaded = true;
+            console.log('✅ Sprite sheet des objets chargée');
+        };
+        
+        this.itemSlotAnimation = null;
+        this.pendingItem = null; // L'objet réel qu'on cache pendant l'animation
+        this.isAnimatingItem = false;
+
+        // Cache pour les icônes découpées
+        this.itemIconsCache = {};    
         
         // Charger les sprites d'effets
         this.loadEffectSprites();
@@ -288,6 +304,45 @@ class GameEngine {
         this.updateUI();
     }
 
+        getItemIcon(itemType) {
+        // Si pas encore chargé, retourner null
+        if (!this.itemIconsLoaded) return null;
+        
+        // Si déjà en cache, le retourner
+        if (this.itemIconsCache[itemType]) {
+            return this.itemIconsCache[itemType];
+        }
+        
+        // Positions dans la grille 3x3 (1024x1024 pixels, donc 341.33px par icône)
+        const iconSize = 341.33; // 1024 / 3
+        const positions = {
+            'rocket': { row: 1, col: 0 },      // 1ère de la 2ème ligne
+            'bomb': { row: 2, col: 0 },        // 1ère de la 3ème ligne
+            'superboost': { row: 0, col: 1 }   // 2ème de la 1ère ligne
+        };
+        
+        const pos = positions[itemType];
+        if (!pos) return null;
+        
+        // Créer un canvas pour stocker l'icône découpée
+        const iconCanvas = document.createElement('canvas');
+        iconCanvas.width = 64; // Taille finale désirée
+        iconCanvas.height = 64;
+        const iconCtx = iconCanvas.getContext('2d');
+        
+        // Découper et redimensionner l'icône
+        iconCtx.drawImage(
+            this.itemIconsSprite,
+            pos.col * iconSize, pos.row * iconSize, iconSize, iconSize, // Source
+            0, 0, 64, 64 // Destination
+        );
+        
+        // Mettre en cache
+        this.itemIconsCache[itemType] = iconCanvas;
+        
+        return iconCanvas;
+    }
+
     // Nouvelle méthode pour les effets visuels de boost
     updateBoosterEffects(deltaTime) {
         // Nettoyer les effets terminés
@@ -327,40 +382,43 @@ class GameEngine {
     }
 
     render() {
-        if (!this.track) return;
-        const ctx = this.offscreenCtx;
-        
-        ctx.fillStyle = this.track.background;
-        ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
-        
-        ctx.save();
-        ctx.scale(this.scale, this.scale);
-        ctx.translate(-this.camera.x, -this.camera.y);
-        
-        this.renderTrack(ctx);
-        this.renderBoosters(ctx);
-        this.renderItemBoxes(ctx);
-        this.renderFinishLine(ctx);
-        
-        // NOUVEAU : Rendre les effets de particules en dessous des joueurs
-        this.particleSystem.render(ctx);
-        
-        this.renderProjectiles(ctx);
-        this.renderPlayers(ctx);
-        this.renderPlayerInfo(ctx);
-        
-        // NOUVEAU : Rendre les effets de dégâts au-dessus des joueurs
-        this.renderDamageEffects(ctx);
-        
-        ctx.restore();
-        
-        this.ctx.drawImage(this.offscreenCanvas, 0, 0);
-        
-        this.renderUI();
-        
-        // NOUVEAU : Rendre la barre d'HP
-        this.renderHealthBar();
+    if (!this.track) return;
+    const ctx = this.offscreenCtx;
+    
+    ctx.fillStyle = this.track.background;
+    ctx.fillRect(0, 0, this.offscreenCanvas.width, this.offscreenCanvas.height);
+    
+    ctx.save();
+    ctx.scale(this.scale, this.scale);
+    ctx.translate(-this.camera.x, -this.camera.y);
+    
+    this.renderTrack(ctx);
+    this.renderBoosters(ctx);
+    this.renderItemBoxes(ctx);
+    this.renderFinishLine(ctx);
+    
+    this.particleSystem.render(ctx);
+    
+    this.renderProjectiles(ctx);
+    this.renderPlayers(ctx);
+    this.renderPlayerInfo(ctx);
+    
+    this.renderDamageEffects(ctx);
+    
+    ctx.restore();
+    
+    this.ctx.drawImage(this.offscreenCanvas, 0, 0);
+    
+    this.renderUI();
+    this.renderHealthBar();
+    
+    // Rendre soit l'animation, soit la case d'objet normale
+    if (this.itemSlotAnimation) {
+        this.renderItemSlotAnimation();
+    } else {
+        this.renderItemSlot();
     }
+}
 
     renderTrack(ctx) {
         if (this.backgroundImage) {
@@ -421,23 +479,28 @@ class GameEngine {
     
     // Rendre une bombe
     renderBomb(ctx, bomb) {
-        // Initialiser l'animation si elle n'existe pas
-        if (!this.projectileAnimations.has(bomb.id)) {
-            this.projectileAnimations.set(bomb.id, {
-                time: 0,
-                startTime: Date.now()
-            });
-        }
-        
-        const anim = this.projectileAnimations.get(bomb.id);
-        anim.time = Date.now() - anim.startTime;
-        const time = anim.time / 1000;
-        
-        // Effet de pulsation
-        const scale = 1 + Math.sin(time * 10) * 0.1;
-        ctx.scale(scale, scale);
-        
-        // Corps de la bombe
+    // Initialiser l'animation si elle n'existe pas
+    if (!this.projectileAnimations.has(bomb.id)) {
+        this.projectileAnimations.set(bomb.id, {
+            time: 0,
+            startTime: Date.now()
+        });
+    }
+    
+    const anim = this.projectileAnimations.get(bomb.id);
+    anim.time = Date.now() - anim.startTime;
+    const time = anim.time / 1000; // Convertir en secondes
+    
+    // Effet de pulsation
+    const scale = 1 + Math.sin(time * 10) * 0.1;
+    ctx.scale(scale, scale);
+    
+    const bombIcon = this.getItemIcon('bomb');
+    if (bombIcon) {
+        // Dessiner le sprite de la bombe
+        ctx.drawImage(bombIcon, -20, -20, 40, 40);
+    } else {
+        // Fallback : dessiner une bombe simple
         ctx.fillStyle = '#333';
         ctx.beginPath();
         ctx.arc(0, 0, 20, 0, Math.PI * 2);
@@ -448,36 +511,64 @@ class GameEngine {
         ctx.beginPath();
         ctx.arc(-5, -5, 5, 0, Math.PI * 2);
         ctx.fill();
-        
-        // Mèche
-        ctx.strokeStyle = '#ff6600';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(0, -20);
-        ctx.lineTo(0, -30);
-        ctx.stroke();
-        
-        // Étincelle
-        const sparkSize = 3 + Math.random() * 3;
-        ctx.fillStyle = '#ff0000';
-        ctx.beginPath();
-        ctx.arc(0, -30, sparkSize, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Compte à rebours visuel
-        if (anim) {
-            const timeLeft = Math.max(0, 2 - time);
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(timeLeft.toFixed(1), 0, 0);
-        }
     }
     
+    // Mèche (toujours affichée, même avec le sprite)
+    ctx.strokeStyle = '#ff6600';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(0, -20);
+    ctx.lineTo(0, -30);
+    ctx.stroke();
+    
+    // Étincelle
+    const sparkSize = 3 + Math.random() * 3;
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.arc(0, -30, sparkSize, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Compte à rebours visuel
+    const timeLeft = Math.max(0, 2 - time);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(timeLeft.toFixed(1), 0, 0);
+}
+    
     // Rendre une roquette
-    renderRocket(ctx, rocket) {
-        ctx.rotate(rocket.angle);
+        renderRocket(ctx, rocket) {
+    ctx.save();
+    ctx.rotate(rocket.angle);
+    
+    const rocketIcon = this.getItemIcon('rocket');
+    
+    if (rocketIcon) {
+        // Traînée de fumée
+        const gradient = ctx.createLinearGradient(-30, 0, 0, 0);
+        gradient.addColorStop(0, 'rgba(150, 150, 150, 0)');
+        gradient.addColorStop(1, 'rgba(100, 100, 100, 0.8)');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(-30, -5, 30, 10);
+        
+        // Sprite de la roquette
+        ctx.drawImage(rocketIcon, -20, -20, 40, 40);
+        
+        // Flamme du propulseur
+        const flameSize = Math.random() * 10 + 10;
+        const flameGradient = ctx.createRadialGradient(-20, 0, 0, -20, 0, flameSize);
+        flameGradient.addColorStop(0, '#ffff00');
+        flameGradient.addColorStop(0.5, '#ff8800');
+        flameGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
+        
+        ctx.fillStyle = flameGradient;
+        ctx.beginPath();
+        ctx.arc(-20, 0, flameSize, 0, Math.PI * 2);
+        ctx.fill();
+    } else {
+        // Fallback : dessiner une roquette simple si le sprite n'est pas chargé
         
         // Traînée de fumée
         const gradient = ctx.createLinearGradient(-30, 0, 0, 0);
@@ -512,6 +603,9 @@ class GameEngine {
         ctx.arc(-15, 0, flameSize, 0, Math.PI * 2);
         ctx.fill();
     }
+    
+    ctx.restore();
+}
 
     // Nouvelle méthode pour afficher les boosters
     renderBoosters(ctx) {
@@ -1094,89 +1188,249 @@ class GameEngine {
         // UI déjà optimisée via HTML/CSS
     }
 
-    updateUI() {
-        const player = this.gameState.players.find(p => p.id === this.playerId);
-        if (!player) return;
+    // Modifier updateUI() pour utiliser les vrais sprites dans le HUD
+updateUI() {}
+
+renderItemSlot() {
+    // Si l'animation est en cours, ne pas afficher l'objet normal
+    if (this.itemSlotAnimation) return;
+    
+    const player = this.gameState.players.find(p => p.id === this.playerId);
+    if (!player) return;
+    
+    const ctx = this.ctx;
+    ctx.save();
+    
+    // Position en bas à gauche
+    const slotSize = 70 * this.scale;
+    const padding = 20 * this.scale;
+    const x = padding;
+    const y = this.canvas.height - slotSize - padding;
+    const borderRadius = 10 * this.scale;
+    
+    // Fond de la case d'objet
+    ctx.fillStyle = player.item ? 'rgba(255, 215, 0, 0.3)' : 'rgba(0, 0, 0, 0.7)';
+    this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
+    ctx.fill();
+    
+    // Bordure
+    ctx.strokeStyle = player.item ? '#ffd700' : 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 3 * this.scale;
+    this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
+    ctx.stroke();
+    
+    // Effet de lueur si objet présent
+    if (player.item) {
+        ctx.shadowColor = '#ffd700';
+        ctx.shadowBlur = 10 * this.scale;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+    
+    // Afficher l'icône de l'objet
+    if (player.item) {
+        const itemIcon = this.getItemIcon(player.item);
         
-        // Gérer uniquement l'item slot
-        const itemSlot = document.getElementById('itemSlot');
-        if (player.item) {
+        if (itemIcon) {
+            // Centrer l'icône dans la case
+            const iconSize = 50 * this.scale;
+            const iconX = x + (slotSize - iconSize) / 2;
+            const iconY = y + (slotSize - iconSize) / 2;
+            
+            ctx.drawImage(itemIcon, iconX, iconY, iconSize, iconSize);
+        } else {
+            // Fallback avec emoji
             const itemIcons = {
                 'bomb': '💣',
                 'rocket': '🚀',
                 'superboost': '⚡'
             };
             
-            if (!itemSlot.dataset.item || itemSlot.dataset.item !== player.item) {
-                itemSlot.innerHTML = `<span style="font-size: 32px;">${itemIcons[player.item] || '?'}</span>`;
-                itemSlot.style.backgroundColor = 'rgba(255, 215, 0, 0.3)';
-                itemSlot.dataset.item = player.item;
-                
-                // Animation de nouveau item
-                itemSlot.style.animation = 'itemPulse 0.5s ease-out';
-                setTimeout(() => {
-                    itemSlot.style.animation = '';
-                }, 500);
-            }
-        } else if (itemSlot.dataset.item) {
-            itemSlot.innerHTML = '';
-            itemSlot.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-            delete itemSlot.dataset.item;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${32 * this.scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(
+                itemIcons[player.item] || '?',
+                x + slotSize / 2,
+                y + slotSize / 2
+            );
         }
+        
+        // Texte "SPACE" en dessous
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = `${12 * this.scale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.fillText('SPACE', x + slotSize / 2, y + slotSize + 15 * this.scale);
     }
+    
+    ctx.restore();
+}
 
-    // Animation casino pour les objets
-    startItemSlotAnimation(finalItem) {
-        const itemSlot = document.getElementById('itemSlot');
-        const items = ['bomb', 'rocket', 'superboost'];
+// Améliorer aussi startItemSlotAnimation pour l'animation casino
+startItemSlotAnimation(finalItem) {
+    const items = ['bomb', 'rocket', 'superboost'];
+    
+    // Stocker l'animation en cours
+    this.itemSlotAnimation = {
+        startTime: Date.now(),
+        duration: 2000,
+        finalItem: finalItem,
+        items: items,
+        currentIndex: 0,
+        lastChange: 0
+    };
+    
+    console.log('🎰 Animation casino démarrée pour:', finalItem);
+}
+
+renderItemSlotAnimation() {
+    if (!this.itemSlotAnimation) return;
+    
+    const anim = this.itemSlotAnimation;
+    const elapsed = Date.now() - anim.startTime;
+    
+    if (elapsed >= anim.duration) {
+        // Animation terminée, donner l'objet au joueur
+        console.log('✅ Animation casino terminée, attribution de:', this.pendingItem);
+        
+        const player = this.gameState.players.find(p => p.id === this.playerId);
+        if (player && this.pendingItem) {
+            player.item = this.pendingItem;
+        }
+        
+        // Réinitialiser
+        this.itemSlotAnimation = null;
+        this.pendingItem = null;
+        this.isAnimatingItem = false;
+        return;
+    }
+    
+    // Calculer la vitesse de défilement (ralentir progressivement)
+    const progress = elapsed / anim.duration;
+    const speed = Math.max(50, 300 * (1 - progress)); // De 300ms à 50ms entre les changements
+    
+    // Changer d'objet selon la vitesse
+    if (elapsed - anim.lastChange > speed) {
+        anim.currentIndex = (anim.currentIndex + 1) % anim.items.length;
+        anim.lastChange = elapsed;
+    }
+    
+    const currentItem = anim.items[anim.currentIndex];
+    
+    const ctx = this.ctx;
+    ctx.save();
+    
+    // Position en bas à gauche
+    const slotSize = 70 * this.scale;
+    const padding = 20 * this.scale;
+    const x = padding;
+    const y = this.canvas.height - slotSize - padding;
+    const borderRadius = 10 * this.scale;
+    
+    // Fond animé avec effet arc-en-ciel
+    const hue = (elapsed / 10) % 360;
+    ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.3)`;
+    this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
+    ctx.fill();
+    
+    // Bordure animée
+    const pulse = Math.sin(elapsed * 0.01) * 0.3 + 0.7;
+    ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 1)`;
+    ctx.lineWidth = 3 * this.scale;
+    ctx.shadowColor = `hsla(${hue}, 100%, 50%, 1)`;
+    ctx.shadowBlur = 20 * this.scale * pulse;
+    this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    
+    // Icône qui change avec effet de rotation
+    ctx.save();
+    ctx.translate(x + slotSize / 2, y + slotSize / 2);
+    
+    // Rotation plus rapide au début, plus lente à la fin
+    const rotationSpeed = 0.02 * (1 - progress * 0.8);
+    const rotation = elapsed * rotationSpeed;
+    ctx.rotate(rotation);
+    
+    // Scale pulsant
+    const scaleEffect = 1 + Math.sin(elapsed * 0.005) * 0.1;
+    ctx.scale(scaleEffect, scaleEffect);
+    
+    const itemIcon = this.getItemIcon(currentItem);
+    if (itemIcon) {
+        const iconSize = 50 * this.scale;
+        ctx.drawImage(itemIcon, -iconSize / 2, -iconSize / 2, iconSize, iconSize);
+    } else {
         const itemIcons = {
             'bomb': '💣',
             'rocket': '🚀',
             'superboost': '⚡'
         };
         
-        let animationTime = 0;
-        const animationDuration = 2000; // 2 secondes
-        
-        const animate = () => {
-            animationTime += 16; // ~60fps
-            
-            if (animationTime < animationDuration) {
-                // Faire défiler les items
-                const index = Math.floor((animationTime / 100) % items.length);
-                itemSlot.innerHTML = `<span style="font-size: 32px; opacity: 0.7;">${itemIcons[items[index]]}</span>`;
-                requestAnimationFrame(animate);
-            } else {
-                // Afficher l'item final
-                itemSlot.innerHTML = `<span style="font-size: 32px;">${itemIcons[finalItem]}</span>`;
-                itemSlot.style.backgroundColor = 'rgba(255, 215, 0, 0.3)';
-                itemSlot.dataset.item = finalItem;
-            }
-        };
-        
-        animate();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${32 * this.scale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(itemIcons[currentItem] || '?', 0, 0);
     }
+    
+    ctx.restore();
+    
+    // Texte "???" pendant l'animation
+    ctx.fillStyle = `hsla(${hue}, 100%, 70%, 1)`;
+    ctx.font = `bold ${16 * this.scale}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 3;
+    ctx.fillText('???', x + slotSize / 2, y + slotSize + 15 * this.scale);
+    
+    ctx.restore();
+}
 
     updateGameState(gameData) {
-        this.gameState = gameData;
+    // Vérifier si on vient de recevoir un nouvel objet
+    const localPlayer = this.gameState.players.find(p => p.id === this.playerId);
+    const newLocalPlayer = gameData.players.find(p => p.id === this.playerId);
+    
+    if (newLocalPlayer && localPlayer) {
+        // Détecter si on vient de recevoir un nouvel objet
+        if (!localPlayer.item && newLocalPlayer.item && !this.isAnimatingItem) {
+            console.log('🎰 Nouvel objet détecté:', newLocalPlayer.item);
+            // Démarrer l'animation et cacher l'objet
+            this.pendingItem = newLocalPlayer.item;
+            this.isAnimatingItem = true;
+            this.startItemSlotAnimation(newLocalPlayer.item);
+            // Forcer l'objet à null dans les données
+            newLocalPlayer.item = null;
+        }
         
-        // Détecter les nouveaux boosts pour les effets visuels uniquement
-        gameData.players.forEach(player => {
-            if (player.isBoosting && !this.boosterEffects.has(player.id)) {
-                this.boosterEffects.set(player.id, {
-                    duration: 1500,
-                    startTime: Date.now()
-                });
-            }
-        });
-        
-        const currentIds = new Set(gameData.players.map(p => p.id));
-        for (const [id] of this.playerInterpolation) {
-            if (!currentIds.has(id)) {
-                this.playerInterpolation.delete(id);
-            }
+        // Si on est en train d'animer, continuer à cacher l'objet
+        if (this.isAnimatingItem && newLocalPlayer) {
+            newLocalPlayer.item = null;
         }
     }
+    
+    // Mettre à jour l'état du jeu
+    this.gameState = gameData;
+    
+    // Détecter les nouveaux boosts pour les effets visuels
+    gameData.players.forEach(player => {
+        if (player.isBoosting && !this.boosterEffects.has(player.id)) {
+            this.boosterEffects.set(player.id, {
+                duration: 1500,
+                startTime: Date.now()
+            });
+        }
+    });
+    
+    const currentIds = new Set(gameData.players.map(p => p.id));
+    for (const [id] of this.playerInterpolation) {
+        if (!currentIds.has(id)) {
+            this.playerInterpolation.delete(id);
+        }
+    }
+}
 }
 
 // Nouveau système de particules

@@ -449,7 +449,7 @@ class GameEngine {
             
             // Dessiner le sprite
             if (this.itemBoxSprite && this.itemBoxSprite.complete) {
-                ctx.drawImage(this.itemBoxSprite, -30, -30, 60, 60);
+                ctx.drawImage(this.itemBoxSprite, -16, -16, 32, 32);
             }
             
             ctx.restore();

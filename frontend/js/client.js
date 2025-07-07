@@ -841,6 +841,15 @@ class GameClient {
                 icon: '🏆'
             });
             
+                // AJOUTER : Arrêter les sons de jeu actifs
+            soundManager.stopEngine(); // Déjà existant pour le moteur
+            
+            // Arrêter le super boost s'il est en cours
+            if (soundManager.sounds.superboost && !soundManager.sounds.superboost.paused) {
+                soundManager.sounds.superboost.pause();
+                soundManager.sounds.superboost.currentTime = 0;
+            }
+
             // Attendre 2 secondes avant d'afficher les résultats
             setTimeout(() => {
                 // Arrêter le moteur de jeu et la musique
@@ -894,9 +903,9 @@ class GameClient {
         // NOUVEAU : Événements des objets
         this.socket.on('itemCollected', (data) => {
             if (data.playerId === this.playerId && data.animation) {
-            soundManager.playItemPickup();            
+                soundManager.playItemPickup(); // Cette ligne est déjà présente mais vérifier
             }
-            });
+        });
         
         this.socket.on('itemUsed', (data) => {
             // Rien de spécial, juste pour la confirmation
@@ -931,12 +940,19 @@ class GameClient {
         
         this.socket.on('projectileHit', (data) => {
             if (data.playerId === this.playerId) {
-                // Flash d'écran selon le type
+                // Flash d'écran existant
                 if (data.projectileType === 'bomb') {
                     this.showScreenFlash('#ff4444');
                 } else if (data.projectileType === 'rocket') {
                     this.showScreenFlash('#ff8844');
                 }
+                
+                // AJOUTER : Affichage des dégâts numériques
+                this.showDamageNotification({
+                    damage: data.damage,
+                    damageType: data.projectileType,
+                    position: data.position
+                });
             }
         });
 
@@ -1833,7 +1849,7 @@ class GameClient {
         right: this.keys.right,
         space: spacePressed // Ne sera true que si pas d'animation en cours
     });
-}
+}   
 
     showScreen(screenName) {
         document.querySelectorAll('.screen').forEach(screen => {

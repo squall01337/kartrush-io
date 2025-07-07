@@ -181,7 +181,7 @@ const GAME_CONFIG = {
     COLLISION_GRID_SIZE: 100,
     ITEM_SPAWN_INTERVAL: 10000, // Spawn d'objets toutes les 10 secondes
     MAX_ITEMS_ON_TRACK: 5,     // Maximum d'objets sur la piste
-    ITEM_BOX_SIZE: 30          // Taille des boîtes d'objets
+    ITEM_BOX_SIZE: 32          // Taille des boîtes d'objets
 };
 
 // Classes des objets
@@ -1026,7 +1026,7 @@ class Room {
         if (player.item !== null || player.isDead) return; // Déjà un objet ou mort
         
         const playerRadius = GAME_CONFIG.KART_SIZE;
-        const boxRadius = GAME_CONFIG.ITEM_BOX_SIZE / 2;
+        const boxRadius = 16;
         
         for (const box of this.itemBoxes) {
             if (!box.active) continue;
@@ -1055,6 +1055,7 @@ class Room {
                 
                 // Envoyer l'événement de ramassage avec animation de casino
                 io.to(player.id).emit('itemCollected', {
+                    playerId: player.id,  // Ajouter cette ligne
                     itemType: itemType,
                     animation: true
                 });

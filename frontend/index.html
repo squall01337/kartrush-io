@@ -26,19 +26,21 @@
         <div class="menu-form">
             <input type="text" id="pseudo" placeholder="Enter your nickname" maxlength="15">
             
-            <!-- Section Partie Publique -->
-            <div class="menu-section">
-                <h3>🌍 Public Room</h3>
-                <button id="joinGame">Join a game</button>
-            </div>
-            
-            <!-- Section Partie Privée -->
-            <div class="menu-section">
-                <h3>🔒 Private room</h3>
-                <button id="createRoom">Create a private room</button>
-                <div class="join-code-section">
-                    <input type="text" id="roomCodeInput" placeholder="ROOM CODE" maxlength="6" style="text-transform: uppercase;">
-                    <button id="joinWithCode">Join with code</button>
+            <div class="room-sections-wrapper">
+                <!-- Section Partie Publique -->
+                <div class="menu-section">
+                    <h3>🌍 Public Room</h3>
+                    <button id="joinGame">Join a room</button>
+                </div>
+                
+                <!-- Section Partie Privée -->
+                <div class="menu-section">
+                    <h3>🔒 Private room</h3>
+                    <button id="createRoom">Create a room</button>
+                    <div class="join-code-section">
+                        <button id="joinWithCode">Join with code</button>
+                        <input type="text" id="roomCodeInput" placeholder="CODE" maxlength="6" style="text-transform: uppercase;">
+                    </div>
                 </div>
             </div>
         </div>
@@ -59,36 +61,41 @@
             <div id="roomCode" class="room-code"></div>
         </div>
         
-        <!-- Nouveau sélecteur de couleur dans le lobby -->
-        <div class="lobby-color-selector">
-            <label>Choose your kart color:</label>
-            <div class="lobby-color-options">
-                <div class="lobby-color-option" data-color="#ff4444" style="background: #ff4444;"></div>
-                <div class="lobby-color-option" data-color="#44ff44" style="background: #44ff44;"></div>
-                <div class="lobby-color-option" data-color="#4444ff" style="background: #4444ff;"></div>
-                <div class="lobby-color-option" data-color="#ffff44" style="background: #ffff44;"></div>
-                <div class="lobby-color-option" data-color="#ff44ff" style="background: #ff44ff;"></div>
-                <div class="lobby-color-option" data-color="#44ffff" style="background: #44ffff;"></div>
-            </div>
-        </div>
-        
-        <div id="playersList" class="players-list"></div>
-        
-        <!-- Map sélectionnée (visible pour tous) -->
-        <div id="selectedMapInfo" class="selected-map-info">
-            <span class="map-label">Map : </span>
-            <span id="selectedMapName">Piste de Lave</span>
-        </div>
-        
-        <!-- Sélecteur de maps (visible seulement pour l'hôte) -->
-        <div id="mapSelector" class="map-selector hidden">
-            <h3>Choose map</h3>
-            <div class="map-selector-container">
-                <button class="map-nav-btn map-nav-prev" id="mapPrevBtn">◀</button>
-                <div class="map-grid" id="mapGrid">
-                    <!-- Les maps seront ajoutées dynamiquement ici -->
+        <div class="lobby-content-wrapper">
+            <!-- Left side: Player info and settings -->
+            <div class="lobby-left-content">
+                <!-- Nouveau sélecteur de couleur dans le lobby -->
+                <div class="lobby-color-selector">
+                    <label>Choose your kart color:</label>
+                    <div class="lobby-color-options">
+                        <div class="lobby-color-option" data-color="#ff4444" style="background: #ff4444;"></div>
+                        <div class="lobby-color-option" data-color="#44ff44" style="background: #44ff44;"></div>
+                        <div class="lobby-color-option" data-color="#4444ff" style="background: #4444ff;"></div>
+                        <div class="lobby-color-option" data-color="#ffff44" style="background: #ffff44;"></div>
+                        <div class="lobby-color-option" data-color="#ff44ff" style="background: #ff44ff;"></div>
+                        <div class="lobby-color-option" data-color="#44ffff" style="background: #44ffff;"></div>
+                    </div>
                 </div>
-                <button class="map-nav-btn map-nav-next" id="mapNextBtn">▶</button>
+                
+                <div id="playersList" class="players-list"></div>
+                
+                <!-- Map sélectionnée (visible pour tous) -->
+                <div id="selectedMapInfo" class="selected-map-info">
+                    <span class="map-label">Map : </span>
+                    <span id="selectedMapName">Piste de Lave</span>
+                </div>
+            </div>
+            
+            <!-- Right side: Map selector (visible only for host) -->
+            <div id="mapSelector" class="map-selector hidden">
+                <h3>Choose map</h3>
+                <div class="map-selector-container">
+                    <button class="map-nav-btn map-nav-prev" id="mapPrevBtn">◀</button>
+                    <div class="map-grid" id="mapGrid">
+                        <!-- Les maps seront ajoutées dynamiquement ici -->
+                    </div>
+                    <button class="map-nav-btn map-nav-next" id="mapNextBtn">▶</button>
+                </div>
             </div>
         </div>
         

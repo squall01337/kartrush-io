@@ -539,13 +539,18 @@ class GameClient {
             const startButton = document.getElementById('startGame');
             const mapSelector = document.getElementById('mapSelector');
             
-            // Afficher/masquer le sélecteur de maps selon le statut d'hôte
+            // Afficher le sélecteur de maps pour tous, mais désactiver l'interaction pour les non-hôtes
             if (mapSelector) {
-                if (this.isHost) {
-                    mapSelector.classList.remove('hidden');
-                    this.renderMapSelector();
+                mapSelector.classList.remove('hidden');
+                this.renderMapSelector();
+                
+                // Désactiver l'interaction si pas hôte
+                if (!this.isHost) {
+                    mapSelector.style.pointerEvents = 'none';
+                    mapSelector.style.opacity = '0.7';
                 } else {
-                    mapSelector.classList.add('hidden');
+                    mapSelector.style.pointerEvents = 'auto';
+                    mapSelector.style.opacity = '1';
                 }
             }
             
@@ -652,17 +657,20 @@ class GameClient {
                     icon: '👑'
                 });
                 
-                // Afficher le sélecteur de maps si on devient hôte
+                // Mettre à jour le sélecteur de maps si on devient hôte
                 const mapSelector = document.getElementById('mapSelector');
                 if (mapSelector) {
                     mapSelector.classList.remove('hidden');
+                    mapSelector.style.pointerEvents = 'auto';
+                    mapSelector.style.opacity = '1';
                     this.renderMapSelector();
                 }
             } else {
-                // Masquer le sélecteur si on n'est plus hôte
+                // Désactiver l'interaction si on n'est plus hôte
                 const mapSelector = document.getElementById('mapSelector');
                 if (mapSelector) {
-                    mapSelector.classList.add('hidden');
+                    mapSelector.style.pointerEvents = 'none';
+                    mapSelector.style.opacity = '0.7';
                 }
             }
         });

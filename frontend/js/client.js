@@ -21,11 +21,42 @@ class GameClient {
         this.currentMapPage = 0;
         this.mapsPerPage = 6;
         
+        // Room browser pagination
+        this.allRooms = [];
+        this.currentPage = 1;
+        this.roomsPerPage = 5;
+        
         // Musique de fond
         this.backgroundMusic = null;
         
         this.initializeUI();
+        this.initializeCustomAlert();
         // Ne pas se connecter tout de suite, attendre le clic sur PLAY
+    }
+
+    // Custom alert function
+    showAlert(message) {
+        const alertOverlay = document.getElementById('customAlert');
+        const alertMessage = document.getElementById('alertMessage');
+        
+        alertMessage.textContent = message;
+        alertOverlay.classList.remove('hidden');
+    }
+
+    initializeCustomAlert() {
+        const alertOverlay = document.getElementById('customAlert');
+        const okButton = document.getElementById('alertOkButton');
+        
+        okButton.addEventListener('click', () => {
+            alertOverlay.classList.add('hidden');
+        });
+        
+        // Close on overlay click
+        alertOverlay.addEventListener('click', (e) => {
+            if (e.target === alertOverlay) {
+                alertOverlay.classList.add('hidden');
+            }
+        });
     }
 
     // Nouvelle méthode pour charger la liste des maps disponibles
@@ -98,8 +129,12 @@ class GameClient {
         this.initializeLobbyColorSelector();
 
         // Boutons du menu
-        document.getElementById('joinGame').addEventListener('click', () => {
-            this.joinGame();
+        document.getElementById('joinPublicRoom').addEventListener('click', () => {
+            this.showRoomBrowser();
+        });
+
+        document.getElementById('createPublicRoom').addEventListener('click', () => {
+            this.createPublicRoom();
         });
 
         document.getElementById('createRoom').addEventListener('click', () => {
@@ -111,9 +146,40 @@ class GameClient {
             this.joinWithCode();
         });
         
+        // Quick match button
+        document.getElementById('quickMatch').addEventListener('click', () => {
+            this.quickMatch();
+        });
+        
         // Formater automatiquement le code en majuscules
         document.getElementById('roomCodeInput').addEventListener('input', (e) => {
             e.target.value = e.target.value.toUpperCase();
+        });
+
+        // Room browser buttons
+        document.getElementById('refreshRooms').addEventListener('click', () => {
+            this.fetchRoomsList();
+        });
+
+        document.getElementById('backToMenu').addEventListener('click', () => {
+            this.showScreen('menu');
+        });
+
+
+        // Pagination buttons
+        document.getElementById('prevPage').addEventListener('click', () => {
+            if (this.currentPage > 1) {
+                this.currentPage--;
+                this.displayRooms(this.allRooms);
+            }
+        });
+
+        document.getElementById('nextPage').addEventListener('click', () => {
+            const totalPages = Math.ceil(this.allRooms.length / this.roomsPerPage);
+            if (this.currentPage < totalPages) {
+                this.currentPage++;
+                this.displayRooms(this.allRooms);
+            }
         });
 
         document.getElementById('leaveRoom').addEventListener('click', () => {
@@ -973,7 +1039,7 @@ class GameClient {
         });
 
         this.socket.on('error', (error) => {
-            alert(error.message);
+            this.showAlert(error.message);
         });
 
         this.socket.on('kickedFromLobby', (data) => {
@@ -1140,7 +1206,7 @@ class GameClient {
                 setTimeout(() => notification.remove(), 1000);
             }).catch(() => {
                 // Fallback si clipboard non disponible
-                alert(`Code de la room : ${code}`);
+                this.showAlert(`Code de la room : ${code}`);
             });
         });
         
@@ -1159,17 +1225,17 @@ class GameClient {
         const roomCode = document.getElementById('roomCodeInput').value.trim();
         
         if (!pseudo) {
-            alert('Please enter a nickname');
+            this.showAlert('Please enter a nickname');
             return;
         }
         
         if (!roomCode) {
-            alert('Please enter a room code');
+            this.showAlert('Please enter a room code');
             return;
         }
         
         if (roomCode.length !== 6) {
-            alert('The room code must be 6 carac long');
+            this.showAlert('The room code must be 6 carac long');
             return;
         }
         
@@ -1530,23 +1596,10 @@ class GameClient {
         this.showScreen('results');
     }
 
-    joinGame() {
-        const pseudo = document.getElementById('pseudo').value.trim();
-        if (!pseudo) {
-            alert('Please enter a nickname');
-            return;
-        }
-
-        this.socket.emit('joinGame', {
-            pseudo: pseudo,
-            color: this.selectedColor
-        });
-    }
-
     createRoom() {
         const pseudo = document.getElementById('pseudo').value.trim();
         if (!pseudo) {
-            alert('Please enter a nickname');
+            this.showAlert('Please enter a nickname');
             return;
         }
 
@@ -1562,6 +1615,191 @@ class GameClient {
             this.socket.connect();
         }
         this.showScreen('menu');
+    }
+
+    showRoomBrowser() {
+        const pseudo = document.getElementById('pseudo').value.trim();
+        if (!pseudo) {
+            this.showAlert('Please enter a nickname');
+            return;
+        }
+        
+        // Ensure maps are loaded
+        if (this.availableMaps.length === 0) {
+            this.loadAvailableMaps();
+        }
+        
+        this.showScreen('roomBrowser');
+        this.currentPage = 1; // Reset to first page
+        this.fetchRoomsList();
+    }
+
+    createPublicRoom() {
+        const pseudo = document.getElementById('pseudo').value.trim();
+        if (!pseudo) {
+            this.showAlert('Please enter a nickname');
+            return;
+        }
+
+        this.socket.emit('createPublicRoom', {
+            pseudo: pseudo,
+            color: this.selectedColor
+        });
+    }
+
+    fetchRoomsList() {
+        fetch('/api/rooms')
+            .then(response => response.json())
+            .then(rooms => {
+                this.allRooms = rooms;
+                this.displayRooms(rooms);
+            })
+            .catch(error => {
+                console.error('Error fetching rooms:', error);
+                this.allRooms = [];
+                this.displayRooms([]);
+            });
+    }
+
+    displayRooms(rooms) {
+        const roomsList = document.getElementById('roomsList');
+        const pagination = document.getElementById('pagination');
+        const pageInfo = document.getElementById('pageInfo');
+        const prevBtn = document.getElementById('prevPage');
+        const nextBtn = document.getElementById('nextPage');
+        
+        roomsList.innerHTML = '';
+
+        if (rooms.length === 0) {
+            roomsList.innerHTML = '<div class="rooms-empty">No public rooms available. Create one!</div>';
+            pagination.classList.add('hidden');
+            return;
+        }
+
+        // Calculate pagination
+        const totalPages = Math.ceil(rooms.length / this.roomsPerPage);
+        const startIndex = (this.currentPage - 1) * this.roomsPerPage;
+        const endIndex = startIndex + this.roomsPerPage;
+        const roomsToDisplay = rooms.slice(startIndex, endIndex);
+
+        // Update pagination UI
+        if (totalPages > 1) {
+            pagination.classList.remove('hidden');
+            pageInfo.textContent = `Page ${this.currentPage} of ${totalPages}`;
+            prevBtn.disabled = this.currentPage === 1;
+            nextBtn.disabled = this.currentPage === totalPages;
+        } else {
+            pagination.classList.add('hidden');
+        }
+
+        // Display rooms with single-line layout
+        roomsToDisplay.forEach(room => {
+            const roomEntry = document.createElement('div');
+            roomEntry.className = 'room-entry';
+            
+            // Host div - separate from the centered elements
+            const hostDiv = document.createElement('div');
+            hostDiv.className = 'room-host';
+            hostDiv.textContent = room.hostName;
+            
+            // Center section with map, thumbnail, and players
+            const roomInfo = document.createElement('div');
+            roomInfo.className = 'room-info-details';
+            
+            const mapDiv = document.createElement('div');
+            mapDiv.className = 'room-map';
+            mapDiv.textContent = room.map.replace(/_/g, ' ');
+            
+            // Create map thumbnail
+            const thumbnailDiv = document.createElement('div');
+            thumbnailDiv.className = 'room-map-thumbnail';
+            
+            // Find the map data to get thumbnail
+            const mapData = this.availableMaps.find(m => m.id === room.map);
+            if (mapData && mapData.thumbnail) {
+                const img = new Image();
+                img.onload = () => {
+                    thumbnailDiv.style.backgroundImage = `url(${mapData.thumbnail})`;
+                };
+                img.onerror = () => {
+                    thumbnailDiv.classList.add('placeholder');
+                    thumbnailDiv.innerHTML = '🏁';
+                };
+                img.src = mapData.thumbnail;
+            } else {
+                thumbnailDiv.classList.add('placeholder');
+                thumbnailDiv.innerHTML = '🏁';
+            }
+            
+            const playersDiv = document.createElement('div');
+            playersDiv.className = 'room-players';
+            playersDiv.textContent = `${room.players}/${room.maxPlayers}`;
+            
+            // Only add map and thumbnail to the centered section
+            roomInfo.appendChild(mapDiv);
+            roomInfo.appendChild(thumbnailDiv);
+            
+            const joinBtn = document.createElement('button');
+            joinBtn.className = 'room-join-btn';
+            joinBtn.textContent = 'Join';
+            joinBtn.disabled = room.players >= room.maxPlayers;
+            
+            joinBtn.addEventListener('click', () => {
+                this.joinRoomWithCode(room.code);
+            });
+            
+            // Append in order: host, centered info, players, join button
+            roomEntry.appendChild(hostDiv);
+            roomEntry.appendChild(roomInfo);
+            roomEntry.appendChild(playersDiv);
+            roomEntry.appendChild(joinBtn);
+            roomsList.appendChild(roomEntry);
+        });
+    }
+
+    joinRoomWithCode(code) {
+        const pseudo = document.getElementById('pseudo').value.trim();
+        if (!pseudo) {
+            this.showAlert('Please enter a nickname');
+            return;
+        }
+
+        this.socket.emit('joinRoomWithCode', {
+            pseudo: pseudo,
+            color: this.selectedColor,
+            roomCode: code
+        });
+    }
+
+    quickMatch() {
+        const pseudo = document.getElementById('pseudo').value.trim();
+        if (!pseudo) {
+            this.showAlert('Please enter a nickname');
+            return;
+        }
+
+        // Fetch rooms and join the one with most players (but not full)
+        fetch('/api/rooms')
+            .then(response => response.json())
+            .then(rooms => {
+                // Filter out full rooms and sort by player count (descending)
+                const availableRooms = rooms
+                    .filter(room => room.players < room.maxPlayers)
+                    .sort((a, b) => b.players - a.players);
+                
+                if (availableRooms.length > 0) {
+                    // Join the room with most players
+                    this.joinRoomWithCode(availableRooms[0].code);
+                } else {
+                    // No rooms available, create a new one
+                    this.createPublicRoom();
+                }
+            })
+            .catch(error => {
+                console.error('Error during quick match:', error);
+                // Fallback to creating a new room
+                this.createPublicRoom();
+            });
     }
 
     startGame() {

@@ -23,6 +23,28 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/assets', express.static(path.join(__dirname, '../assets')));
 
+// API endpoint to get list of public rooms
+app.get('/api/rooms', (req, res) => {
+    const publicRooms = [];
+    
+    gameState.rooms.forEach((room, roomCode) => {
+        if (!room.isPrivate && !room.gameStarted) {
+            // Get host information
+            const hostPlayer = room.players.get(room.host);
+            
+            publicRooms.push({
+                code: roomCode,
+                hostName: hostPlayer ? hostPlayer.pseudo : 'Unknown',
+                map: room.selectedMap || 'lava_track',
+                players: room.players.size,
+                maxPlayers: 6  // You mentioned 6 players maximum
+            });
+        }
+    });
+    
+    res.json(publicRooms);
+});
+
 // Chargement de la map globale (au démarrage du serveur)
 let trackData = null;
 let availableMaps = [];
@@ -2068,56 +2090,6 @@ class Room {
 io.on('connection', (socket) => {
     console.log(`Joueur connecté: ${socket.id}`);
 
-    socket.on('joinGame', (data) => {
-        const { pseudo, color } = data;
-        
-        // Créer le joueur
-        const player = new Player(socket.id, pseudo, color);
-        gameState.players.set(socket.id, player);
-        
-        // Trouver ou créer une room publique
-        let room = findAvailableRoom();
-        if (!room) {
-            // Créer une nouvelle room publique avec un code court
-            const roomCode = generateRoomCode();
-            room = new Room(roomCode, false);
-            room.host = player.id; // Le créateur devient l'hôte
-            gameState.rooms.set(roomCode, room);
-            console.log('🌍 Room publique créée - Code:', roomCode);
-        }
-        
-        // Ajouter le joueur à la room
-        if (room.addPlayer(player)) {
-            socket.join(room.id);
-
-            // Envoyer les infos de la room avec le statut d'hôte
-            socket.emit('joinedRoom', {
-                roomId: room.id,
-                playerId: player.id,
-                isPrivate: false,
-                roomCode: room.id,
-                isHost: room.host === player.id
-            });
-
-            // Envoyer la map sélectionnée
-            socket.emit('mapSelected', {
-                mapId: room.selectedMap
-            });
-
-            // Notifier les autres joueurs
-            socket.to(room.id).emit('playerJoined', {
-                id: player.id,
-                pseudo: player.pseudo,
-                color: player.color
-            });
-            
-            // Envoyer la liste des joueurs
-            broadcastPlayersList(room);
-        } else {
-            socket.emit('error', { message: 'Room pleine' });
-        }
-    });
-
     socket.on('createRoom', (data) => {
         const { pseudo, color } = data;
         
@@ -2150,6 +2122,42 @@ io.on('connection', (socket) => {
         });
         
         broadcastPlayersList(room);
+    });
+
+    socket.on('createPublicRoom', (data) => {
+        const { pseudo, color } = data;
+        
+        // Créer le joueur
+        const player = new Player(socket.id, pseudo, color);
+        gameState.players.set(socket.id, player);
+        
+        // Always create a new public room
+        const roomCode = generateRoomCode();
+        const room = new Room(roomCode, false); // false = public room
+        room.host = player.id;
+        gameState.rooms.set(roomCode, room);
+        
+        console.log('🌍 New public room created - Code:', roomCode);
+        
+        // Add player to room
+        if (room.addPlayer(player)) {
+            socket.join(room.id);
+
+            socket.emit('joinedRoom', {
+                roomId: room.id,
+                playerId: player.id,
+                isPrivate: false,
+                roomCode: room.id,
+                isHost: true
+            });
+
+            // Send selected map
+            socket.emit('mapSelected', {
+                mapId: room.selectedMap
+            });
+
+            broadcastPlayersList(room);
+        }
     });
 
     // Nouveau handler pour rejoindre avec un code
@@ -2367,15 +2375,6 @@ io.on('connection', (socket) => {
 });
 
 // Fonctions utilitaires
-function findAvailableRoom() {
-    for (let room of gameState.rooms.values()) {
-        if (!room.isPrivate && !room.gameStarted && room.players.size < GAME_CONFIG.MAX_PLAYERS_PER_ROOM) {
-            return room;
-        }
-    }
-    return null;
-}
-
 function findPlayerRoom(playerId) {
     for (let room of gameState.rooms.values()) {
         if (room.players.has(playerId)) {

@@ -30,7 +30,9 @@
                 <!-- Section Partie Publique -->
                 <div class="menu-section">
                     <h3>🌍 Public Room</h3>
-                    <button id="joinGame">Join a room</button>
+                    <button id="createPublicRoom">Create a room</button>
+                    <button id="joinPublicRoom">Join a room</button>
+                    <button id="quickMatch">Quick match</button>
                 </div>
                 
                 <!-- Section Partie Privée -->
@@ -49,6 +51,27 @@
             <p>🔼🔽 Accelerate / Break</p>
             <p>◀️▶️ Turn</p>
             <p>SPACE Use an item</p>
+        </div>
+    </div>
+</div>
+
+<!-- Room Browser Screen -->
+<div id="roomBrowser" class="screen hidden">
+    <div class="menu-container">
+        <h1>🌍 Public Rooms</h1>
+        <div class="room-browser-content">
+            <div id="roomsList" class="rooms-list">
+                <!-- Room entries will be added dynamically here -->
+            </div>
+            <div id="pagination" class="pagination hidden">
+                <button id="prevPage" class="pagination-btn">← Previous</button>
+                <span id="pageInfo" class="pagination-info">Page 1 of 1</span>
+                <button id="nextPage" class="pagination-btn">Next →</button>
+            </div>
+            <div class="room-browser-actions">
+                <button id="refreshRooms" class="btn-action">🔄 Refresh</button>
+                <button id="backToMenu" class="btn-action">← Back</button>
+            </div>
         </div>
     </div>
 </div>
@@ -163,6 +186,16 @@
         </svg>
     </button>
 </div>
+
+    <!-- Custom Alert Modal -->
+    <div id="customAlert" class="custom-alert-overlay hidden">
+        <div class="custom-alert">
+            <div class="custom-alert-content">
+                <p id="alertMessage">Alert message</p>
+                <button id="alertOkButton" class="alert-ok-btn">OK</button>
+            </div>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="js/assets.js"></script>

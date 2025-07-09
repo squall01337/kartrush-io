@@ -99,3 +99,21 @@ When starting a new session, ask these questions to quickly understand the proje
 - Placeholder changed from "ROOM CODE" to "CODE"
 - Section width increased to 400px max to prevent text wrapping
 - All buttons set to consistent 200px width
+
+### Public Room Browser System
+- Added API endpoint `/api/rooms` to list public rooms
+- Public rooms section now has two buttons:
+  - "Join a room" - Opens room browser to see available rooms
+  - "Create a room" - Creates a new public room
+- New room browser screen shows:
+  - Host name
+  - Selected map
+  - Current players (X/6)
+  - Join button for each room
+- Room browser features:
+  - Refresh button to update list
+  - Back button to return to menu
+  - Create room button in browser
+- Public rooms can still be joined via code system
+- Private rooms are not shown in the API/browser
+- Maximum 6 players per room (as requested)

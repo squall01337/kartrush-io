@@ -58,6 +58,30 @@ body {
     text-align: center;
 }
 
+#pseudo {
+    width: 300px;
+    padding: 12px;
+    margin: 0 auto 20px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    display: block;
+}
+
+#pseudo:focus {
+    border-color: #4ecdc4;
+    outline: none;
+    box-shadow: 0 0 10px rgba(78, 205, 196, 0.5);
+}
+
+#pseudo::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
 button {
     background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
     border: none;
@@ -2038,5 +2062,329 @@ button:disabled {
     50% {
         border-color: #ffed4e;
         box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+    }
+}
+
+/* Room Browser Styles */
+.room-browser-content {
+    width: 800px;
+    max-width: 90vw;
+}
+
+.rooms-list {
+    min-height: 540px;
+    max-height: 540px;
+    overflow-y: hidden;
+    margin-bottom: 20px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    padding: 15px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.room-entry {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.1) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    padding: 12px 20px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.room-entry::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    transition: left 0.5s;
+}
+
+.room-entry:hover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.15) 100%);
+    transform: translateX(5px);
+    border-color: rgba(78, 205, 196, 0.5);
+    box-shadow: 0 5px 15px rgba(78, 205, 196, 0.2);
+}
+
+.room-entry:hover::before {
+    left: 100%;
+}
+
+.room-info-details {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 25px;
+    margin-left: 20px;
+    margin-right: 0;
+}
+
+.room-host {
+    font-size: 1.1em;
+    font-weight: bold;
+    min-width: 130px;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.room-map {
+    font-size: 0.95em;
+    color: #4ecdc4;
+    min-width: 110px;
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+.room-map-thumbnail {
+    width: 90px;
+    height: 55px;
+    border-radius: 8px;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid rgba(78, 205, 196, 0.3);
+    flex-shrink: 0;
+}
+
+.room-map-thumbnail.placeholder {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2em;
+}
+
+.room-players {
+    font-size: 0.95em;
+    color: #fff;
+    min-width: 80px;
+    text-align: center;
+    background: rgba(78, 205, 196, 0.2);
+    padding: 5px 15px;
+    border-radius: 20px;
+    border: 1px solid rgba(78, 205, 196, 0.3);
+    font-weight: 600;
+    margin: 0 25px;
+}
+
+.room-join-btn {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    color: white;
+    border: none;
+    padding: 10px 25px;
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+}
+
+.room-join-btn:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 6px 20px rgba(78, 205, 196, 0.4);
+}
+
+.room-join-btn:disabled {
+    background: linear-gradient(45deg, #666, #555);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6;
+}
+
+.rooms-empty {
+    text-align: center;
+    padding: 80px 40px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 1.2em;
+    font-weight: 500;
+}
+
+.room-browser-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.btn-action {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    border: none;
+    padding: 15px 30px;
+    margin: 10px;
+    border-radius: 25px;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-action:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    padding: 12px 25px;
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, #ff6b6b, #ff5252);
+    color: white;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 25px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(45deg, #ff5252, #ff4444);
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+}
+
+/* Pagination Styles */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 15px;
+    padding: 15px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 25px;
+    backdrop-filter: blur(5px);
+}
+
+.pagination-btn {
+    background: rgba(78, 205, 196, 0.1);
+    color: #4ecdc4;
+    border: 2px solid rgba(78, 205, 196, 0.3);
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: rgba(78, 205, 196, 0.2);
+    border-color: #4ecdc4;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(78, 205, 196, 0.2);
+}
+
+.pagination-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    color: #666;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.pagination-info {
+    color: #fff;
+    font-size: 1em;
+    font-weight: 600;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Custom Alert Modal */
+.custom-alert-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    backdrop-filter: blur(5px);
+}
+
+.custom-alert {
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 20px;
+    padding: 30px;
+    min-width: 300px;
+    max-width: 500px;
+    text-align: center;
+    animation: alertSlideIn 0.3s ease-out;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.custom-alert-content p {
+    color: white;
+    font-size: 18px;
+    margin-bottom: 25px;
+    font-weight: 500;
+}
+
+.alert-ok-btn {
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    border: none;
+    padding: 12px 40px;
+    border-radius: 25px;
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.alert-ok-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes alertSlideIn {
+    from {
+        transform: scale(0.8) translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
     }
 }

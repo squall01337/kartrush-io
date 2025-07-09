@@ -61,6 +61,13 @@ class GameEngine {
             console.log('✅ Sprite sheet des objets chargée');
         };
         
+        // NOUVEAU : Sprite du healthpack (séparé)
+        this.healthpackSprite = new Image();
+        this.healthpackSprite.src = 'assets/healthpack.png';
+        this.healthpackSprite.onload = () => {
+            console.log('✅ Sprite healthpack chargé');
+        };
+        
         this.itemSlotAnimation = null;
         this.pendingItem = null; // L'objet réel qu'on cache pendant l'animation
         this.isAnimatingItem = false;
@@ -305,6 +312,14 @@ class GameEngine {
     }
 
         getItemIcon(itemType) {
+        // Cas spécial pour le healthpack qui a son propre sprite
+        if (itemType === 'healthpack') {
+            if (this.healthpackSprite && this.healthpackSprite.complete) {
+                return this.healthpackSprite;
+            }
+            return null;
+        }
+        
         // Si pas encore chargé, retourner null
         if (!this.itemIconsLoaded) return null;
         
@@ -540,32 +555,32 @@ class GameEngine {
     // Rendre une roquette
         renderRocket(ctx, rocket) {
     ctx.save();
-    ctx.rotate(rocket.angle);
+    ctx.rotate(rocket.angle + Math.PI / 2); // Ajouter 90 degrés pour corriger l'orientation
     
     const rocketIcon = this.getItemIcon('rocket');
     
     if (rocketIcon) {
-        // Traînée de fumée
-        const gradient = ctx.createLinearGradient(-30, 0, 0, 0);
+        // Traînée de fumée - maintenant derrière la roquette (en bas)
+        const gradient = ctx.createLinearGradient(0, 30, 0, 0);
         gradient.addColorStop(0, 'rgba(150, 150, 150, 0)');
         gradient.addColorStop(1, 'rgba(100, 100, 100, 0.8)');
         
         ctx.fillStyle = gradient;
-        ctx.fillRect(-30, -5, 30, 10);
+        ctx.fillRect(-5, 0, 10, 30);
         
         // Sprite de la roquette
         ctx.drawImage(rocketIcon, -20, -20, 40, 40);
         
-        // Flamme du propulseur
+        // Flamme du propulseur - maintenant en bas de la roquette
         const flameSize = Math.random() * 10 + 10;
-        const flameGradient = ctx.createRadialGradient(-20, 0, 0, -20, 0, flameSize);
+        const flameGradient = ctx.createRadialGradient(0, 20, 0, 0, 20, flameSize);
         flameGradient.addColorStop(0, '#ffff00');
         flameGradient.addColorStop(0.5, '#ff8800');
         flameGradient.addColorStop(1, 'rgba(255, 0, 0, 0)');
         
         ctx.fillStyle = flameGradient;
         ctx.beginPath();
-        ctx.arc(-20, 0, flameSize, 0, Math.PI * 2);
+        ctx.arc(0, 20, flameSize, 0, Math.PI * 2);
         ctx.fill();
     } else {
         // Fallback : dessiner une roquette simple si le sprite n'est pas chargé
@@ -1075,51 +1090,76 @@ class GameEngine {
     
     // Nouvelle méthode pour rendre les effets de dégâts
     renderDamageEffects(ctx) {
-        // Rendre les explosions
+        // Rendre les explosions de joueurs
         for (const [playerId, player] of this.gameState.players.entries()) {
             if (player.isDead) {
-                this.renderExplosion(ctx, player.x, player.y, player.id);
+                this.renderExplosion(ctx, player.x, player.y, `explosion_${player.id}`);
+            }
+        }
+        
+        // Rendre les explosions de projectiles
+        for (const [key, explosionData] of this.damageEffects.entries()) {
+            if (key.startsWith('projectile_explosion_')) {
+                this.renderExplosion(ctx, explosionData.x, explosionData.y, key);
             }
         }
     }
     
     // Méthode pour rendre une explosion
-    renderExplosion(ctx, x, y, playerId) {
-        const explosionData = this.damageEffects.get(`explosion_${playerId}`);
+    renderExplosion(ctx, x, y, explosionKey) {
+        const explosionData = this.damageEffects.get(explosionKey);
         if (!explosionData) return;
         
         const progress = (Date.now() - explosionData.startTime) / explosionData.duration;
         if (progress > 1) {
-            this.damageEffects.delete(`explosion_${playerId}`);
+            this.damageEffects.delete(explosionKey);
             return;
         }
         
         ctx.save();
         ctx.translate(x, y);
         
-        // Cercles d'explosion multiples
-        for (let i = 0; i < 3; i++) {
-            const delay = i * 0.1;
-            const ringProgress = Math.max(0, Math.min(1, (progress - delay) / (1 - delay)));
+        // Utiliser le sprite d'explosion s'il est chargé
+        if (this.explosionSprite && this.explosionSprite.complete) {
+            // Calculer la taille et l'opacité selon le progrès
+            const maxSize = 120;
+            const size = maxSize * (0.5 + progress * 0.5); // Grandit avec le temps
+            const alpha = 1 - progress; // Devient transparent avec le temps
             
-            if (ringProgress > 0 && ringProgress < 1) {
-                const radius = 20 + ringProgress * 60;
-                const alpha = (1 - ringProgress) * 0.8;
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(
+                this.explosionSprite, 
+                -size / 2, 
+                -size / 2, 
+                size, 
+                size
+            );
+            ctx.globalAlpha = 1;
+        } else {
+            // Fallback: Cercles d'explosion multiples si le sprite n'est pas chargé
+            for (let i = 0; i < 3; i++) {
+                const delay = i * 0.1;
+                const ringProgress = Math.max(0, Math.min(1, (progress - delay) / (1 - delay)));
                 
-                ctx.strokeStyle = `rgba(255, ${100 + i * 50}, ${i * 30}, ${alpha})`;
-                ctx.lineWidth = 3 + (1 - ringProgress) * 5;
-                ctx.beginPath();
-                ctx.arc(0, 0, radius, 0, Math.PI * 2);
-                ctx.stroke();
-                
-                // Remplissage
-                const fillAlpha = (1 - ringProgress) * 0.3;
-                ctx.fillStyle = `rgba(255, ${150 + i * 30}, 0, ${fillAlpha})`;
-                ctx.fill();
+                if (ringProgress > 0 && ringProgress < 1) {
+                    const radius = 20 + ringProgress * 60;
+                    const alpha = (1 - ringProgress) * 0.8;
+                    
+                    ctx.strokeStyle = `rgba(255, ${100 + i * 50}, ${i * 30}, ${alpha})`;
+                    ctx.lineWidth = 3 + (1 - ringProgress) * 5;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                    
+                    // Remplissage
+                    const fillAlpha = (1 - ringProgress) * 0.3;
+                    ctx.fillStyle = `rgba(255, ${150 + i * 30}, 0, ${fillAlpha})`;
+                    ctx.fill();
+                }
             }
         }
         
-        // Flash central
+        // Flash central (garde cet effet même avec le sprite)
         if (progress < 0.3) {
             const flashAlpha = (1 - progress / 0.3) * 0.9;
             const flashRadius = 30 * (1 + progress * 2);
@@ -1180,6 +1220,31 @@ class GameEngine {
         this.socket.on('playerRespawned', (data) => {
             // Effet de respawn
             this.particleSystem.createRespawnEffect(data.position.x, data.position.y);
+            if (soundManager) soundManager.playRespawn();
+        });
+        
+        // NOUVEAU : Gérer les explosions de projectiles
+        this.socket.on('projectileExploded', (data) => {
+            // Créer l'explosion visuelle
+            this.damageEffects.set(`projectile_explosion_${data.id}`, {
+                startTime: Date.now(),
+                duration: 800,
+                x: data.x,
+                y: data.y,
+                type: data.type,
+                radius: data.radius
+            });
+            
+            // Créer des particules d'explosion
+            this.particleSystem.createExplosion(data.x, data.y);
+        });
+        
+        // NOUVEAU : Gérer l'utilisation du healthpack
+        this.socket.on('healthpackUsed', (data) => {
+            // Créer des particules de soin
+            this.particleSystem.createHealingEffect(data.position.x, data.position.y);
+            
+            // Jouer le son de respawn pour le soin
             if (soundManager) soundManager.playRespawn();
         });
     }
@@ -1243,7 +1308,8 @@ renderItemSlot() {
             const itemIcons = {
                 'bomb': '💣',
                 'rocket': '🚀',
-                'superboost': '⚡'
+                'superboost': '⚡',
+                'healthpack': '💚'
             };
             
             ctx.fillStyle = '#ffffff';
@@ -1269,7 +1335,7 @@ renderItemSlot() {
 
 // Améliorer aussi startItemSlotAnimation pour l'animation casino
 startItemSlotAnimation(finalItem) {
-    const items = ['bomb', 'rocket', 'superboost'];
+    const items = ['bomb', 'rocket', 'superboost', 'healthpack'];
     
     // Stocker l'animation en cours
     this.itemSlotAnimation = {
@@ -1518,6 +1584,41 @@ class ParticleSystem {
         }
     }
     
+    createHealingEffect(x, y) {
+        // Particules vertes qui montent
+        for (let i = 0; i < 20; i++) {
+            const angle = (Math.random() - 0.5) * Math.PI * 0.5; // Angle vers le haut
+            const speed = 50 + Math.random() * 100;
+            
+            this.particles.push({
+                x: x + (Math.random() - 0.5) * 30,
+                y: y + (Math.random() - 0.5) * 30,
+                vx: Math.cos(angle) * speed * 0.3,
+                vy: -Math.abs(Math.sin(angle) * speed), // Toujours vers le haut
+                size: 4 + Math.random() * 3,
+                life: 1 + Math.random() * 0.5,
+                maxLife: 1 + Math.random() * 0.5,
+                color: '#00ff00',
+                type: 'healing'
+            });
+        }
+        
+        // Quelques croix vertes
+        for (let i = 0; i < 5; i++) {
+            this.particles.push({
+                x: x + (Math.random() - 0.5) * 20,
+                y: y + (Math.random() - 0.5) * 20,
+                vx: (Math.random() - 0.5) * 20,
+                vy: -50 - Math.random() * 50,
+                size: 8,
+                life: 1.5,
+                maxLife: 1.5,
+                color: '#00ff00',
+                type: 'healingCross'
+            });
+        }
+    }
+    
     update(deltaTime) {
         this.particles = this.particles.filter(particle => {
             particle.life -= deltaTime;
@@ -1585,6 +1686,30 @@ class ParticleSystem {
                     particle.x + Math.cos(particle.angle) * 20 * lifeRatio,
                     particle.y + Math.sin(particle.angle) * 20 * lifeRatio
                 );
+                ctx.stroke();
+            } else if (particle.type === 'healing') {
+                // Particules vertes brillantes
+                ctx.fillStyle = particle.color;
+                ctx.globalAlpha = lifeRatio * 0.8;
+                ctx.shadowColor = '#00ff00';
+                ctx.shadowBlur = 5;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            } else if (particle.type === 'healingCross') {
+                // Croix vertes
+                ctx.strokeStyle = particle.color;
+                ctx.globalAlpha = lifeRatio;
+                ctx.lineWidth = 3;
+                const crossSize = particle.size * lifeRatio;
+                ctx.beginPath();
+                // Ligne verticale
+                ctx.moveTo(particle.x, particle.y - crossSize);
+                ctx.lineTo(particle.x, particle.y + crossSize);
+                // Ligne horizontale
+                ctx.moveTo(particle.x - crossSize, particle.y);
+                ctx.lineTo(particle.x + crossSize, particle.y);
                 ctx.stroke();
             }
         });

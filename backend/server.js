@@ -586,13 +586,17 @@ class Player {
 
     turnLeft() {
         if (Math.abs(this.speed) > 0.1) {
-            this.angle -= GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED);
+            // Réduire le turn rate pour tous les boosts (niveau 1, 2, 3) et super boost item
+            const turnRateMultiplier = (this.isBoosting || this.isSuperBoosting) ? 0.6 : 1.0;
+            this.angle -= GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED) * turnRateMultiplier;
         }
     }
 
     turnRight() {
         if (Math.abs(this.speed) > 0.1) {
-            this.angle += GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED);
+            // Réduire le turn rate pour tous les boosts (niveau 1, 2, 3) et super boost item
+            const turnRateMultiplier = (this.isBoosting || this.isSuperBoosting) ? 0.6 : 1.0;
+            this.angle += GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED) * turnRateMultiplier;
         }
     }
 }
@@ -1042,10 +1046,12 @@ class Room {
                 const rand = Math.random();
                 let itemType;
                 
-                if (rand < 0.6) {
-                    itemType = 'bomb'; // 60%
-                } else if (rand < 0.9) {
-                    itemType = 'rocket'; // 30%
+                if (rand < 0.45) {
+                    itemType = 'healthpack'; // 45%
+                } else if (rand < 0.70) {
+                    itemType = 'bomb'; // 25%
+                } else if (rand < 0.90) {
+                    itemType = 'rocket'; // 20%
                 } else {
                     itemType = 'superboost'; // 10%
                 }
@@ -1084,6 +1090,10 @@ class Room {
                 
             case 'superboost':
                 this.useSuperBoost(player);
+                break;
+                
+            case 'healthpack':
+                this.useHealthpack(player);
                 break;
         }
         
@@ -1162,6 +1172,23 @@ class Room {
         });
         
         console.log(`⚡ ${player.pseudo} a activé le super booster !`);
+    }
+    
+    useHealthpack(player) {
+        const healAmount = 50;
+        const oldHp = player.hp;
+        player.hp = Math.min(player.hp + healAmount, player.maxHp);
+        const actualHeal = player.hp - oldHp;
+        
+        // Envoyer l'événement de soin
+        io.to(this.id).emit('healthpackUsed', {
+            playerId: player.id,
+            healAmount: actualHeal,
+            newHp: player.hp,
+            position: { x: player.x, y: player.y }
+        });
+        
+        console.log(`💚 ${player.pseudo} a utilisé un pack de soin (+${actualHeal} HP) !`);
     }
     
     // Gérer l'explosion d'un projectile

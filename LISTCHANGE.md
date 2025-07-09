@@ -83,7 +83,19 @@ When starting a new session, ask these questions to quickly understand the proje
 - Player info box: 220x85px
 - All multiplied by `this.scale` (canvas.width / 1536)
 
-### Pending Git Changes
-- Modified: `backend/server.js`, `frontend/js/game.js`
-- New file: `assets/healthpack.png`
-- Multiple deleted/added map and asset files from previous changes
+### Lobby Layout Changes
+- Moved map selector to right side of lobby (side-by-side with player info)
+- Map selector now visible to all players but only interactive for host
+- Non-hosts see opacity 0.7 and "Only host can select" message
+- Added CSS wrapper `.lobby-content-wrapper` with flexbox layout
+
+### Menu Page Reorganization
+- Public and Private room sections now side-by-side
+- Button text changes:
+  - "Join a game" → "Join a room"
+  - "Create a private room" → "Create a room"
+- Room code input moved UNDER "Join with code" button
+- Room code input width reduced to 120px for 6 characters
+- Placeholder changed from "ROOM CODE" to "CODE"
+- Section width increased to 400px max to prevent text wrapping
+- All buttons set to consistent 200px width

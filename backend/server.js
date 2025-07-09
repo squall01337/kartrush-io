@@ -644,6 +644,34 @@ class Room {
         this.itemBoxes = [];
         this.projectiles = new Map();
         this.lastItemSpawn = 0;
+        
+        // Available colors for players
+        this.availableColors = [
+            '#ff4444', // Red
+            '#44ff44', // Green
+            '#4444ff', // Blue
+            '#ffff44', // Yellow
+            '#ff44ff', // Magenta
+            '#44ffff'  // Cyan
+        ];
+    }
+    
+    // Get next available color for new player
+    getAvailableColor() {
+        const usedColors = new Set();
+        this.players.forEach(player => {
+            usedColors.add(player.color);
+        });
+        
+        // Find first available color
+        for (const color of this.availableColors) {
+            if (!usedColors.has(color)) {
+                return color;
+            }
+        }
+        
+        // If all colors are taken, return the first one
+        return this.availableColors[0];
     }
 
     // Nouvelle méthode pour vérifier si l'hôte peut démarrer
@@ -2091,15 +2119,19 @@ io.on('connection', (socket) => {
     console.log(`Joueur connecté: ${socket.id}`);
 
     socket.on('createRoom', (data) => {
-        const { pseudo, color } = data;
-        
-        // Créer le joueur
-        const player = new Player(socket.id, pseudo, color);
-        gameState.players.set(socket.id, player);
+        const { pseudo } = data;
         
         // Créer une room privée avec un code court
         const roomCode = generateRoomCode();
         const room = new Room(roomCode, true); // L'ID de la room EST le code
+        
+        // Get available color for the player
+        const availableColor = room.getAvailableColor();
+        
+        // Créer le joueur avec la couleur disponible
+        const player = new Player(socket.id, pseudo, availableColor);
+        gameState.players.set(socket.id, player);
+        
         room.host = player.id; // Marquer l'hôte
         gameState.rooms.set(roomCode, room); // Utiliser le code comme clé
         
@@ -2113,7 +2145,8 @@ io.on('connection', (socket) => {
             playerId: player.id,
             isPrivate: true,
             roomCode: roomCode,   // Le code explicite pour l'affichage
-            isHost: true
+            isHost: true,
+            assignedColor: player.color  // Send the assigned color
         });
         
         // Envoyer la map sélectionnée (par défaut)
@@ -2123,17 +2156,50 @@ io.on('connection', (socket) => {
         
         broadcastPlayersList(room);
     });
+    
+    socket.on('changeColor', (data) => {
+        const { color } = data;
+        const player = gameState.players.get(socket.id);
+        const room = findPlayerRoom(socket.id);
+        
+        if (!player || !room) return;
+        
+        // Check if color is available
+        const usedColors = new Set();
+        room.players.forEach(p => {
+            if (p.id !== player.id) {
+                usedColors.add(p.color);
+            }
+        });
+        
+        if (!usedColors.has(color) && room.availableColors.includes(color)) {
+            // Update player color
+            player.color = color;
+            
+            // Broadcast the update to all players in the room
+            broadcastPlayersList(room);
+        } else {
+            // Color is not available, send back the current color
+            socket.emit('colorNotAvailable', {
+                currentColor: player.color
+            });
+        }
+    });
 
     socket.on('createPublicRoom', (data) => {
-        const { pseudo, color } = data;
-        
-        // Créer le joueur
-        const player = new Player(socket.id, pseudo, color);
-        gameState.players.set(socket.id, player);
+        const { pseudo } = data;
         
         // Always create a new public room
         const roomCode = generateRoomCode();
         const room = new Room(roomCode, false); // false = public room
+        
+        // Get available color for the player
+        const availableColor = room.getAvailableColor();
+        
+        // Créer le joueur avec la couleur disponible
+        const player = new Player(socket.id, pseudo, availableColor);
+        gameState.players.set(socket.id, player);
+        
         room.host = player.id;
         gameState.rooms.set(roomCode, room);
         
@@ -2148,7 +2214,8 @@ io.on('connection', (socket) => {
                 playerId: player.id,
                 isPrivate: false,
                 roomCode: room.id,
-                isHost: true
+                isHost: true,
+                assignedColor: player.color  // Send the assigned color
             });
 
             // Send selected map
@@ -2162,7 +2229,7 @@ io.on('connection', (socket) => {
 
     // Nouveau handler pour rejoindre avec un code
     socket.on('joinRoomWithCode', (data) => {
-        const { pseudo, color, roomCode } = data;
+        const { pseudo, roomCode } = data;
         
         // Chercher la room par son code (publique ou privée)
         const room = gameState.rooms.get(roomCode.toUpperCase());
@@ -2182,8 +2249,11 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Créer le joueur
-        const player = new Player(socket.id, pseudo, color);
+        // Get available color for the player
+        const availableColor = room.getAvailableColor();
+        
+        // Créer le joueur avec la couleur disponible
+        const player = new Player(socket.id, pseudo, availableColor);
         gameState.players.set(socket.id, player);
         
         // Ajouter le joueur à la room
@@ -2195,7 +2265,8 @@ io.on('connection', (socket) => {
                 playerId: player.id,
                 isPrivate: room.isPrivate,
                 roomCode: room.id,
-                isHost: false
+                isHost: false,
+                assignedColor: player.color  // Send the assigned color
             });
             
             // Envoyer la map sélectionnée
@@ -2393,10 +2464,17 @@ function broadcastPlayersList(room) {
         isHost: p.id === room.host
     }));
     
+    // Get list of used colors
+    const usedColors = new Set();
+    room.players.forEach(player => {
+        usedColors.add(player.color);
+    });
+    
     io.to(room.id).emit('playersUpdate', {
         players: playersList,
         canStart: room.canHostStart(), // Utiliser la nouvelle méthode
-        hostId: room.host
+        hostId: room.host,
+        usedColors: Array.from(usedColors)
     });
 }
 

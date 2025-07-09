@@ -216,6 +216,11 @@ class GameClient {
         // Gérer le sélecteur de couleur dans le lobby
         document.addEventListener('click', (e) => {
             if (e.target.classList.contains('lobby-color-option')) {
+                // Check if color is available
+                if (e.target.classList.contains('unavailable')) {
+                    return; // Don't allow selection of unavailable colors
+                }
+                
                 // Retirer la sélection précédente
                 document.querySelectorAll('.lobby-color-option').forEach(opt => 
                     opt.classList.remove('selected')
@@ -254,6 +259,30 @@ class GameClient {
             opt.classList.remove('selected');
             if (opt.dataset.color === this.selectedColor) {
                 opt.classList.add('selected');
+            }
+        });
+    }
+    
+    // Update available colors based on what's already taken
+    updateAvailableColors(usedColors) {
+        const allColors = ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff', '#44ffff'];
+        
+        document.querySelectorAll('.lobby-color-option').forEach(opt => {
+            const color = opt.dataset.color;
+            
+            // Check if this color is used by another player (not self)
+            const isUsedByOther = usedColors.includes(color) && color !== this.selectedColor;
+            
+            if (isUsedByOther) {
+                opt.classList.add('unavailable');
+                opt.style.opacity = '0.3';
+                opt.style.cursor = 'not-allowed';
+                opt.title = 'Color already taken';
+            } else {
+                opt.classList.remove('unavailable');
+                opt.style.opacity = '1';
+                opt.style.cursor = 'pointer';
+                opt.title = '';
             }
         });
     }
@@ -548,6 +577,12 @@ class GameClient {
             this.roomId = data.roomId;
             this.isHost = data.isHost || false;
             
+            // Update the selected color to match the assigned color
+            if (data.assignedColor) {
+                this.selectedColor = data.assignedColor;
+                this.updateLobbyColorSelector();
+            }
+            
             const roomTypeEl = document.getElementById('roomType');
             const roomCodeEl = document.getElementById('roomCode');
             
@@ -596,11 +631,23 @@ class GameClient {
             }
         });
 
+        // Handle color not available
+        this.socket.on('colorNotAvailable', (data) => {
+            this.selectedColor = data.currentColor;
+            this.updateLobbyColorSelector();
+            this.showAlert('This color is already taken by another player');
+        });
+
         // Modifier le handler playersUpdate
         this.socket.on('playersUpdate', (data) => {
             this.updatePlayersList(data.players);
             this.hostId = data.hostId;
             this.totalPlayers = data.players.length;
+            
+            // Update available colors
+            if (data.usedColors) {
+                this.updateAvailableColors(data.usedColors);
+            }
             
             const startButton = document.getElementById('startGame');
             const mapSelector = document.getElementById('mapSelector');

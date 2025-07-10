@@ -639,6 +639,7 @@ class Room {
         this.rematchVotes = new Set(); // Nouveaux votes pour rejouer
         this.rematchTimer = null; // Timer pour le rematch
         this.selectedMap = 'random'; // Map sélectionnée par l'hôte - random par défaut
+        this.actualMapId = null; // Map réellement chargée quand random est sélectionné
         
         // NOUVEAU : Système d'objets
         this.itemBoxes = [];
@@ -654,6 +655,10 @@ class Room {
             '#ff44ff', // Magenta
             '#44ffff'  // Cyan
         ];
+        
+        // Kick tracking system
+        this.kickedPlayers = new Map(); // playerId -> kick count
+        this.bannedPlayers = new Set(); // playerIds banned from this room
     }
     
     // Get next available color for new player
@@ -750,6 +755,8 @@ class Room {
         this.lastItemSpawn = 0;
         
         // NE PAS réinitialiser la selectedMap ici, elle doit persister
+        // Mais réinitialiser actualMapId pour permettre un nouveau tirage aléatoire
+        this.actualMapId = null;
         
         // Réinitialiser l'état ready de tous les joueurs (sauf l'hôte)
         for (let player of this.players.values()) {
@@ -834,6 +841,50 @@ class Room {
         // Renvoyer au lobby
         broadcastPlayersList(this);
     }
+    
+    // Kick player method
+    kickPlayer(kickerId, targetId) {
+        // Check if kicker is the host
+        if (this.host !== kickerId) {
+            return { success: false, message: 'Only the host can kick players' };
+        }
+        
+        // Can't kick yourself
+        if (kickerId === targetId) {
+            return { success: false, message: 'You cannot kick yourself' };
+        }
+        
+        // Check if player is in room
+        if (!this.players.has(targetId)) {
+            return { success: false, message: 'Player not found in room' };
+        }
+        
+        // Update kick count
+        const currentKicks = this.kickedPlayers.get(targetId) || 0;
+        const newKickCount = currentKicks + 1;
+        this.kickedPlayers.set(targetId, newKickCount);
+        
+        // Ban if kicked 3 times
+        if (newKickCount >= 3) {
+            this.bannedPlayers.add(targetId);
+        }
+        
+        // Remove player from room
+        const player = this.players.get(targetId);
+        this.removePlayer(targetId);
+        
+        return { 
+            success: true, 
+            playerName: player.pseudo,
+            kickCount: newKickCount,
+            isBanned: newKickCount >= 3
+        };
+    }
+    
+    // Check if player is banned
+    isPlayerBanned(playerId) {
+        return this.bannedPlayers.has(playerId);
+    }
 
     startGame() {
         if (!this.canStart()) return false;
@@ -848,8 +899,11 @@ class Room {
         // NE PAS définir gameStartTime ici, attendre 3 secondes
         this.gameStartTime = null;
         
-        // Charger la map sélectionnée
-        loadMapData(this.selectedMap);
+        // Ne charger la map que si ce n'est pas 'random'
+        // (si c'est random, elle sera chargée par hostStartGame)
+        if (this.selectedMap !== 'random') {
+            loadMapData(this.selectedMap);
+        }
         
         this.raceSettings = trackData.raceSettings || {
             laps: 3,
@@ -2251,6 +2305,12 @@ io.on('connection', (socket) => {
             return;
         }
         
+        // Check if player is banned from this room
+        if (room.isPlayerBanned(socket.id)) {
+            socket.emit('error', { message: 'You have been banned from this room (kicked 3 times)' });
+            return;
+        }
+        
         // Get available color for the player
         const availableColor = room.getAvailableColor();
         
@@ -2335,10 +2395,14 @@ io.on('connection', (socket) => {
             if (availableMaps.length > 0) {
                 const randomIndex = Math.floor(Math.random() * availableMaps.length);
                 mapToLoad = availableMaps[randomIndex];
+                room.actualMapId = mapToLoad; // Stocker la map réellement chargée
                 console.log(`🎲 Map aléatoire choisie pour la course : ${mapToLoad}`);
             } else {
                 mapToLoad = 'beach'; // Fallback
+                room.actualMapId = 'beach';
             }
+        } else {
+            room.actualMapId = room.selectedMap;
         }
         
         // Charger la map et envoyer à tous les joueurs
@@ -2449,6 +2513,77 @@ io.on('connection', (socket) => {
                 room.useItem(player);
             }
         }
+    });
+
+    socket.on('kickPlayer', (data) => {
+        const { playerId } = data;
+        const room = findPlayerRoom(socket.id);
+        
+        if (!room) {
+            socket.emit('error', { message: 'Room not found' });
+            return;
+        }
+        
+        const result = room.kickPlayer(socket.id, playerId);
+        
+        if (result.success) {
+            // Notify the kicked player
+            io.to(playerId).emit('kickedFromRoom', {
+                message: `You have been kicked by the host`,
+                kickCount: result.kickCount,
+                isBanned: result.isBanned
+            });
+            
+            // Force disconnect the kicked player's socket from the room
+            const kickedSocket = io.sockets.sockets.get(playerId);
+            if (kickedSocket) {
+                kickedSocket.leave(room.id);
+            }
+            
+            // Notify all other players
+            socket.to(room.id).emit('playerKicked', {
+                playerId: playerId,
+                playerName: result.playerName,
+                message: `${result.playerName} has been kicked from the room`
+            });
+            
+            // Update player list for everyone
+            broadcastPlayersList(room);
+            
+            // Show success message to host
+            socket.emit('kickSuccess', {
+                playerName: result.playerName,
+                message: result.isBanned ? 
+                    `${result.playerName} has been kicked and banned (3 kicks)` : 
+                    `${result.playerName} has been kicked (${result.kickCount}/3 kicks)`
+            });
+        } else {
+            socket.emit('error', { message: result.message });
+        }
+    });
+
+    socket.on('chatMessage', (data) => {
+        const { message } = data;
+        const player = gameState.players.get(socket.id);
+        const room = findPlayerRoom(socket.id);
+        
+        if (!player || !room || !message) return;
+        
+        // Sanitize message (basic protection)
+        const sanitizedMessage = message.trim().substring(0, 100);
+        
+        if (sanitizedMessage.length === 0) return;
+        
+        // Broadcast message to all players in the room
+        io.to(room.id).emit('chatMessage', {
+            playerId: player.id,
+            playerName: player.pseudo,
+            playerColor: player.color,
+            message: sanitizedMessage,
+            timestamp: Date.now()
+        });
+        
+        console.log(`💬 Chat [${room.id}] ${player.pseudo}: ${sanitizedMessage}`);
     });
 
     socket.on('disconnect', () => {

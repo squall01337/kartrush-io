@@ -103,7 +103,7 @@
                 <div id="playersList" class="players-list"></div>
             </div>
             
-            <!-- Right side: Map selector (visible only for host) -->
+            <!-- Middle: Map selector (visible only for host) -->
             <div id="mapSelector" class="map-selector hidden">
                 <h3>Choose map</h3>
                 <div class="map-selector-container">
@@ -112,6 +112,16 @@
                         <!-- Les maps seront ajoutées dynamiquement ici -->
                     </div>
                     <button class="map-nav-btn map-nav-next" id="mapNextBtn">▶</button>
+                </div>
+            </div>
+            
+            <!-- Right side: Chat -->
+            <div id="lobbyChat" class="lobby-chat">
+                <h3>Chat</h3>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-container">
+                    <input type="text" id="chatInput" class="chat-input" placeholder="Type a message..." maxlength="100">
+                    <button id="chatSendBtn" class="chat-send-btn">➤</button>
                 </div>
             </div>
         </div>
@@ -157,7 +167,7 @@
             <div id="finalRanking" class="ranking"></div>
             <div class="results-actions">
                 <button id="playAgain">Replay</button>
-                <button id="backToMenu">Return to menu</button>
+                <button id="backToMenuFromResults">Return to menu</button>
             </div>
         </div>
     </div>
@@ -187,6 +197,19 @@
             <div class="custom-alert-content">
                 <p id="alertMessage">Alert message</p>
                 <button id="alertOkButton" class="alert-ok-btn">OK</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Custom Confirm Modal -->
+    <div id="customConfirm" class="custom-alert-overlay hidden">
+        <div class="custom-alert">
+            <div class="custom-alert-content">
+                <p id="confirmMessage">Confirm message</p>
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button id="confirmYesButton" class="alert-ok-btn">Yes</button>
+                    <button id="confirmNoButton" class="alert-ok-btn" style="background: #666;">No</button>
+                </div>
             </div>
         </div>
     </div>

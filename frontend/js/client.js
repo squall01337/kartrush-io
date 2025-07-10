@@ -40,8 +40,51 @@ class GameClient {
         const alertOverlay = document.getElementById('customAlert');
         const alertMessage = document.getElementById('alertMessage');
         
-        alertMessage.textContent = message;
+        // Replace newlines with <br> for multi-line messages
+        alertMessage.innerHTML = message.split('\n').map(line => 
+            line.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        ).join('<br>');
         alertOverlay.classList.remove('hidden');
+    }
+    
+    showConfirm(message) {
+        return new Promise((resolve) => {
+            const confirmOverlay = document.getElementById('customConfirm');
+            const confirmMessage = document.getElementById('confirmMessage');
+            const yesButton = document.getElementById('confirmYesButton');
+            const noButton = document.getElementById('confirmNoButton');
+            
+            confirmMessage.textContent = message;
+            confirmOverlay.classList.remove('hidden');
+            
+            const handleYes = () => {
+                cleanup();
+                resolve(true);
+            };
+            
+            const handleNo = () => {
+                cleanup();
+                resolve(false);
+            };
+            
+            const handleOverlayClick = (e) => {
+                if (e.target === confirmOverlay) {
+                    cleanup();
+                    resolve(false);
+                }
+            };
+            
+            const cleanup = () => {
+                confirmOverlay.classList.add('hidden');
+                yesButton.removeEventListener('click', handleYes);
+                noButton.removeEventListener('click', handleNo);
+                confirmOverlay.removeEventListener('click', handleOverlayClick);
+            };
+            
+            yesButton.addEventListener('click', handleYes);
+            noButton.addEventListener('click', handleNo);
+            confirmOverlay.addEventListener('click', handleOverlayClick);
+        });
     }
 
     initializeCustomAlert() {
@@ -199,7 +242,7 @@ class GameClient {
             this.voteRematch();
         });
 
-        document.getElementById('backToMenu').addEventListener('click', () => {
+        document.getElementById('backToMenuFromResults').addEventListener('click', () => {
             this.leaveResults();
         });
 
@@ -208,6 +251,9 @@ class GameClient {
         
         // Initialiser le sélecteur de maps
         this.initializeMapSelector();
+        
+        // Initialize chat
+        this.initializeChat();
     }
 
     // Nouvelle méthode pour gérer le sélecteur de couleur dans le lobby
@@ -590,6 +636,77 @@ class GameClient {
         requestAnimationFrame(fadeOut);
     }
 
+    initializeChat() {
+        const chatInput = document.getElementById('chatInput');
+        const chatSendBtn = document.getElementById('chatSendBtn');
+        
+        if (!chatInput || !chatSendBtn) return;
+        
+        // Send message on button click
+        chatSendBtn.addEventListener('click', () => {
+            this.sendChatMessage();
+        });
+        
+        // Send message on Enter key
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.sendChatMessage();
+            }
+        });
+    }
+    
+    sendChatMessage() {
+        const chatInput = document.getElementById('chatInput');
+        const message = chatInput.value.trim();
+        
+        if (message && this.socket && this.roomId) {
+            this.socket.emit('chatMessage', { message });
+            chatInput.value = '';
+        }
+    }
+    
+    addChatMessage(data) {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message';
+        
+        // Add appropriate class based on message type
+        if (data.system) {
+            messageDiv.classList.add('system-message');
+            messageDiv.innerHTML = `<div class="message-text">${data.message}</div>`;
+        } else {
+            if (data.playerId === this.playerId) {
+                messageDiv.classList.add('own-message');
+            }
+            
+            const authorStyle = data.playerColor ? `style="color: ${data.playerColor};"` : '';
+            messageDiv.innerHTML = `
+                <div class="message-author" ${authorStyle}>${data.playerName}</div>
+                <div class="message-text">${this.escapeHtml(data.message)}</div>
+            `;
+        }
+        
+        chatMessages.appendChild(messageDiv);
+        
+        // Scroll to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    clearChat() {
+        const chatMessages = document.getElementById('chatMessages');
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
+    }
+
     connectToServer() {
         this.socket = io();
 
@@ -645,6 +762,15 @@ class GameClient {
             }
             
             this.showRoomShareInfo(code, data.isPrivate);
+            
+            // Clear chat when joining a room
+            this.clearChat();
+            
+            // Add welcome message
+            this.addChatMessage({
+                system: true,
+                message: 'Welcome to the room! Use the chat to communicate with other players.'
+            });
             
             this.showScreen('lobby');
         });
@@ -1204,17 +1330,63 @@ class GameClient {
         });
 
         this.socket.on('playerJoined', (player) => {
-            // Joueur rejoint la partie
+            // Add system message to chat
+            this.addChatMessage({
+                system: true,
+                message: `${player.pseudo} joined the room`
+            });
         });
 
         this.socket.on('playerLeft', (data) => {
-            // Joueur a quitté la partie  
+            // Add system message to chat  
+            this.addChatMessage({
+                system: true,
+                message: `A player left the room`
+            });
+        });
+        
+        this.socket.on('chatMessage', (data) => {
+            this.addChatMessage(data);
         });
 
         this.socket.on('error', (error) => {
             this.showAlert(error.message);
         });
 
+        this.socket.on('kickedFromRoom', (data) => {
+            this.showScreen('menu');
+            
+            // Show alert about being kicked
+            let message = data.message;
+            if (data.isBanned) {
+                message += '\n\nYou have been banned from this room (3 kicks).';
+            } else {
+                message += `\n\nKick count: ${data.kickCount}/3`;
+            }
+            this.showAlert(message);
+            
+            // Stop music
+            if (this.gameEngine && this.gameEngine.music) {
+                soundManager.unregisterAudio('gameMusic');
+                this.gameEngine.music.pause();
+                this.gameEngine.music.currentTime = 0;
+                this.gameEngine.music = null;
+            }
+        });
+        
+        this.socket.on('playerKicked', (data) => {
+            // Show notification when another player is kicked
+            this.showNotification({
+                text: data.message,
+                type: 'warning',
+                icon: '⚠️'
+            });
+        });
+        
+        this.socket.on('kickSuccess', (data) => {
+            this.showAlert(data.message);
+        });
+        
         this.socket.on('kickedFromLobby', (data) => {
             this.showScreen('menu');
             
@@ -2100,6 +2272,13 @@ class GameClient {
     }
 
     // Modifier updatePlayersList pour afficher l'hôte et stocker les données
+    async kickPlayer(playerId, playerName) {
+        const confirmed = await this.showConfirm(`Are you sure you want to kick ${playerName}?`);
+        if (confirmed) {
+            this.socket.emit('kickPlayer', { playerId });
+        }
+    }
+
     updatePlayersList(players) {
         // Stocker les données des joueurs pour la gestion des couleurs
         this.lastPlayersData = players;
@@ -2153,6 +2332,37 @@ class GameClient {
             playerDiv.appendChild(colorDiv);
             playerDiv.appendChild(nameSpan);
             playerDiv.appendChild(statusDiv);
+            
+            // Add kick button for host (can't kick themselves)
+            if (this.isHost && player.id !== this.playerId && !player.isHost) {
+                const kickBtn = document.createElement('span');
+                kickBtn.className = 'kick-button';
+                kickBtn.innerHTML = '✖';
+                kickBtn.title = 'Kick player';
+                kickBtn.style.cssText = `
+                    margin-left: 10px;
+                    color: #ff4444;
+                    cursor: pointer;
+                    font-size: 20px;
+                    font-weight: bold;
+                    transition: all 0.2s;
+                    display: inline-block;
+                    line-height: 1;
+                    user-select: none;
+                `;
+                kickBtn.onmouseover = () => {
+                    kickBtn.style.color = '#ff6666';
+                    kickBtn.style.transform = 'scale(1.2)';
+                };
+                kickBtn.onmouseout = () => {
+                    kickBtn.style.color = '#ff4444';
+                    kickBtn.style.transform = 'scale(1)';
+                };
+                kickBtn.onclick = () => {
+                    this.kickPlayer(player.id, player.pseudo);
+                };
+                playerDiv.appendChild(kickBtn);
+            }
             
             // Mettre en évidence notre propre entrée
             if (player.id === this.playerId) {

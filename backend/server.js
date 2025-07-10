@@ -24,7 +24,7 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/assets', express.static(path.join(__dirname, '../assets')));
 
 // API endpoint to get list of public rooms
-app.get('/api/rooms', (req, res) => {
+app.get('/api/rooms', (_, res) => {
     const publicRooms = [];
     
     gameState.rooms.forEach((room, roomCode) => {
@@ -35,7 +35,7 @@ app.get('/api/rooms', (req, res) => {
             publicRooms.push({
                 code: roomCode,
                 hostName: hostPlayer ? hostPlayer.pseudo : 'Unknown',
-                map: room.selectedMap || 'lava_track',
+                map: room.selectedMap,
                 players: room.players.size,
                 maxPlayers: 6  // You mentioned 6 players maximum
             });
@@ -58,7 +58,6 @@ function loadAvailableMaps() {
             .filter(file => file.endsWith('.json'))
             .map(file => file.replace('.json', ''));
         
-        console.log('📁 Maps disponibles:', availableMaps);
     } catch (error) {
         console.error('❌ Erreur lors du chargement des maps:', error);
         availableMaps = ['beach']; // Map par défaut
@@ -72,7 +71,6 @@ function loadMapData(mapName = 'beach') {
         
         // Si la map n'existe pas, charger la map par défaut
         if (!fs.existsSync(mapPath)) {
-            console.log(`⚠️ Map ${mapName} non trouvée, chargement de beach`);
             mapPath = path.join(__dirname, '../maps/beach.json');
             
             // Si même la map par défaut n'existe pas, utiliser night_city
@@ -87,9 +85,6 @@ function loadMapData(mapName = 'beach') {
         // Convertir les anciens rectangles en lignes si nécessaire
         convertRectsToLines(trackData);
         
-        console.log('✅ Map chargée :', trackData.name);
-        console.log('📍 Checkpoints:', trackData.checkpoints ? trackData.checkpoints.length : 0);
-        console.log('🏁 Ligne d\'arrivée:', trackData.finishLine ? 'Oui' : 'Non');
         
         return true;
         
@@ -117,7 +112,6 @@ function loadMapData(mapName = 'beach') {
             }
         };
         
-        console.log('⚠️ Map de secours chargée');
         return false;
     }
 }
@@ -126,11 +120,10 @@ function loadMapData(mapName = 'beach') {
 function convertRectsToLines(data) {
     // Convertir les checkpoints rectangulaires en lignes
     if (data.checkpoints && data.checkpoints.length > 0 && data.checkpoints[0].width !== undefined) {
-        console.log('🔄 Conversion des checkpoints rectangulaires en lignes...');
         data.checkpoints = data.checkpoints.map(cp => {
             const cx = cp.x + cp.width / 2;
             const cy = cp.y + cp.height / 2;
-            const angle = (cp.angle || 0) * Math.PI / 180;
+            const angle = cp.angle * Math.PI / 180;
             const halfLength = cp.height / 2;
             
             // Ligne perpendiculaire au rectangle
@@ -149,11 +142,10 @@ function convertRectsToLines(data) {
     
     // Convertir la ligne d'arrivée
     if (data.finishLine && data.finishLine.width !== undefined) {
-        console.log('🔄 Conversion de la ligne d\'arrivée rectangulaire en ligne...');
         const fl = data.finishLine;
         const cx = fl.x + fl.width / 2;
         const cy = fl.y + fl.height / 2;
-        const angle = (fl.angle || 0) * Math.PI / 180;
+        const angle = fl.angle * Math.PI / 180;
         const halfLength = fl.height / 2;
         
         const perpAngle = angle + Math.PI / 2;
@@ -207,11 +199,6 @@ const GAME_CONFIG = {
 };
 
 // Classes des objets
-class Item {
-    constructor(type) {
-        this.type = type;
-    }
-}
 
 class ItemBox {
     constructor(x, y) {
@@ -287,7 +274,7 @@ class Projectile {
         }
     }
     
-    updateRocket(deltaTime, players, walls) {
+    updateRocket(_, players, walls) {
         if (this.target && players.has(this.target)) {
             const target = players.get(this.target);
             if (!target.isDead) {
@@ -434,7 +421,7 @@ class Player {
     }
 
     // Nouvelle méthode pour infliger des dégâts
-    takeDamage(amount, damageType = 'collision') {
+    takeDamage(amount) {
         if (this.invulnerableTime > Date.now() || this.isDead || this.isSuperBoosting) return false;
         
         const now = Date.now();
@@ -470,7 +457,7 @@ class Player {
         this.y = spawnPoint.y;
         this.lastX = spawnPoint.x;
         this.lastY = spawnPoint.y;
-        this.angle = spawnPoint.angle || 0;
+        this.angle = spawnPoint.angle;
         this.speed = 0;
         this.invulnerableTime = Date.now() + 2000; // 2 secondes d'invulnérabilité
         
@@ -1031,25 +1018,21 @@ class Room {
             loadMapData(this.selectedMap);
         }
         
-        this.raceSettings = trackData.raceSettings || {
-            laps: 3,
-            maxTime: 300000,
-            maxTimeWarning: 240000
-        };
+        this.raceSettings = trackData.raceSettings;
         
         // Initialiser les boîtes d'objets
         this.initializeItemBoxes();
         
-        const spawnPoints = (trackData && trackData.spawnPoints) || [];
+        const spawnPoints = trackData.spawnPoints;
 
         let index = 0;
         for (let player of this.players.values()) {
-            const pos = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+            const pos = spawnPoints[index % spawnPoints.length];
             player.x = pos.x;
             player.y = pos.y;
             player.lastX = pos.x;
             player.lastY = pos.y;
-            player.angle = (pos.angle || 0) * Math.PI / 180;
+            player.angle = pos.angle * Math.PI / 180;
             player.speed = 0;
             player.lap = 0;
             player.finished = false;
@@ -1098,7 +1081,6 @@ class Room {
         // Démarrer le timer après 3 secondes (temps du countdown)
         setTimeout(() => {
             this.gameStartTime = Date.now();
-            console.log('⏱️ Timer de course démarré !');
         }, 8800);
         
         return true;
@@ -1119,10 +1101,8 @@ class Room {
             
             this.itemBoxes.push(new ItemBox(centerX, centerY));
             
-            console.log(`📦 Boîte d'objet placée à (${centerX.toFixed(0)}, ${centerY.toFixed(0)})`);
         });
         
-        console.log(`✅ ${this.itemBoxes.length} boîtes d'objets chargées depuis la map ${this.selectedMap}`);
     }
 }
 
@@ -1180,7 +1160,6 @@ class Room {
             }
             
             if (raceTime >= this.raceSettings.maxTime) {
-                console.log('⏱️ Temps limite atteint !');
                 this.forceEndRace();
                 return;
             }
@@ -1191,7 +1170,7 @@ class Room {
         
         // Mettre à jour les projectiles
         for (const [id, projectile] of this.projectiles) {
-            projectile.update(deltaTime, this.players, trackData.continuousCurves || []);
+            projectile.update(deltaTime, this.players, trackData.continuousCurves);
             
             if (!projectile.active) {
                 // Explosion !
@@ -1211,14 +1190,14 @@ class Room {
                     spawnPoint = player.checkpointPositions[player.lastValidatedCheckpoint - 2];
                 } else if (player.lastValidatedCheckpoint > 0 && player.checkpointPositions[player.lastValidatedCheckpoint - 1]) {
                     // Si on n'a validé qu'un seul checkpoint, respawn au point de départ
-                    const spawnPoints = trackData.spawnPoints || [];
+                    const spawnPoints = trackData.spawnPoints;
                     const index = Array.from(this.players.values()).indexOf(player);
-                    spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+                    spawnPoint = spawnPoints[index % spawnPoints.length];
                 } else {
                     // Sinon, respawn au point de départ
-                    const spawnPoints = trackData.spawnPoints || [];
+                    const spawnPoints = trackData.spawnPoints;
                     const index = Array.from(this.players.values()).indexOf(player);
-                    spawnPoint = spawnPoints[index % spawnPoints.length] || { x: 400, y: 500, angle: 0 };
+                    spawnPoint = spawnPoints[index % spawnPoints.length];
                 }
                 
                 player.respawn(spawnPoint);
@@ -1296,7 +1275,6 @@ class Room {
                     animation: true
                 });
                 
-                console.log(`📦 ${player.pseudo} a ramassé ${itemType}`);
                 break;
             }
         }
@@ -1343,7 +1321,6 @@ class Room {
             ownerId: player.id
         });
         
-        console.log(`💣 ${player.pseudo} a posé une bombe !`);
     }
     
     useRocket(player) {
@@ -1386,7 +1363,6 @@ class Room {
             targetId: target
         });
         
-        console.log(`🚀 ${player.pseudo} a lancé une roquette${target ? ' sur ' + this.players.get(target).pseudo : ''} !`);
     }
     
     useSuperBoost(player) {
@@ -1401,7 +1377,6 @@ class Room {
             duration: 10000
         });
         
-        console.log(`⚡ ${player.pseudo} a activé le super booster !`);
     }
     
     useHealthpack(player) {
@@ -1418,13 +1393,12 @@ class Room {
             position: { x: player.x, y: player.y }
         });
         
-        console.log(`💚 ${player.pseudo} a utilisé un pack de soin (+${actualHeal} HP) !`);
     }
     
     // Gérer l'explosion d'un projectile
     handleProjectileExplosion(projectile) {
         // Vérifier les joueurs dans le rayon
-        for (const [id, player] of this.players) {
+        for (const [_, player] of this.players) {
             if (player.isDead) continue;
             
             const dx = player.x - projectile.x;
@@ -1532,7 +1506,6 @@ class Room {
         // Émettre l'événement avec le niveau de boost
         io.to(player.id).emit('boostActivated', { level: player.boostLevel });
         
-        console.log(`🚀 ${player.pseudo} - Boost niveau ${player.boostLevel} !`);
     }
 
     // Méthode utilitaire pour calculer la distance d'un point à une ligne
@@ -1591,7 +1564,6 @@ class Room {
     }
 
     forceEndRace() {
-        console.log('⏱️ Course terminée - Temps limite atteint !');
         
         // Marquer tous les joueurs non finis comme DNF (Did Not Finish)
         for (let player of this.players.values()) {
@@ -1644,7 +1616,6 @@ class Room {
                         player.lap = 1;
                         player.nextCheckpoint = 0;
                         
-                        console.log(`🚦 ${player.pseudo} - Tour 1 commencé !`);
                         
                         io.to(player.id).emit('lapStarted', {
                             message: '1st Lap',
@@ -1657,7 +1628,6 @@ class Room {
                         player.lap++;
                         player.nextCheckpoint = 0;
                         
-                        console.log(`🏁 ${player.pseudo} - Lap ${player.lap}/${this.raceSettings.laps} !`);
                         
                         if (player.lap > this.raceSettings.laps) {
                             player.finished = true;
@@ -1726,7 +1696,6 @@ class Room {
                         
                         player.nextCheckpoint++;
                         
-                        console.log(`✅ ${player.pseudo} - Checkpoint ${player.nextCheckpoint}/${trackData.checkpoints.length}`);
                         
                         io.to(player.id).emit('checkpointPassed', {
                             checkpoint: player.nextCheckpoint,
@@ -1792,7 +1761,6 @@ class Room {
     }
 
     endRace() {
-        console.log('🏁 Course terminée !');
         
         // Arrêter la boucle de jeu
         this.stopGame();
@@ -1812,7 +1780,7 @@ class Room {
                 // Ceux qui ont voté rematch restent, les autres sont kickés
                 const playersToRemove = [];
                 
-                for (let [playerId, player] of this.players) {
+                for (let [playerId] of this.players) {
                     if (!this.rematchVotes.has(playerId)) {
                         playersToRemove.push(playerId);
                     }
@@ -2037,11 +2005,8 @@ class Room {
         const minDist = radius + 4;
         const minDistSq = minDist * minDist;
 
-        const prevX = player.x;
-        const prevY = player.y;
-        const prevSpeed = player.speed;
 
-        for (const curve of trackData.continuousCurves || []) {
+        for (const curve of trackData.continuousCurves) {
             const points = curve.points;
             const len = points.length;
             
@@ -2301,7 +2266,6 @@ class Room {
 
 // Gestion des connexions Socket.io
 io.on('connection', (socket) => {
-    console.log(`Joueur connecté: ${socket.id}`);
 
     socket.on('createRoom', (data) => {
         const { pseudo } = data;
@@ -2323,7 +2287,6 @@ io.on('connection', (socket) => {
         room.addPlayer(player);
         socket.join(roomCode); // Joindre avec le code
         
-        console.log('🔑 Room privée créée - Code:', roomCode);
         
         socket.emit('joinedRoom', {
             roomId: roomCode,     // L'ID est le code
@@ -2389,7 +2352,6 @@ io.on('connection', (socket) => {
         room.host = player.id;
         gameState.rooms.set(roomCode, room);
         
-        console.log('🌍 New public room created - Code:', roomCode);
         
         // Add player to room
         if (room.addPlayer(player)) {
@@ -2527,7 +2489,6 @@ io.on('connection', (socket) => {
                 const randomIndex = Math.floor(Math.random() * availableMaps.length);
                 mapToLoad = availableMaps[randomIndex];
                 room.actualMapId = mapToLoad; // Stocker la map réellement chargée
-                console.log(`🎲 Map aléatoire choisie pour la course : ${mapToLoad}`);
             } else {
                 mapToLoad = 'beach'; // Fallback
                 room.actualMapId = 'beach';
@@ -2567,15 +2528,12 @@ io.on('connection', (socket) => {
         // Si c'est random, on garde "random" sélectionné
         if (data.mapId === 'random') {
             room.selectedMap = 'random';
-            console.log(`🎲 Room ${room.id} - Mode aléatoire activé`);
         } else {
             // Vérifier que la map existe
             if (!availableMaps.includes(data.mapId) && data.mapId !== 'lava_track') {
-                console.log(`⚠️ Map ${data.mapId} non trouvée dans la liste`);
                 return;
             }
             room.selectedMap = data.mapId;
-            console.log(`🗺️ Room ${room.id} - Map changée : ${data.mapId}`);
         }
         
         // Notifier tous les joueurs de la room
@@ -2602,7 +2560,6 @@ io.on('connection', (socket) => {
             // Mettre à jour la liste des joueurs
             broadcastPlayersList(room);
             
-            console.log(`🎨 ${player.pseudo} a changé de couleur : ${data.color}`);
         }
     });
 
@@ -2727,11 +2684,9 @@ io.on('connection', (socket) => {
             timestamp: Date.now()
         });
         
-        console.log(`💬 Chat [${room.id}] ${player.pseudo}: ${sanitizedMessage}`);
     });
 
     socket.on('disconnect', () => {
-        console.log(`Joueur déconnecté: ${socket.id}`);
         
         const room = findPlayerRoom(socket.id);
         if (room) {
@@ -2783,7 +2738,7 @@ function broadcastPlayersList(room) {
 }
 
 // Route pour obtenir la liste des maps disponibles
-app.get('/api/maps', (req, res) => {
+app.get('/api/maps', (_, res) => {
     const maps = availableMaps.map(mapId => {
         // Pour chaque map, essayer de charger ses infos
         try {
@@ -2792,7 +2747,7 @@ app.get('/api/maps', (req, res) => {
             return {
                 id: mapId,
                 name: data.name || mapId,
-                thumbnail: data.background || 'assets/track_background.png' // Utiliser directement background
+                thumbnail: data.background
             };
         } catch (e) {
             return {
@@ -2807,7 +2762,7 @@ app.get('/api/maps', (req, res) => {
 });
 
 // Route pour servir le frontend
-app.get('/', (req, res) => {
+app.get('/', (_, res) => {
     res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 

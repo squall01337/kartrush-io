@@ -143,9 +143,7 @@ class GameClient {
         this.backgroundMusic = new Audio('assets/audio/kartrush_theme.mp3');
         this.backgroundMusic.loop = true;
         this.backgroundMusic.volume = soundManager.getVolumeFor('backgroundMusic');
-        this.backgroundMusic.play().catch(e => {
-            console.log('Musique de fond autorisée par le clic utilisateur');
-        });
+        this.backgroundMusic.play().catch(e => console.log('Musique de fond autorisée par le clic utilisateur'));
         
         // Enregistrer la musique dans le gestionnaire
         soundManager.registerAudio('backgroundMusic', this.backgroundMusic);
@@ -709,10 +707,6 @@ class GameClient {
 
     connectToServer() {
         this.socket = io();
-
-        this.socket.on('connect', () => {
-            console.log('Connecté au serveur');
-        });
 
         this.socket.on('joinedRoom', (data) => {
             this.playerId = data.playerId;
@@ -1847,7 +1841,6 @@ class GameClient {
             try {
                 soundManager.playVictory();
             } catch (e) {
-                console.log('Son non disponible');
             }
         }
     }

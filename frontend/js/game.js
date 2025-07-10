@@ -58,15 +58,11 @@ class GameEngine {
         this.itemIconsLoaded = false;
         this.itemIconsSprite.onload = () => {
             this.itemIconsLoaded = true;
-            console.log('✅ Sprite sheet des objets chargée');
         };
         
         // NOUVEAU : Sprite du healthpack (séparé)
         this.healthpackSprite = new Image();
         this.healthpackSprite.src = 'assets/healthpack.png';
-        this.healthpackSprite.onload = () => {
-            console.log('✅ Sprite healthpack chargé');
-        };
         
         this.itemSlotAnimation = null;
         this.pendingItem = null; // L'objet réel qu'on cache pendant l'animation
@@ -1436,7 +1432,6 @@ startItemSlotAnimation(finalItem) {
         lastChange: 0
     };
     
-    console.log('🎰 Animation casino démarrée pour:', finalItem);
 }
 
     renderItemSlotAnimation() {
@@ -1447,7 +1442,6 @@ startItemSlotAnimation(finalItem) {
         
         if (elapsed >= anim.duration) {
             // Animation terminée, donner l'objet au joueur
-            console.log('✅ Animation casino terminée, attribution de:', this.pendingItem);
             
             const player = this.gameState.players.find(p => p.id === this.playerId);
             if (player && this.pendingItem) {
@@ -1553,7 +1547,6 @@ startItemSlotAnimation(finalItem) {
     if (newLocalPlayer && localPlayer) {
         // Détecter si on vient de recevoir un nouvel objet
         if (!localPlayer.item && newLocalPlayer.item && !this.isAnimatingItem) {
-            console.log('🎰 Nouvel objet détecté:', newLocalPlayer.item);
             // Démarrer l'animation et cacher l'objet
             this.pendingItem = newLocalPlayer.item;
             this.isAnimatingItem = true;

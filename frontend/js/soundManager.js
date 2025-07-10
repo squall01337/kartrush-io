@@ -182,10 +182,7 @@ class SoundManager {
             scrapeClone.volume = this.getEffectiveVolume() * this.volumeMultipliers.wallScrape;
             scrapeClone.play().catch(e => {
                 console.log('Erreur lecture wall_scrape:', e);
-                this.playWallScrapeSynth();
             });
-        } else {
-            this.playWallScrapeSynth();
         }
     }
     
@@ -196,10 +193,7 @@ class SoundManager {
             hit.currentTime = 0;
             hit.play().catch(e => {
                 console.log('Erreur lecture wall_hit:', e);
-                this.playWallHitSynth();
             });
-        } else {
-            this.playWallHitSynth();
         }
     }
     
@@ -210,10 +204,7 @@ class SoundManager {
             collision.currentTime = 0;
             collision.play().catch(e => {
                 console.log('Erreur lecture player_collision:', e);
-                this.playCollisionSynth();
             });
-        } else {
-            this.playCollisionSynth();
         }
     }
     
@@ -224,10 +215,7 @@ class SoundManager {
             explosion.currentTime = 0;
             explosion.play().catch(e => {
                 console.log('Erreur lecture explosion:', e);
-                this.playExplosionSynth();
             });
-        } else {
-            this.playExplosionSynth();
         }
     }
     
@@ -238,10 +226,7 @@ class SoundManager {
             respawn.currentTime = 0;
             respawn.play().catch(e => {
                 console.log('Erreur lecture respawn:', e);
-                this.playRespawnSynth();
             });
-        } else {
-            this.playRespawnSynth();
         }
     }
 
@@ -250,12 +235,7 @@ class SoundManager {
         if (pickup) {
             pickup.volume = this.getEffectiveVolume() * this.volumeMultipliers.itemPickup;
             pickup.currentTime = 0;
-            pickup.play().catch(e => {
-                console.log('Erreur lecture item_pickup:', e);
-                this.playItemPickupSynth();
-            });
-        } else {
-            this.playItemPickupSynth();
+            pickup.play().catch(e => console.log('Erreur lecture item_pickup:', e));
         }
     }
     
@@ -264,12 +244,7 @@ class SoundManager {
         if (drop) {
             drop.volume = this.getEffectiveVolume() * this.volumeMultipliers.bombDrop;
             drop.currentTime = 0;
-            drop.play().catch(e => {
-                console.log('Erreur lecture bomb_drop:', e);
-                this.playBombDropSynth();
-            });
-        } else {
-            this.playBombDropSynth();
+            drop.play().catch(e => console.log('Erreur lecture bomb_drop:', e));
         }
     }
     
@@ -280,10 +255,7 @@ class SoundManager {
             explode.currentTime = 0;
             explode.play().catch(e => {
                 console.log('Erreur lecture bomb_explode:', e);
-                this.playExplosionSynth();
             });
-        } else {
-            this.playExplosionSynth();
         }
     }
     
@@ -294,10 +266,7 @@ class SoundManager {
             launch.currentTime = 0;
             launch.play().catch(e => {
                 console.log('Erreur lecture rocket_launch:', e);
-                this.playRocketLaunchSynth();
             });
-        } else {
-            this.playRocketLaunchSynth();
         }
     }
     
@@ -308,10 +277,7 @@ class SoundManager {
             explode.currentTime = 0;
             explode.play().catch(e => {
                 console.log('Erreur lecture rocket_explode:', e);
-                this.playExplosionSynth();
             });
-        } else {
-            this.playExplosionSynth();
         }
     }
     
@@ -322,295 +288,10 @@ class SoundManager {
             boost.currentTime = 0;
             boost.play().catch(e => {
                 console.log('Erreur lecture superboost:', e);
-                this.playSuperBoostSynth();
             });
-        } else {
-            this.playSuperBoostSynth();
         }
     }
     
-    // Sons synthétisés de fallback pour les objets
-    
-    playItemPickupSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Son de collecte agréable
-            for (let i = 0; i < 3; i++) {
-                const oscillator = audioContext.createOscillator();
-                oscillator.frequency.setValueAtTime(400 + i * 200, audioContext.currentTime + i * 0.1);
-                
-                const gain = audioContext.createGain();
-                gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime + i * 0.1);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + i * 0.1 + 0.2);
-                
-                oscillator.connect(gain);
-                gain.connect(audioContext.destination);
-                
-                oscillator.start(audioContext.currentTime + i * 0.1);
-                oscillator.stop(audioContext.currentTime + i * 0.1 + 0.2);
-            }
-        } catch (e) {
-            console.log('Erreur synthèse item_pickup:', e);
-        }
-    }
-    
-    playBombDropSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Son grave de chute
-            const oscillator = audioContext.createOscillator();
-            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(50, audioContext.currentTime + 0.3);
-            
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.5, audioContext.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            
-            oscillator.connect(gain);
-            gain.connect(audioContext.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
-        } catch (e) {
-            console.log('Erreur synthèse bomb_drop:', e);
-        }
-    }
-    
-    playRocketLaunchSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Sifflement ascendant
-            const oscillator = audioContext.createOscillator();
-            oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(2000, audioContext.currentTime + 0.5);
-            
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.6, audioContext.currentTime);
-            gain.gain.linearRampToValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime + 0.5);
-            
-            // Filtre pour le sifflement
-            const filter = audioContext.createBiquadFilter();
-            filter.type = 'highpass';
-            filter.frequency.value = 1000;
-            
-            oscillator.connect(filter);
-            filter.connect(gain);
-            gain.connect(audioContext.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.5);
-            
-            // Bruit de propulsion
-            this.playNoiseBurst(audioContext, 0.5, 3000, 0.4);
-        } catch (e) {
-            console.log('Erreur synthèse rocket_launch:', e);
-        }
-    }
-    
-    playSuperBoostSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Son électrique puissant
-            for (let i = 0; i < 5; i++) {
-                const oscillator = audioContext.createOscillator();
-                oscillator.type = 'sawtooth';
-                oscillator.frequency.setValueAtTime(100 + i * 100, audioContext.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(1000 + i * 200, audioContext.currentTime + 0.5);
-                
-                const gain = audioContext.createGain();
-                gain.gain.setValueAtTime(0, audioContext.currentTime);
-                gain.gain.linearRampToValueAtTime(this.getEffectiveVolume() * 0.2, audioContext.currentTime + 0.1);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
-                
-                const filter = audioContext.createBiquadFilter();
-                filter.type = 'bandpass';
-                filter.frequency.value = 500 + i * 200;
-                filter.Q.value = 5;
-                
-                oscillator.connect(filter);
-                filter.connect(gain);
-                gain.connect(audioContext.destination);
-                
-                oscillator.start();
-                oscillator.stop(audioContext.currentTime + 1);
-            }
-        } catch (e) {
-            console.log('Erreur synthèse superboost:', e);
-        }
-    }
-    
-    // Sons synthétisés comme fallback
-    
-    playWallScrapeSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const duration = 0.3;
-            
-            // Bruit blanc pour le frottement
-            const bufferSize = audioContext.sampleRate * duration;
-            const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-            const data = buffer.getChannelData(0);
-            
-            for (let i = 0; i < bufferSize; i++) {
-                data[i] = (Math.random() * 2 - 1) * 0.1;
-            }
-            
-            const noise = audioContext.createBufferSource();
-            noise.buffer = buffer;
-            
-            const filter = audioContext.createBiquadFilter();
-            filter.type = 'bandpass';
-            filter.frequency.value = 1000;
-            filter.Q.value = 10;
-            
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-            
-            noise.connect(filter);
-            filter.connect(gain);
-            gain.connect(audioContext.destination);
-            
-            noise.start();
-            noise.stop(audioContext.currentTime + duration);
-        } catch (e) {
-            console.log('Erreur synthèse wall_scrape:', e);
-        }
-    }
-    
-    playWallHitSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Impact basse fréquence
-            const oscillator = audioContext.createOscillator();
-            oscillator.frequency.setValueAtTime(100, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(30, audioContext.currentTime + 0.2);
-            
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.8, audioContext.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            
-            oscillator.connect(gain);
-            gain.connect(audioContext.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.3);
-            
-            // Bruit d'impact
-            this.playNoiseBurst(audioContext, 0.1, 2000);
-        } catch (e) {
-            console.log('Erreur synthèse wall_hit:', e);
-        }
-    }
-    
-    playCollisionSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Double impact
-            for (let i = 0; i < 2; i++) {
-                const delay = i * 0.05;
-                const oscillator = audioContext.createOscillator();
-                oscillator.frequency.setValueAtTime(150 - i * 30, audioContext.currentTime + delay);
-                
-                const gain = audioContext.createGain();
-                gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.6, audioContext.currentTime + delay);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + delay + 0.2);
-                
-                oscillator.connect(gain);
-                gain.connect(audioContext.destination);
-                
-                oscillator.start(audioContext.currentTime + delay);
-                oscillator.stop(audioContext.currentTime + delay + 0.2);
-            }
-        } catch (e) {
-            console.log('Erreur synthèse collision:', e);
-        }
-    }
-    
-    playExplosionSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Explosion basse fréquence
-            const oscillator = audioContext.createOscillator();
-            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(20, audioContext.currentTime + 0.5);
-            
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(this.getEffectiveVolume() * 0.9, audioContext.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1);
-            
-            oscillator.connect(gain);
-            gain.connect(audioContext.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 1);
-            
-            // Bruit blanc pour l'explosion
-            this.playNoiseBurst(audioContext, 0.8, 500, 0.9);
-        } catch (e) {
-            console.log('Erreur synthèse explosion:', e);
-        }
-    }
-    
-    playRespawnSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Son de téléportation ascendant
-            const oscillator = audioContext.createOscillator();
-            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1600, audioContext.currentTime + 0.5);
-            
-            const gain = audioContext.createGain();
-            gain.gain.setValueAtTime(0, audioContext.currentTime);
-            gain.gain.linearRampToValueAtTime(this.getEffectiveVolume() * 0.5, audioContext.currentTime + 0.1);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            
-            oscillator.connect(gain);
-            gain.connect(audioContext.destination);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } catch (e) {
-            console.log('Erreur synthèse respawn:', e);
-        }
-    }
-    
-    // Méthode utilitaire pour générer du bruit
-    playNoiseBurst(audioContext, duration, frequency, volume = 0.5) {
-        const bufferSize = audioContext.sampleRate * duration;
-        const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
-        const data = buffer.getChannelData(0);
-        
-        for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
-        }
-        
-        const noise = audioContext.createBufferSource();
-        noise.buffer = buffer;
-        
-        const filter = audioContext.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = frequency;
-        
-        const gain = audioContext.createGain();
-        gain.gain.setValueAtTime(this.getEffectiveVolume() * volume, audioContext.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-        
-        noise.connect(filter);
-        filter.connect(gain);
-        gain.connect(audioContext.destination);
-        
-        noise.start();
-        noise.stop(audioContext.currentTime + duration);
-    }
     
     playEngine() {
         const engine = this.sounds.engineLoop;
@@ -646,36 +327,9 @@ class SoundManager {
             boost.volume = this.getEffectiveVolume() * this.volumeMultipliers.boost;
             boost.currentTime = 0;
             boost.play().catch(e => {
-                // Fallback avec synthèse sonore
-                this.playBoostSynth();
+                console.log('Erreur lecture boost:', e);
             });
-        } else {
-            // Fallback si pas de fichier audio
-            this.playBoostSynth();
         }
-    }
-    
-    playBoostSynth() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            // Effet de montée en fréquence
-            oscillator.frequency.setValueAtTime(200, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.2);
-            oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.5);
-            
-            // Volume qui diminue
-            gainNode.gain.setValueAtTime(this.getEffectiveVolume() * 0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } catch (e) {}
     }
     
     // Méthode générique pour jouer un son temporaire
@@ -701,24 +355,6 @@ class SoundManager {
     
     playVictory() {
         return this.playSound('assets/audio/victory.wav', this.volumeMultipliers.victory);
-    }
-    
-    // Méthode de fallback avec Web Audio API
-    playTone(frequency, duration = 0.1, volumeMultiplier = 0.3) {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.frequency.value = frequency;
-            gainNode.gain.value = this.getEffectiveVolume() * volumeMultiplier;
-            
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + duration);
-        } catch (e) {}
     }
     
     // === GESTION DU VOLUME ===

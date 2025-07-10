@@ -1053,6 +1053,92 @@ class GameEngine {
                 ctx.shadowBlur = 20;
             }
             
+            // Drift effects
+            if (player.isDrifting) {
+                const chargeColors = [
+                    { spark: '#66ccff', trail: '#4488ff' },      // Level 1: Light blue
+                    { spark: '#cc66ff', trail: '#8844ff' },      // Level 2: Purple
+                    { spark: '#ff8844', trail: '#ff6600' }       // Level 3: Orange/Red
+                ];
+                
+                if (player.driftChargeLevel > 0) {
+                    const colors = chargeColors[player.driftChargeLevel - 1];
+                    
+                    // Tire smoke effect
+                    ctx.save();
+                    ctx.globalAlpha = 0.3;
+                    const smokeCount = 3;
+                    for (let i = 0; i < smokeCount; i++) {
+                        const age = (Date.now() * 0.001 + i * 0.5) % 1;
+                        const smokeX = -size/2 - age * 20;
+                        const smokeY = player.driftDirection * (size/2 + age * 10);
+                        const smokeSize = 10 + age * 15;
+                        
+                        ctx.fillStyle = `rgba(200, 200, 200, ${0.3 * (1 - age)})`;
+                        ctx.beginPath();
+                        ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+                    
+                    // Spark trail
+                    ctx.save();
+                    const sparkCount = 8 + player.driftChargeLevel * 4;
+                    for (let i = 0; i < sparkCount; i++) {
+                        const progress = i / sparkCount;
+                        const age = (Date.now() * 0.003 + progress) % 1;
+                        
+                        // Spark position
+                        const sparkX = -size/2 - age * 40 - Math.random() * 5;
+                        const sparkY = player.driftDirection * (size/2 + Math.sin(age * Math.PI * 2) * 8);
+                        
+                        // Spark trail effect
+                        const trailLength = 10 + player.driftChargeLevel * 5;
+                        const gradient = ctx.createLinearGradient(
+                            sparkX, sparkY,
+                            sparkX - trailLength, sparkY - player.driftDirection * 5
+                        );
+                        gradient.addColorStop(0, colors.spark);
+                        gradient.addColorStop(0.5, colors.trail);
+                        gradient.addColorStop(1, 'transparent');
+                        
+                        ctx.strokeStyle = gradient;
+                        ctx.lineWidth = 2 + player.driftChargeLevel;
+                        ctx.globalAlpha = (1 - age) * 0.8;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(sparkX, sparkY);
+                        ctx.lineTo(sparkX - trailLength, sparkY - player.driftDirection * 5);
+                        ctx.stroke();
+                        
+                        // Spark core
+                        ctx.fillStyle = colors.spark;
+                        ctx.globalAlpha = (1 - age);
+                        ctx.beginPath();
+                        ctx.arc(sparkX, sparkY, 1 + player.driftChargeLevel * 0.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+                    ctx.restore();
+                    
+                    // Ground glow effect
+                    ctx.save();
+                    const glowGradient = ctx.createRadialGradient(
+                        -size/2, player.driftDirection * size/2, 0,
+                        -size/2, player.driftDirection * size/2, size * 1.5
+                    );
+                    glowGradient.addColorStop(0, colors.trail + '40');
+                    glowGradient.addColorStop(1, 'transparent');
+                    ctx.fillStyle = glowGradient;
+                    ctx.fillRect(-size * 2, -size * 2, size * 4, size * 4);
+                    ctx.restore();
+                    
+                    // Enhanced shadow/glow
+                    ctx.shadowColor = colors.trail;
+                    ctx.shadowBlur = 15 + player.driftChargeLevel * 10;
+                }
+            }
+            
             const cachedSprite = this.spriteCache.get(player.color);
             
             if (cachedSprite) {

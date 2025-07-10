@@ -423,6 +423,14 @@ class Player {
         // Super booster
         this.isSuperBoosting = false;
         this.superBoostEndTime = 0;
+        
+        // Drift system
+        this.isDrifting = false;
+        this.driftStartTime = 0;
+        this.driftChargeLevel = 0; // 0 = no charge, 1-3 = charge levels
+        this.driftDirection = 0; // -1 = left, 1 = right
+        this.driftAngle = 0; // Additional angle for drift slide effect
+        this.lastDriftBoostTime = 0; // Cooldown between drift boosts
     }
 
     // Nouvelle méthode pour infliger des dégâts
@@ -473,6 +481,11 @@ class Player {
         this.isSuperBoosting = false;
         this.superBoostEndTime = 0;
         this.isStunned = false;
+        
+        // Reset drift state
+        this.isDrifting = false;
+        this.driftChargeLevel = 0;
+        this.driftAngle = 0;
     }
     
     stun(duration) {
@@ -481,6 +494,68 @@ class Player {
         this.isStunned = true;
         this.stunnedUntil = Date.now() + duration;
         this.speed = 0;
+    }
+    
+    startDrift(direction) {
+        // Can only drift when moving forward at decent speed
+        if (this.speed < GAME_CONFIG.MAX_SPEED * 0.3 || this.isDead || this.isStunned) return;
+        
+        this.isDrifting = true;
+        this.driftStartTime = Date.now();
+        this.driftDirection = direction; // -1 for left, 1 for right
+        this.driftChargeLevel = 0;
+        // Start with immediate drift angle for better feel
+        this.driftAngle = direction * 0.15;
+    }
+    
+    updateDrift(deltaTime) {
+        if (!this.isDrifting) return;
+        
+        const now = Date.now();
+        const driftDuration = now - this.driftStartTime;
+        
+        // Update drift charge level based on duration (longer times)
+        if (driftDuration > 3500) {
+            this.driftChargeLevel = 3; // Orange/Red sparks - highest boost
+        } else if (driftDuration > 2000) {
+            this.driftChargeLevel = 2; // Purple sparks - medium boost
+        } else if (driftDuration > 800) {
+            this.driftChargeLevel = 1; // Blue sparks - small boost
+        }
+        
+        // Apply drift physics - more pronounced slide angle
+        const targetDriftAngle = this.driftDirection * 0.4; // Max 0.4 radians slide
+        this.driftAngle += (targetDriftAngle - this.driftAngle) * 0.15;
+        
+        // Slight speed reduction during drift for realism
+        if (this.speed > GAME_CONFIG.MAX_SPEED * 0.8) {
+            this.speed *= 0.98;
+        }
+    }
+    
+    endDrift() {
+        if (!this.isDrifting) return;
+        
+        this.isDrifting = false;
+        
+        // Apply boost based on charge level
+        if (this.driftChargeLevel > 0 && Date.now() - this.lastDriftBoostTime > 500) {
+            this.lastDriftBoostTime = Date.now();
+            
+            // Boost duration and speed based on charge level
+            const boostDurations = [0, 800, 1200, 1600]; // ms for each level
+            const boostLevels = [0, 1, 2, 3]; // Matching existing boost system
+            
+            this.isBoosting = true;
+            this.boostEndTime = Date.now() + boostDurations[this.driftChargeLevel];
+            this.boostLevel = boostLevels[this.driftChargeLevel];
+            this.boostCooldown = 0;
+        }
+        
+        // Reset drift properties
+        this.driftChargeLevel = 0;
+        this.driftAngle = 0;
+        this.driftDirection = 0;
     }
 
     update(deltaTime) {
@@ -516,6 +591,9 @@ class Player {
         if (this.boostCooldown > 0) {
             this.boostCooldown -= deltaTime * 1000;
         }
+        
+        // Update drift state
+        this.updateDrift(deltaTime);
         
         // Traiter les inputs
         if (this.inputs.up) this.accelerate();
@@ -560,9 +638,10 @@ class Player {
             this.speed = 0;
         }
         
-        // Mettre à jour la position
-        this.x += Math.cos(this.angle) * this.speed;
-        this.y += Math.sin(this.angle) * this.speed;
+        // Mettre à jour la position avec drift angle
+        const effectiveAngle = this.angle + this.driftAngle;
+        this.x += Math.cos(effectiveAngle) * this.speed;
+        this.y += Math.sin(effectiveAngle) * this.speed;
         
         // Limites de la piste
         this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
@@ -608,16 +687,38 @@ class Player {
 
     turnLeft() {
         if (Math.abs(this.speed) > 0.1) {
-            // Réduire le turn rate pour tous les boosts (niveau 1, 2, 3) et super boost item
-            const turnRateMultiplier = (this.isBoosting || this.isSuperBoosting) ? 0.6 : 1.0;
+            // Block turning in opposite direction during drift
+            if (this.isDrifting && this.driftDirection > 0) {
+                return; // Can't turn left while drifting right
+            }
+            
+            // Réduire le turn rate pour tous les boosts et drift
+            let turnRateMultiplier = 1.0;
+            if (this.isBoosting || this.isSuperBoosting) {
+                turnRateMultiplier *= 0.6;
+            }
+            if (this.isDrifting) {
+                turnRateMultiplier *= 0.5; // More reduced turning during drift
+            }
             this.angle -= GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED) * turnRateMultiplier;
         }
     }
 
     turnRight() {
         if (Math.abs(this.speed) > 0.1) {
-            // Réduire le turn rate pour tous les boosts (niveau 1, 2, 3) et super boost item
-            const turnRateMultiplier = (this.isBoosting || this.isSuperBoosting) ? 0.6 : 1.0;
+            // Block turning in opposite direction during drift
+            if (this.isDrifting && this.driftDirection < 0) {
+                return; // Can't turn right while drifting left
+            }
+            
+            // Réduire le turn rate pour tous les boosts et drift
+            let turnRateMultiplier = 1.0;
+            if (this.isBoosting || this.isSuperBoosting) {
+                turnRateMultiplier *= 0.6;
+            }
+            if (this.isDrifting) {
+                turnRateMultiplier *= 0.5; // More reduced turning during drift
+            }
             this.angle += GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED) * turnRateMultiplier;
         }
     }
@@ -796,6 +897,13 @@ class Room {
             player.lastDamageTime = 0;
             player.lastValidatedCheckpoint = 0;
             player.checkpointPositions = [];
+            
+            // Reset drift state
+            player.isDrifting = false;
+            player.driftStartTime = 0;
+            player.driftChargeLevel = 0;
+            player.driftDirection = 0;
+            player.driftAngle = 0;
         }
     }
 
@@ -2100,7 +2208,11 @@ class Room {
                 isInvulnerable: p.invulnerableTime > Date.now(),
                 // NOUVEAU : États des objets
                 isStunned: p.isStunned,
-                isSuperBoosting: p.isSuperBoosting
+                isSuperBoosting: p.isSuperBoosting,
+                // Drift state
+                isDrifting: p.isDrifting,
+                driftChargeLevel: p.driftChargeLevel,
+                driftDirection: p.driftDirection
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,
@@ -2507,6 +2619,19 @@ io.on('connection', (socket) => {
             player.inputs.down = input.down;
             player.inputs.left = input.left;
             player.inputs.right = input.right;
+            
+            // Handle drift input
+            if (input.shift && !player.isDrifting && player.speed > GAME_CONFIG.MAX_SPEED * 0.3) {
+                // Start drift based on current turn direction
+                if (player.inputs.left && !player.inputs.right) {
+                    player.startDrift(-1);
+                } else if (player.inputs.right && !player.inputs.left) {
+                    player.startDrift(1);
+                }
+            } else if (!input.shift && player.isDrifting) {
+                // End drift when shift is released
+                player.endDrift();
+            }
             
             // Traiter l'item séparément
             if (input.space && player.item) {

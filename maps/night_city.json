@@ -6,7 +6,7 @@
   "music": "assets/audio/nightcity.mp3",
   "background": "assets/nightcity.png",
   "raceSettings": {
-    "laps": 1,
+    "laps": 6,
     "maxTime": 300000,
     "maxTimeWarning": 240000
   },

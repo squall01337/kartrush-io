@@ -195,3 +195,44 @@ When starting a new session, ask these questions to quickly understand the proje
   - Changed from `background-size: cover` to `contain`
   - Added black background color
   - Ensures full image visibility without cropping
+
+### Replay System Fixes
+- Fixed "Return to menu" button in replay window (was conflicting with room browser button)
+- Fixed map config mixing issue when random map selects different map after replay
+- Added `actualMapId` tracking to properly handle random map selection
+- Map data is now only loaded once to prevent conflicts
+
+### Kick System Implementation
+- Added kick functionality for room hosts
+- Red X button appears next to player names (host can't kick themselves)
+- Kick tracking: players kicked 3 times are banned from that specific room
+- Custom confirmation dialog for kick action
+- Visual feedback for kicked players and other room members
+- Banned players cannot rejoin the room via room code
+
+### Lobby Chat System
+- Added real-time chat to the right of map selector in lobby
+- Chat messages show player names in their kart colors
+- System messages for player join/leave events
+- Send button replaced with arrow icon (➤)
+- Auto-scroll to latest messages
+- Chat clears when joining a new room
+- 100 character message limit
+
+### Drift Mechanic (Mario Kart Style)
+- Activate drift with Left Shift while turning at 30%+ speed
+- Direction locked once drift starts (no changing direction mid-drift)
+- 3-level charge system with visual feedback:
+  - Level 1 (Blue sparks): 800ms+ drift → 800ms boost
+  - Level 2 (Purple sparks): 2000ms+ drift → 1200ms boost
+  - Level 3 (Orange/Red sparks): 3500ms+ drift → 1600ms boost
+- Enhanced visual effects:
+  - Tire smoke effects
+  - Colored spark trails matching charge level
+  - Ground glow effect
+  - Progressive intensity based on charge level
+- Drift physics:
+  - Immediate drift angle for responsive feel
+  - 50% turn rate reduction during drift
+  - Slight speed reduction for realism
+  - Maximum 0.4 radian slide angle

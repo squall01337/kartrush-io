@@ -2380,7 +2380,8 @@ class GameClient {
             down: false,
             left: false,
             right: false,
-            space: false
+            space: false,
+            shift: false
         };
 
         // Boucle d'envoi continu des inputs
@@ -2430,6 +2431,10 @@ class GameClient {
                     }
                     e.preventDefault();
                     break;
+                case 'ShiftLeft':
+                    this.keys.shift = true;
+                    e.preventDefault();
+                    break;
             }
         });
 
@@ -2456,6 +2461,9 @@ class GameClient {
                     this.keys.space = false;
                     this.hasUsedSpace = false; // Réinitialiser quand on relâche
                     break;
+                case 'ShiftLeft':
+                    this.keys.shift = false;
+                    break;
             }
         });
     }
@@ -2477,7 +2485,8 @@ class GameClient {
         down: this.keys.down,
         left: this.keys.left,
         right: this.keys.right,
-        space: spacePressed // Ne sera true que si pas d'animation en cours
+        space: spacePressed, // Ne sera true que si pas d'animation en cours
+        shift: this.keys.shift
     });
 }   
 

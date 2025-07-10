@@ -219,20 +219,24 @@ When starting a new session, ask these questions to quickly understand the proje
 - Chat clears when joining a new room
 - 100 character message limit
 
-### Drift Mechanic (Mario Kart Style)
-- Activate drift with Left Shift while turning at 30%+ speed
-- Direction locked once drift starts (no changing direction mid-drift)
-- 3-level charge system with visual feedback:
-  - Level 1 (Blue sparks): 800ms+ drift → 800ms boost
-  - Level 2 (Purple sparks): 2000ms+ drift → 1200ms boost
-  - Level 3 (Orange/Red sparks): 3500ms+ drift → 1600ms boost
-- Enhanced visual effects:
-  - Tire smoke effects
-  - Colored spark trails matching charge level
+### Drift Mechanic (Final Version)
+- Hold Shift to activate drift when moving at 30%+ speed
+- Direction locked based on turn direction when drift starts
+- While drifting:
+  - Immediate speed reduction to 45% when starting drift
+  - Kart sprite rotates at 3.2 rad/s in drift direction
+  - Movement curves significantly towards facing direction (45% curve factor)
+  - Outward drift inertia pushes kart to the outside of the turn
+  - Inertia force increases over time (simulating centrifugal force)
+  - Max rotation limited to 90° for better control
+  - 50% turn rate reduction
+  - Continuous speed reduction (caps at 25% of max speed)
+- Release Shift to boost:
+  - Single boost level (1 second duration)
+  - Requires minimum 200ms drift to activate boost
+  - Kart moves fully in new facing direction after boost
+- Visual effects:
+  - Blue/white spark trails appear after 500ms
+  - Tire smoke effects with intensity based on drift duration
   - Ground glow effect
-  - Progressive intensity based on charge level
-- Drift physics:
-  - Immediate drift angle for responsive feel
-  - 50% turn rate reduction during drift
-  - Slight speed reduction for realism
-  - Maximum 0.4 radian slide angle
+  - Shadow blur increases with drift duration

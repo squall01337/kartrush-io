@@ -427,9 +427,9 @@ class Player {
         // Drift system
         this.isDrifting = false;
         this.driftStartTime = 0;
-        this.driftChargeLevel = 0; // 0 = no charge, 1-3 = charge levels
         this.driftDirection = 0; // -1 = left, 1 = right
-        this.driftAngle = 0; // Additional angle for drift slide effect
+        this.driftRotation = 0; // Current rotation amount during drift
+        this.originalAngle = 0; // Angle when drift started
         this.lastDriftBoostTime = 0; // Cooldown between drift boosts
     }
 
@@ -503,33 +503,33 @@ class Player {
         this.isDrifting = true;
         this.driftStartTime = Date.now();
         this.driftDirection = direction; // -1 for left, 1 for right
-        this.driftChargeLevel = 0;
-        // Start with immediate drift angle for better feel
-        this.driftAngle = direction * 0.15;
+        this.originalAngle = this.angle; // Store the angle when drift started
+        this.driftRotation = 0;
+        
+        // Immediate speed reduction when starting drift
+        this.speed *= 0.45; // Reduce speed to 45% immediately
     }
     
     updateDrift(deltaTime) {
         if (!this.isDrifting) return;
         
-        const now = Date.now();
-        const driftDuration = now - this.driftStartTime;
+        // Rotate the kart while drifting
+        const rotationSpeed = 3.2; // radians per second (increased for faster rotation)
+        const maxRotation = Math.PI * 0.5; // 90 degrees max
         
-        // Update drift charge level based on duration (longer times)
-        if (driftDuration > 3500) {
-            this.driftChargeLevel = 3; // Orange/Red sparks - highest boost
-        } else if (driftDuration > 2000) {
-            this.driftChargeLevel = 2; // Purple sparks - medium boost
-        } else if (driftDuration > 800) {
-            this.driftChargeLevel = 1; // Blue sparks - small boost
+        // Calculate new rotation
+        const rotationDelta = this.driftDirection * rotationSpeed * deltaTime;
+        const newRotation = this.driftRotation + rotationDelta;
+        
+        // Limit rotation to prevent spinning too far
+        if (Math.abs(newRotation) <= maxRotation) {
+            this.driftRotation = newRotation;
+            this.angle = this.originalAngle + this.driftRotation;
         }
         
-        // Apply drift physics - more pronounced slide angle
-        const targetDriftAngle = this.driftDirection * 0.4; // Max 0.4 radians slide
-        this.driftAngle += (targetDriftAngle - this.driftAngle) * 0.15;
-        
-        // Slight speed reduction during drift for realism
-        if (this.speed > GAME_CONFIG.MAX_SPEED * 0.8) {
-            this.speed *= 0.98;
+        // More significant speed reduction during drift
+        if (this.speed > GAME_CONFIG.MAX_SPEED * 0.25) {
+            this.speed *= 0.91; // Even faster deceleration, cap at 25% speed
         }
     }
     
@@ -538,23 +538,20 @@ class Player {
         
         this.isDrifting = false;
         
-        // Apply boost based on charge level
-        if (this.driftChargeLevel > 0 && Date.now() - this.lastDriftBoostTime > 500) {
+        // Apply single level boost if we drifted for at least 200ms
+        const driftDuration = Date.now() - this.driftStartTime;
+        if (driftDuration > 200 && Date.now() - this.lastDriftBoostTime > 1000) {
             this.lastDriftBoostTime = Date.now();
             
-            // Boost duration and speed based on charge level
-            const boostDurations = [0, 800, 1200, 1600]; // ms for each level
-            const boostLevels = [0, 1, 2, 3]; // Matching existing boost system
-            
+            // Single boost level
             this.isBoosting = true;
-            this.boostEndTime = Date.now() + boostDurations[this.driftChargeLevel];
-            this.boostLevel = boostLevels[this.driftChargeLevel];
+            this.boostEndTime = Date.now() + 1000; // 1 second boost
+            this.boostLevel = 2; // Medium boost level
             this.boostCooldown = 0;
         }
         
         // Reset drift properties
-        this.driftChargeLevel = 0;
-        this.driftAngle = 0;
+        this.driftRotation = 0;
         this.driftDirection = 0;
     }
 
@@ -638,10 +635,26 @@ class Player {
             this.speed = 0;
         }
         
-        // Mettre à jour la position avec drift angle
-        const effectiveAngle = this.angle + this.driftAngle;
-        this.x += Math.cos(effectiveAngle) * this.speed;
-        this.y += Math.sin(effectiveAngle) * this.speed;
+        // Update position - during drift, create a noticeable curve towards facing direction
+        let moveAngle = this.angle;
+        if (this.isDrifting) {
+            // Blend between original angle and current angle for a curved drift
+            const curveFactor = 0.45; // Increased for more noticeable curve (0 = straight, 1 = full turn)
+            moveAngle = this.originalAngle + (this.angle - this.originalAngle) * curveFactor;
+        }
+        this.x += Math.cos(moveAngle) * this.speed;
+        this.y += Math.sin(moveAngle) * this.speed;
+        
+        // Add outward drift inertia (centrifugal force effect)
+        if (this.isDrifting) {
+            const driftTime = (Date.now() - this.driftStartTime) / 1000; // Time in seconds
+            const inertiaForce = Math.min(1.6, driftTime * 0.8) * this.speed; // Further increased force
+            
+            // Calculate perpendicular direction (opposite to drift direction)
+            const inertiaAngle = this.originalAngle - (this.driftDirection * Math.PI / 2);
+            this.x += Math.cos(inertiaAngle) * inertiaForce;
+            this.y += Math.sin(inertiaAngle) * inertiaForce;
+        }
         
         // Limites de la piste
         this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
@@ -2211,8 +2224,9 @@ class Room {
                 isSuperBoosting: p.isSuperBoosting,
                 // Drift state
                 isDrifting: p.isDrifting,
-                driftChargeLevel: p.driftChargeLevel,
-                driftDirection: p.driftDirection
+                driftStartTime: p.driftStartTime,
+                driftDirection: p.driftDirection,
+                driftRotation: p.driftRotation
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

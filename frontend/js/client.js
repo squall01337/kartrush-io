@@ -683,8 +683,8 @@ class GameClient {
             
             const authorStyle = data.playerColor ? `style="color: ${data.playerColor};"` : '';
             messageDiv.innerHTML = `
-                <div class="message-author" ${authorStyle}>${data.playerName}</div>
-                <div class="message-text">${this.escapeHtml(data.message)}</div>
+                <span class="message-author" ${authorStyle}>${data.playerName}:</span>
+                <span class="message-text">${this.escapeHtml(data.message)}</span>
             `;
         }
         
@@ -765,12 +765,6 @@ class GameClient {
             
             // Clear chat when joining a room
             this.clearChat();
-            
-            // Add welcome message
-            this.addChatMessage({
-                system: true,
-                message: 'Welcome to the room! Use the chat to communicate with other players.'
-            });
             
             this.showScreen('lobby');
         });

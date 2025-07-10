@@ -160,6 +160,20 @@ button:disabled {
     animation: iconPulse 2s ease-in-out infinite;
 }
 
+.controls-columns {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+    width: 100%;
+}
+
+.controls-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
 @keyframes iconPulse {
     0%, 100% {
         transform: scale(1);
@@ -172,11 +186,11 @@ button:disabled {
 }
 
 .controls-info p {
-    margin: 8px 0;
+    margin: 0;
     padding: 8px 16px;
     background: rgba(0, 0, 0, 0.3);
     border-radius: 25px;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 12px;
     font-size: 0.95em;
@@ -186,6 +200,8 @@ button:disabled {
     overflow: hidden;
     user-select: none;
     cursor: default;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .controls-info p::before {
@@ -2645,14 +2661,16 @@ button:disabled {
 
 .chat-message .message-author {
     font-weight: bold;
-    margin-bottom: 2px;
+    margin-right: 5px;
     font-size: 0.9em;
     text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+    display: inline;
 }
 
 .chat-message .message-text {
     color: #fff;
     font-size: 0.95em;
+    display: inline;
 }
 
 .chat-input-container {

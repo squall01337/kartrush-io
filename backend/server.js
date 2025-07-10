@@ -513,8 +513,13 @@ class Player {
     updateDrift(deltaTime) {
         if (!this.isDrifting) return;
         
+        // Check if player is counter-steering (pressing opposite direction)
+        const isCounterSteering = (this.driftDirection === -1 && this.inputs.right) || 
+                                 (this.driftDirection === 1 && this.inputs.left);
+        
         // Rotate the kart while drifting
-        const rotationSpeed = 3.2; // radians per second (increased for faster rotation)
+        const baseRotationSpeed = 3.2; // radians per second
+        const rotationSpeed = isCounterSteering ? 0 : baseRotationSpeed; // Stop rotation if counter-steering
         const maxRotation = Math.PI * 0.5; // 90 degrees max
         
         // Calculate new rotation

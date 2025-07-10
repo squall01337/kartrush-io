@@ -73,7 +73,10 @@ class GameEngine {
         this.isAnimatingItem = false;
 
         // Cache pour les icônes découpées
-        this.itemIconsCache = {};    
+        this.itemIconsCache = {};
+        
+        // Item pickup notification
+        this.itemNotification = null;    
         
         // Charger les sprites d'effets
         this.loadEffectSprites();
@@ -433,6 +436,9 @@ class GameEngine {
     } else {
         this.renderItemSlot();
     }
+    
+    // Render item pickup notification
+    this.renderItemNotification();
 }
 
     renderTrack(ctx) {
@@ -1433,109 +1439,111 @@ startItemSlotAnimation(finalItem) {
     console.log('🎰 Animation casino démarrée pour:', finalItem);
 }
 
-renderItemSlotAnimation() {
-    if (!this.itemSlotAnimation) return;
+    renderItemSlotAnimation() {
+        if (!this.itemSlotAnimation) return;
     
-    const anim = this.itemSlotAnimation;
-    const elapsed = Date.now() - anim.startTime;
-    
-    if (elapsed >= anim.duration) {
-        // Animation terminée, donner l'objet au joueur
-        console.log('✅ Animation casino terminée, attribution de:', this.pendingItem);
+        const anim = this.itemSlotAnimation;
+        const elapsed = Date.now() - anim.startTime;
         
-        const player = this.gameState.players.find(p => p.id === this.playerId);
-        if (player && this.pendingItem) {
-            player.item = this.pendingItem;
+        if (elapsed >= anim.duration) {
+            // Animation terminée, donner l'objet au joueur
+            console.log('✅ Animation casino terminée, attribution de:', this.pendingItem);
+            
+            const player = this.gameState.players.find(p => p.id === this.playerId);
+            if (player && this.pendingItem) {
+                player.item = this.pendingItem;
+                // Show item notification
+                this.showItemNotification(this.pendingItem);
+            }
+            
+            // Réinitialiser
+            this.itemSlotAnimation = null;
+            this.pendingItem = null;
+            this.isAnimatingItem = false;
+            return;
         }
         
-        // Réinitialiser
-        this.itemSlotAnimation = null;
-        this.pendingItem = null;
-        this.isAnimatingItem = false;
-        return;
-    }
-    
-    // Calculer la vitesse de défilement (ralentir progressivement)
-    const progress = elapsed / anim.duration;
-    const speed = Math.max(50, 300 * (1 - progress)); // De 300ms à 50ms entre les changements
-    
-    // Changer d'objet selon la vitesse
-    if (elapsed - anim.lastChange > speed) {
-        anim.currentIndex = (anim.currentIndex + 1) % anim.items.length;
-        anim.lastChange = elapsed;
-    }
-    
-    const currentItem = anim.items[anim.currentIndex];
-    
-    const ctx = this.ctx;
-    ctx.save();
-    
-    // Position en bas à gauche
-    const slotSize = 70 * this.scale;
-    const padding = 20 * this.scale;
-    const x = padding;
-    const y = this.canvas.height - slotSize - padding;
-    const borderRadius = 10 * this.scale;
-    
-    // Fond animé avec effet arc-en-ciel
-    const hue = (elapsed / 10) % 360;
-    ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.3)`;
-    this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
-    ctx.fill();
-    
-    // Bordure animée
-    const pulse = Math.sin(elapsed * 0.01) * 0.3 + 0.7;
-    ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 1)`;
-    ctx.lineWidth = 3 * this.scale;
-    ctx.shadowColor = `hsla(${hue}, 100%, 50%, 1)`;
-    ctx.shadowBlur = 20 * this.scale * pulse;
-    this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    
-    // Icône qui change avec effet de rotation
-    ctx.save();
-    ctx.translate(x + slotSize / 2, y + slotSize / 2);
-    
-    // Rotation plus rapide au début, plus lente à la fin
-    const rotationSpeed = 0.02 * (1 - progress * 0.8);
-    const rotation = elapsed * rotationSpeed;
-    ctx.rotate(rotation);
-    
-    // Scale pulsant
-    const scaleEffect = 1 + Math.sin(elapsed * 0.005) * 0.1;
-    ctx.scale(scaleEffect, scaleEffect);
-    
-    const itemIcon = this.getItemIcon(currentItem);
-    if (itemIcon) {
-        const iconSize = 50 * this.scale;
-        ctx.drawImage(itemIcon, -iconSize / 2, -iconSize / 2, iconSize, iconSize);
-    } else {
-        const itemIcons = {
-            'bomb': '💣',
-            'rocket': '🚀',
-            'superboost': '⚡'
-        };
+        // Calculer la vitesse de défilement (ralentir progressivement)
+        const progress = elapsed / anim.duration;
+        const speed = Math.max(50, 300 * (1 - progress)); // De 300ms à 50ms entre les changements
         
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${32 * this.scale}px Arial`;
+        // Changer d'objet selon la vitesse
+        if (elapsed - anim.lastChange > speed) {
+            anim.currentIndex = (anim.currentIndex + 1) % anim.items.length;
+            anim.lastChange = elapsed;
+        }
+        
+        const currentItem = anim.items[anim.currentIndex];
+        
+        const ctx = this.ctx;
+        ctx.save();
+        
+        // Position en bas à gauche
+        const slotSize = 70 * this.scale;
+        const padding = 20 * this.scale;
+        const x = padding;
+        const y = this.canvas.height - slotSize - padding;
+        const borderRadius = 10 * this.scale;
+        
+        // Fond animé avec effet arc-en-ciel
+        const hue = (elapsed / 10) % 360;
+        ctx.fillStyle = `hsla(${hue}, 70%, 50%, 0.3)`;
+        this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
+        ctx.fill();
+        
+        // Bordure animée
+        const pulse = Math.sin(elapsed * 0.01) * 0.3 + 0.7;
+        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 1)`;
+        ctx.lineWidth = 3 * this.scale;
+        ctx.shadowColor = `hsla(${hue}, 100%, 50%, 1)`;
+        ctx.shadowBlur = 20 * this.scale * pulse;
+        this.drawRoundedRect(ctx, x, y, slotSize, slotSize, borderRadius);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        // Icône qui change avec effet de rotation
+        ctx.save();
+        ctx.translate(x + slotSize / 2, y + slotSize / 2);
+        
+        // Rotation plus rapide au début, plus lente à la fin
+        const rotationSpeed = 0.02 * (1 - progress * 0.8);
+        const rotation = elapsed * rotationSpeed;
+        ctx.rotate(rotation);
+        
+        // Scale pulsant
+        const scaleEffect = 1 + Math.sin(elapsed * 0.005) * 0.1;
+        ctx.scale(scaleEffect, scaleEffect);
+        
+        const itemIcon = this.getItemIcon(currentItem);
+        if (itemIcon) {
+            const iconSize = 50 * this.scale;
+            ctx.drawImage(itemIcon, -iconSize / 2, -iconSize / 2, iconSize, iconSize);
+        } else {
+            const itemIcons = {
+                'bomb': '💣',
+                'rocket': '🚀',
+                'superboost': '⚡'
+            };
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${32 * this.scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(itemIcons[currentItem] || '?', 0, 0);
+        }
+        
+        ctx.restore();
+        
+        // Texte "???" pendant l'animation
+        ctx.fillStyle = `hsla(${hue}, 100%, 70%, 1)`;
+        ctx.font = `bold ${16 * this.scale}px Arial`;
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(itemIcons[currentItem] || '?', 0, 0);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 3;
+            ctx.fillText('???', x + slotSize / 2, y + slotSize + 15 * this.scale);
+        
+        ctx.restore();
     }
-    
-    ctx.restore();
-    
-    // Texte "???" pendant l'animation
-    ctx.fillStyle = `hsla(${hue}, 100%, 70%, 1)`;
-    ctx.font = `bold ${16 * this.scale}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 3;
-    ctx.fillText('???', x + slotSize / 2, y + slotSize + 15 * this.scale);
-    
-    ctx.restore();
-}
 
     updateGameState(gameData) {
     // Vérifier si on vient de recevoir un nouvel objet
@@ -1579,7 +1587,97 @@ renderItemSlotAnimation() {
             this.playerInterpolation.delete(id);
         }
     }
-}
+    }
+    
+    showItemNotification(itemType) {
+        this.itemNotification = {
+            type: itemType,
+            startTime: Date.now(),
+            duration: 2000 // 2 seconds
+        };
+    }
+    
+    renderItemNotification() {
+        if (!this.itemNotification) return;
+        
+        const elapsed = Date.now() - this.itemNotification.startTime;
+        if (elapsed >= this.itemNotification.duration) {
+            this.itemNotification = null;
+            return;
+        }
+        
+        const ctx = this.ctx;
+        ctx.save();
+        
+        // Calculate fade in/out
+        let alpha = 1;
+        if (elapsed < 300) {
+            // Fade in
+            alpha = elapsed / 300;
+        } else if (elapsed > this.itemNotification.duration - 300) {
+            // Fade out
+            alpha = (this.itemNotification.duration - elapsed) / 300;
+        }
+        
+        // Position at center of screen
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Semi-transparent background box
+        const boxWidth = 280 * this.scale;
+        const boxHeight = 120 * this.scale;
+        const boxX = centerX - boxWidth / 2;
+        const boxY = centerY - boxHeight / 2;
+        
+        // Dark transparent background
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.6 * alpha})`;
+        this.drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, 15 * this.scale);
+        ctx.fill();
+        
+        // Subtle purple glow border
+        ctx.strokeStyle = `rgba(147, 51, 234, ${0.4 * alpha})`;
+        ctx.lineWidth = 2 * this.scale;
+        ctx.shadowColor = `rgba(147, 51, 234, ${0.5 * alpha})`;
+        ctx.shadowBlur = 10 * this.scale;
+        this.drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, 15 * this.scale);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        
+        // Item icon centered
+        const iconSize = 60 * this.scale;
+        const iconX = centerX - iconSize / 2;
+        const iconY = centerY - iconSize / 2 - 20 * this.scale;
+        
+        ctx.globalAlpha = alpha;
+        const itemIcon = this.getItemIcon(this.itemNotification.type);
+        if (itemIcon) {
+            ctx.drawImage(itemIcon, iconX, iconY, iconSize, iconSize);
+        }
+        
+        // Item name
+        const itemNames = {
+            'bomb': 'BOMB',
+            'rocket': 'ROCKET',
+            'superboost': 'SUPER BOOST',
+            'healthpack': 'HEALTH PACK'
+        };
+        
+        const itemName = itemNames[this.itemNotification.type] || this.itemNotification.type.toUpperCase();
+        
+        ctx.font = `bold ${24 * this.scale}px Arial`;
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(itemName, centerX, centerY + 35 * this.scale);
+        
+        // Add some glow effect
+        const glowSize = 10 + Math.sin(elapsed * 0.005) * 5;
+        ctx.shadowColor = `rgba(255, 255, 255, ${0.5 * alpha})`;
+        ctx.shadowBlur = glowSize * this.scale;
+        ctx.fillText(itemName, centerX, centerY + 35 * this.scale);
+        
+        ctx.restore();
+    }
 }
 
 // Nouveau système de particules
@@ -1801,3 +1899,4 @@ class ParticleSystem {
         ctx.restore();
     }
 }
+    

@@ -225,6 +225,7 @@ When starting a new session, ask these questions to quickly understand the proje
 - While drifting:
   - Immediate speed reduction to 45% when starting drift
   - Kart sprite rotates at 3.2 rad/s in drift direction
+  - **Counter-steering**: Hold opposite direction to stop rotation
   - Movement curves significantly towards facing direction (45% curve factor)
   - Outward drift inertia pushes kart to the outside of the turn
   - Inertia force increases over time (simulating centrifugal force)
@@ -240,3 +241,12 @@ When starting a new session, ask these questions to quickly understand the proje
   - Tire smoke effects with intensity based on drift duration
   - Ground glow effect
   - Shadow blur increases with drift duration
+
+### Item Pickup Notification System
+- Shows when player receives item from item box after casino animation
+- Centered notification with:
+  - Item sprite (60x60px)
+  - Item name in white text with subtle glow
+  - Semi-transparent dark background box
+  - 2-second duration with fade in/out
+- Supports all items: BOMB, ROCKET, SUPER BOOST, HEALTH PACK

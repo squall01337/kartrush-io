@@ -117,3 +117,53 @@ When starting a new session, ask these questions to quickly understand the proje
 - Public rooms can still be joined via code system
 - Private rooms are not shown in the API/browser
 - Maximum 6 players per room (as requested)
+
+### Room Browser UI Improvements
+- Room entries now display in single-line format
+- Added pagination system (5 rooms per page)
+- Previous/Next navigation buttons
+- Page counter shows current page
+- Increased room list height to properly show 5 rooms
+- Map thumbnails added to room entries (90x55px)
+- Balanced spacing between all elements
+
+### Socket Events Cleanup
+- Removed redundant `joinGame` socket event
+- Removed unused `findAvailableRoom` function
+- Added new `createPublicRoom` event that always creates a new public room
+- Current socket events:
+  - `createPublicRoom` - Always creates a new public room
+  - `createRoom` - Creates a private room
+  - `joinRoomWithCode` - Joins any room (public/private) with code
+
+### Main Menu Updates
+- Fixed vertical gap between public room buttons to match private room section
+- Switched order: "Create a room" now appears before "Join a room"
+- Added "Quick match" button that joins the most populated (but not full) room
+- Quick match creates a new room if none available
+
+### Room Browser Design Updates
+- Increased thumbnail size to 90x55px
+- Fixed spacing: host name left-aligned, join button right-aligned
+- Map name and thumbnail centered with player count positioned between thumbnail and join button
+- All elements have consistent 25px spacing
+- Removed "Create a room" button from browser (already in main menu)
+- Styled refresh and back buttons to match game design
+
+### Custom Alert System
+- Replaced browser alerts with custom styled modal
+- Dark theme with blur backdrop
+- Gradient OK button matching game style
+- Smooth slide-in animation
+- Click overlay or OK button to close
+
+### Kart Color System
+- Players cannot choose the same color in a lobby
+- Server automatically assigns first available color when joining
+- 6 available colors: red, green, blue, yellow, magenta, cyan
+- Taken colors show as unavailable (30% opacity) in color selector
+- Cannot click on taken colors
+- Server validates color changes and reverts if color is taken
+- Client updates selected color to match server-assigned color
+- Added `changeColor` socket event for color changes
+- Added `colorNotAvailable` event when color is already taken

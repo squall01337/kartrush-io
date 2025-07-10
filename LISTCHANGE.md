@@ -167,3 +167,31 @@ When starting a new session, ask these questions to quickly understand the proje
 - Client updates selected color to match server-assigned color
 - Added `changeColor` socket event for color changes
 - Added `colorNotAvailable` event when color is already taken
+
+### Random Map Selection Feature
+- Added "Random" as first option in map selector with "?" icon
+- Purple gradient background with pulsing animation for random option
+- Random is now the default selection when creating a room
+- When "Random" is selected in lobby:
+  - Players see "Random" in the selected map display
+  - Actual map is only chosen when game starts
+  - Server randomly picks from available maps (beach, night_city)
+- Loading screen behavior:
+  - Initially shows "Random Map..." with "?" when random selected
+  - Updates to show actual map name/thumbnail once received
+- Server includes `mapId` in `mapData` and `gameStarted` events
+- Updated all default map references from 'lava_track' to 'beach'
+- Non-host players get notification when map selection changes
+
+### Map Thumbnail Adjustments
+- Updated all map thumbnails to 3:2 aspect ratio (matching 1536x1024 maps)
+- Map selector thumbnails: 90px height
+- Room browser thumbnails: 90x60px (3:2 ratio)
+- Loading screen thumbnail: 300x200px (3:2 ratio)
+- Removed unnecessary `selectedMapInfo` div from lobby
+- Increased map selector width (450-600px) for better display
+- Reduced player list width (300-400px) to give more space to map selector
+- Fixed loading screen thumbnail centering:
+  - Changed from `background-size: cover` to `contain`
+  - Added black background color
+  - Ensures full image visibility without cropping

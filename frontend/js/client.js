@@ -18,6 +18,7 @@ class GameClient {
         // Gestion des maps
         this.availableMaps = [];
         this.selectedMap = null;
+        this.actualMapId = null; // Map ID when random is selected
         this.currentMapPage = 0;
         this.mapsPerPage = 6;
         
@@ -89,10 +90,8 @@ class GameClient {
             ];
         }
         
-        // Sélectionner la première map par défaut
-        if (this.availableMaps.length > 0) {
-            this.selectedMap = this.availableMaps[0].id;
-        }
+        // Sélectionner random par défaut
+        this.selectedMap = 'random';
     }
 
     // Méthode appelée quand on clique sur PLAY
@@ -324,11 +323,15 @@ class GameClient {
         this.renderMapSelector();
         
         // Mettre à jour l'affichage du nom
-        const mapInfo = this.availableMaps.find(m => m.id === mapId);
-        if (mapInfo) {
-            const selectedMapName = document.getElementById('selectedMapName');
-            if (selectedMapName) {
-                selectedMapName.textContent = mapInfo.name;
+        const selectedMapName = document.getElementById('selectedMapName');
+        if (selectedMapName) {
+            if (mapId === 'random') {
+                selectedMapName.textContent = 'Random';
+            } else {
+                const mapInfo = this.availableMaps.find(m => m.id === mapId);
+                if (mapInfo) {
+                    selectedMapName.textContent = mapInfo.name;
+                }
             }
         }
         
@@ -351,10 +354,16 @@ class GameClient {
         
         if (!mapGrid) return;
         
+        // Créer une liste temporaire avec la map random en premier
+        const mapsWithRandom = [
+            { id: 'random', name: 'Random', thumbnail: null },
+            ...this.availableMaps
+        ];
+        
         // Calculer les maps à afficher
         const startIdx = this.currentMapPage * this.mapsPerPage;
-        const endIdx = Math.min(startIdx + this.mapsPerPage, this.availableMaps.length);
-        const mapsToShow = this.availableMaps.slice(startIdx, endIdx);
+        const endIdx = Math.min(startIdx + this.mapsPerPage, mapsWithRandom.length);
+        const mapsToShow = mapsWithRandom.slice(startIdx, endIdx);
         
         // Vider la grille
         mapGrid.innerHTML = '';
@@ -373,19 +382,25 @@ class GameClient {
             const thumbnail = document.createElement('div');
             thumbnail.className = 'map-thumbnail';
             
-            // Vérifier si l'image existe, sinon afficher un placeholder
-            const img = new Image();
-            img.onload = () => {
-                thumbnail.style.backgroundImage = `url(${map.thumbnail})`;
-                thumbnail.style.backgroundSize = 'cover';
-                thumbnail.style.backgroundPosition = 'center';
-            };
-            img.onerror = () => {
-                // Placeholder avec l'icône de la map
-                thumbnail.classList.add('placeholder');
-                thumbnail.innerHTML = '🏁';
-            };
-            img.src = map.thumbnail;
+            // Si c'est la map random, afficher un point d'interrogation
+            if (map.id === 'random') {
+                thumbnail.classList.add('placeholder', 'random-map');
+                thumbnail.innerHTML = '?';
+            } else {
+                // Vérifier si l'image existe, sinon afficher un placeholder
+                const img = new Image();
+                img.onload = () => {
+                    thumbnail.style.backgroundImage = `url(${map.thumbnail})`;
+                    thumbnail.style.backgroundSize = 'cover';
+                    thumbnail.style.backgroundPosition = 'center';
+                };
+                img.onerror = () => {
+                    // Placeholder avec l'icône de la map
+                    thumbnail.classList.add('placeholder');
+                    thumbnail.innerHTML = '🏁';
+                };
+                img.src = map.thumbnail;
+            }
             
             // Nom de la map
             const nameDiv = document.createElement('div');
@@ -402,7 +417,7 @@ class GameClient {
         });
         
         // Gérer l'état des boutons de navigation
-        const totalPages = Math.ceil(this.availableMaps.length / this.mapsPerPage);
+        const totalPages = Math.ceil(mapsWithRandom.length / this.mapsPerPage);
         prevBtn.disabled = this.currentMapPage === 0;
         nextBtn.disabled = this.currentMapPage >= totalPages - 1;
     }
@@ -424,30 +439,40 @@ class GameClient {
         percentage.textContent = '0%';
         
         // Afficher les infos de la map sélectionnée
-        const mapInfo = this.availableMaps.find(m => m.id === this.selectedMap);
-        if (mapInfo) {
-            // Nom de la map
-            mapNameEl.textContent = mapInfo.name;
-            
-            // Thumbnail de la map
-            mapThumbnailEl.classList.remove('placeholder');
-            
-            // Essayer de charger l'image
-            const img = new Image();
-            img.onload = () => {
-                mapThumbnailEl.style.backgroundImage = `url(${mapInfo.thumbnail})`;
-            };
-            img.onerror = () => {
-                // Si l'image n'existe pas, afficher un placeholder
+        if (this.selectedMap === 'random' && !this.actualMapId) {
+            // Si random est sélectionné et qu'on n'a pas encore reçu l'ID réel, afficher un placeholder
+            mapNameEl.textContent = 'Random Map...';
+            mapThumbnailEl.classList.add('placeholder', 'random-map');
+            mapThumbnailEl.innerHTML = '?';
+            mapThumbnailEl.style.backgroundImage = 'none';
+        } else {
+            // Utiliser actualMapId si disponible, sinon selectedMap
+            const mapId = this.actualMapId || this.selectedMap;
+            const mapInfo = this.availableMaps.find(m => m.id === mapId);
+            if (mapInfo) {
+                // Nom de la map
+                mapNameEl.textContent = mapInfo.name;
+                
+                // Thumbnail de la map
+                mapThumbnailEl.classList.remove('placeholder');
+                
+                // Essayer de charger l'image
+                const img = new Image();
+                img.onload = () => {
+                    mapThumbnailEl.style.backgroundImage = `url(${mapInfo.thumbnail})`;
+                };
+                img.onerror = () => {
+                    // Si l'image n'existe pas, afficher un placeholder
+                    mapThumbnailEl.classList.add('placeholder');
+                    mapThumbnailEl.innerHTML = '🏁';
+                };
+                img.src = mapInfo.thumbnail;
+            } else {
+                // Fallback si pas d'info de map
+                mapNameEl.textContent = 'Loading Track...';
                 mapThumbnailEl.classList.add('placeholder');
                 mapThumbnailEl.innerHTML = '🏁';
-            };
-            img.src = mapInfo.thumbnail;
-        } else {
-            // Fallback si pas d'info de map
-            mapNameEl.textContent = 'Loading Track...';
-            mapThumbnailEl.classList.add('placeholder');
-            mapThumbnailEl.innerHTML = '🏁';
+            }
         }
         
         // Démarrer la vidéo depuis le début
@@ -583,6 +608,22 @@ class GameClient {
                 this.updateLobbyColorSelector();
             }
             
+            // Update the selected map if provided
+            if (data.selectedMap) {
+                this.selectedMap = data.selectedMap;
+                const selectedMapName = document.getElementById('selectedMapName');
+                if (selectedMapName) {
+                    if (data.selectedMap === 'random') {
+                        selectedMapName.textContent = 'Random';
+                    } else {
+                        const mapInfo = this.availableMaps.find(m => m.id === data.selectedMap);
+                        if (mapInfo) {
+                            selectedMapName.textContent = mapInfo.name;
+                        }
+                    }
+                }
+            }
+            
             const roomTypeEl = document.getElementById('roomType');
             const roomCodeEl = document.getElementById('roomCode');
             
@@ -610,6 +651,37 @@ class GameClient {
 
         this.socket.on('mapData', (mapData) => {
             this.mapData = mapData;
+            
+            // Si on a reçu une map aléatoire, mettre à jour l'affichage de la map dans le loading screen
+            if (mapData.mapId && this.selectedMap === 'random') {
+                this.actualMapId = mapData.mapId;
+                
+                // Mettre à jour l'affichage du loading screen si on y est
+                const loadingScreen = document.getElementById('loading');
+                if (loadingScreen && !loadingScreen.classList.contains('hidden')) {
+                    const mapNameEl = document.querySelector('.loading-map-name');
+                    const mapThumbnailEl = document.querySelector('.loading-map-thumbnail');
+                    
+                    if (mapNameEl && mapThumbnailEl) {
+                        const mapInfo = this.availableMaps.find(m => m.id === mapData.mapId);
+                        if (mapInfo) {
+                            mapNameEl.textContent = mapInfo.name;
+                            
+                            // Mettre à jour le thumbnail
+                            mapThumbnailEl.classList.remove('placeholder');
+                            const img = new Image();
+                            img.onload = () => {
+                                mapThumbnailEl.style.backgroundImage = `url(${mapInfo.thumbnail})`;
+                            };
+                            img.onerror = () => {
+                                mapThumbnailEl.classList.add('placeholder');
+                                mapThumbnailEl.innerHTML = '🏁';
+                            };
+                            img.src = mapInfo.thumbnail;
+                        }
+                    }
+                }
+            }
             
             if (mapData.background && mapData.background.endsWith('.png')) {
                 const img = new Image();
@@ -705,20 +777,36 @@ class GameClient {
             this.selectedMap = data.mapId;
             
             // Mettre à jour l'affichage du nom pour tous
-            const mapInfo = this.availableMaps.find(m => m.id === data.mapId);
-            if (mapInfo) {
-                const selectedMapName = document.getElementById('selectedMapName');
-                if (selectedMapName) {
-                    selectedMapName.textContent = mapInfo.name;
+            const selectedMapName = document.getElementById('selectedMapName');
+            if (selectedMapName) {
+                if (data.mapId === 'random') {
+                    selectedMapName.textContent = 'Random';
+                } else {
+                    const mapInfo = this.availableMaps.find(m => m.id === data.mapId);
+                    if (mapInfo) {
+                        selectedMapName.textContent = mapInfo.name;
+                    }
                 }
-                
-                if (!this.isHost) {
-                    // Notification seulement pour les non-hôtes
+            }
+            
+            if (!this.isHost) {
+                if (data.mapId === 'random') {
+                    // Notification pour le mode aléatoire
                     this.showNotification({
-                        text: `Map sélectionnée : ${mapInfo.name}`,
+                        text: `Mode aléatoire activé`,
                         type: 'info',
-                        icon: '🗺️'
+                        icon: '🎲'
                     });
+                } else {
+                    const mapInfo = this.availableMaps.find(m => m.id === data.mapId);
+                    if (mapInfo) {
+                        // Notification pour une map spécifique
+                        this.showNotification({
+                            text: `Map sélectionnée : ${mapInfo.name}`,
+                            type: 'info',
+                            icon: '🗺️'
+                        });
+                    }
                 }
             }
             
@@ -748,7 +836,44 @@ class GameClient {
             });
         });
 
-        this.socket.on('gameStarted', () => {
+        this.socket.on('gameStarted', (data) => {
+            // Handle the mapId parameter if provided
+            if (data && data.mapId) {
+                // If random was selected and we now have the actual mapId
+                if (this.selectedMap === 'random') {
+                    this.actualMapId = data.mapId;
+                    
+                    // Update loading screen if it's already visible
+                    const loadingScreen = document.getElementById('loading');
+                    if (loadingScreen && !loadingScreen.classList.contains('hidden')) {
+                        const mapNameEl = document.querySelector('.loading-map-name');
+                        const mapThumbnailEl = document.querySelector('.loading-map-thumbnail');
+                        
+                        if (mapNameEl && mapThumbnailEl) {
+                            const mapInfo = this.availableMaps.find(m => m.id === data.mapId);
+                            if (mapInfo) {
+                                mapNameEl.textContent = mapInfo.name;
+                                
+                                // Update thumbnail
+                                mapThumbnailEl.classList.remove('placeholder', 'random-map');
+                                mapThumbnailEl.innerHTML = '';
+                                const img = new Image();
+                                img.onload = () => {
+                                    mapThumbnailEl.style.backgroundImage = `url(${mapInfo.thumbnail})`;
+                                };
+                                img.onerror = () => {
+                                    mapThumbnailEl.classList.add('placeholder');
+                                    mapThumbnailEl.innerHTML = '🏁';
+                                };
+                                img.src = mapInfo.thumbnail;
+                            }
+                        }
+                    }
+                } else {
+                    // Otherwise set it as the selected map
+                    this.selectedMap = data.mapId;
+                }
+            }
             this.startGameCountdown();
         });
 
@@ -797,6 +922,7 @@ class GameClient {
         // Nouveau : Rematch qui démarre (MODIFIÉ)
         this.socket.on('rematchStarting', async (data) => {
             this.rematchVotes = 0;
+            this.actualMapId = null; // Reset the actual map ID for the new game
             
             // Arrêter la musique AVANT de nettoyer les notifications
             if (this.gameEngine && this.gameEngine.music) {
@@ -1661,6 +1787,7 @@ class GameClient {
             this.socket.disconnect();
             this.socket.connect();
         }
+        this.actualMapId = null; // Reset the actual map ID when leaving
         this.showScreen('menu');
     }
 

@@ -61,23 +61,23 @@ function loadAvailableMaps() {
         console.log('📁 Maps disponibles:', availableMaps);
     } catch (error) {
         console.error('❌ Erreur lors du chargement des maps:', error);
-        availableMaps = ['lava_track']; // Map par défaut
+        availableMaps = ['beach']; // Map par défaut
     }
 }
 
-function loadMapData(mapName = 'lava_track') {
+function loadMapData(mapName = 'beach') {
     try {
         // Construire le chemin de la map
         let mapPath = path.join(__dirname, '../maps', `${mapName}.json`);
         
         // Si la map n'existe pas, charger la map par défaut
         if (!fs.existsSync(mapPath)) {
-            console.log(`⚠️ Map ${mapName} non trouvée, chargement de lava_track`);
-            mapPath = path.join(__dirname, '../maps/lava_track.json');
+            console.log(`⚠️ Map ${mapName} non trouvée, chargement de beach`);
+            mapPath = path.join(__dirname, '../maps/beach.json');
             
-            // Si même la map par défaut n'existe pas, utiliser oval_track
+            // Si même la map par défaut n'existe pas, utiliser night_city
             if (!fs.existsSync(mapPath)) {
-                mapPath = path.join(__dirname, '../maps/oval_track.json');
+                mapPath = path.join(__dirname, '../maps/night_city.json');
             }
         }
         
@@ -635,10 +635,10 @@ class Room {
         this.gameLoop = null;
         this.warningShown = false;
         this.raceSettings = null;
-        this.mapName = 'lava_track'; // Map par défaut
+        this.mapName = 'beach'; // Map par défaut
         this.rematchVotes = new Set(); // Nouveaux votes pour rejouer
         this.rematchTimer = null; // Timer pour le rematch
-        this.selectedMap = 'lava_track'; // Map sélectionnée par l'hôte
+        this.selectedMap = 'random'; // Map sélectionnée par l'hôte - random par défaut
         
         // NOUVEAU : Système d'objets
         this.itemBoxes = [];
@@ -2146,7 +2146,8 @@ io.on('connection', (socket) => {
             isPrivate: true,
             roomCode: roomCode,   // Le code explicite pour l'affichage
             isHost: true,
-            assignedColor: player.color  // Send the assigned color
+            assignedColor: player.color,  // Send the assigned color
+            selectedMap: room.selectedMap  // Add selected map to joined room data
         });
         
         // Envoyer la map sélectionnée (par défaut)
@@ -2215,7 +2216,8 @@ io.on('connection', (socket) => {
                 isPrivate: false,
                 roomCode: room.id,
                 isHost: true,
-                assignedColor: player.color  // Send the assigned color
+                assignedColor: player.color,  // Send the assigned color
+                selectedMap: room.selectedMap  // Add selected map to joined room data
             });
 
             // Send selected map
@@ -2266,7 +2268,8 @@ io.on('connection', (socket) => {
                 isPrivate: room.isPrivate,
                 roomCode: room.id,
                 isHost: false,
-                assignedColor: player.color  // Send the assigned color
+                assignedColor: player.color,  // Send the assigned color
+                selectedMap: room.selectedMap  // Add selected map to joined room data
             });
             
             // Envoyer la map sélectionnée
@@ -2326,14 +2329,32 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Charger la map sélectionnée et envoyer à tous les joueurs
-        if (loadMapData(room.selectedMap)) {
-            io.to(room.id).emit('mapData', trackData);
+        // Si random est sélectionné, choisir une map maintenant
+        let mapToLoad = room.selectedMap;
+        if (room.selectedMap === 'random') {
+            if (availableMaps.length > 0) {
+                const randomIndex = Math.floor(Math.random() * availableMaps.length);
+                mapToLoad = availableMaps[randomIndex];
+                console.log(`🎲 Map aléatoire choisie pour la course : ${mapToLoad}`);
+            } else {
+                mapToLoad = 'beach'; // Fallback
+            }
+        }
+        
+        // Charger la map et envoyer à tous les joueurs
+        if (loadMapData(mapToLoad)) {
+            // Inclure l'ID de la map réellement chargée dans les données
+            const mapDataWithId = {
+                ...trackData,
+                mapId: mapToLoad
+            };
+            io.to(room.id).emit('mapData', mapDataWithId);
         }
         
         // Démarrer la partie
         if (room.startGame()) {
-            io.to(room.id).emit('gameStarted');
+            // Envoyer l'ID de la map avec l'événement gameStarted
+            io.to(room.id).emit('gameStarted', { mapId: mapToLoad });
         }
     });
 
@@ -2348,19 +2369,23 @@ io.on('connection', (socket) => {
             return;
         }
         
-        // Vérifier que la map existe
-        if (!availableMaps.includes(data.mapId) && data.mapId !== 'lava_track') {
-            console.log(`⚠️ Map ${data.mapId} non trouvée dans la liste`);
-            return;
+        // Si c'est random, on garde "random" sélectionné
+        if (data.mapId === 'random') {
+            room.selectedMap = 'random';
+            console.log(`🎲 Room ${room.id} - Mode aléatoire activé`);
+        } else {
+            // Vérifier que la map existe
+            if (!availableMaps.includes(data.mapId) && data.mapId !== 'lava_track') {
+                console.log(`⚠️ Map ${data.mapId} non trouvée dans la liste`);
+                return;
+            }
+            room.selectedMap = data.mapId;
+            console.log(`🗺️ Room ${room.id} - Map changée : ${data.mapId}`);
         }
-        
-        // Mettre à jour la map sélectionnée
-        room.selectedMap = data.mapId;
-        console.log(`🗺️ Room ${room.id} - Map changée : ${data.mapId}`);
         
         // Notifier tous les joueurs de la room
         io.to(room.id).emit('mapSelected', {
-            mapId: data.mapId
+            mapId: room.selectedMap
         });
     });
 

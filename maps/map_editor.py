@@ -723,7 +723,7 @@ class MapEditor:
                     if len(self.current_racing_line) >= 3:
                         first_point = self.current_racing_line[0]
                         if math.dist((event.x, event.y), first_point) < 15:
-                            # Marquer comme fermée en mettant un flag spécial
+                            # Marquer comme fermée sans ajouter de point
                             self.force_close_racing_line = True
                             self.log(f"Ligne de course fermée - circuit complet!")
                             self.stop_racing_line()

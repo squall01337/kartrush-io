@@ -31,7 +31,8 @@ class SoundManager {
             superboost: 0.8,
             slickDropping: 0.6,
             slickCrossing: 0.5,
-            lightningStrike: 0.9
+            lightningStrike: 0.9,
+            wrongDirection: 0.1
 
         };
         
@@ -78,6 +79,8 @@ class SoundManager {
         this.sounds.slickDropping = new Audio('assets/audio/slick_dropping.mp3');
         this.sounds.slickCrossing = new Audio('assets/audio/slick_crossing.mp3');
         this.sounds.lightningStrike = new Audio('assets/audio/lightningstrike.mp3');
+        this.sounds.wrongDirection = new Audio('assets/audio/wrongdirection.mp3');
+        this.sounds.wrongDirection.loop = true;
 
     }
     
@@ -325,6 +328,25 @@ class SoundManager {
         }
     }
     
+    playWrongDirection() {
+        const wrongDirection = this.sounds.wrongDirection;
+        if (wrongDirection && wrongDirection.paused) {
+            wrongDirection.volume = this.getEffectiveVolume() * this.volumeMultipliers.wrongDirection;
+            wrongDirection.currentTime = 0;
+            wrongDirection.play().catch(e => console.log('Erreur lecture wrong_direction:', e));
+            this.activeAudios.set('wrongDirection', wrongDirection);
+        }
+    }
+    
+    stopWrongDirection() {
+        const wrongDirection = this.sounds.wrongDirection;
+        if (wrongDirection && !wrongDirection.paused) {
+            wrongDirection.pause();
+            wrongDirection.currentTime = 0;
+            this.activeAudios.delete('wrongDirection');
+        }
+    }
+    
     
     playEngine() {
         const engine = this.sounds.engineLoop;
@@ -511,6 +533,9 @@ class SoundManager {
         }
         if (this.sounds.superboost) {
             this.sounds.superboost.volume = effectiveVolume * this.volumeMultipliers.superboost;
+        }
+        if (this.sounds.wrongDirection) {
+            this.sounds.wrongDirection.volume = effectiveVolume * this.volumeMultipliers.wrongDirection;
         }
         
         // Appliquer à tous les éléments audio actifs enregistrés

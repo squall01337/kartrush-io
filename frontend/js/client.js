@@ -1325,6 +1325,20 @@ class GameClient {
             }
         });
         
+        this.socket.on('wrongDirectionAlert', (data) => {
+            const alertElement = document.getElementById('wrongDirectionAlert');
+            
+            if (data.show) {
+                // Show alert and play sound
+                alertElement.classList.remove('hidden');
+                soundManager.playWrongDirection();
+            } else {
+                // Hide alert and stop sound
+                alertElement.classList.add('hidden');
+                soundManager.stopWrongDirection();
+            }
+        });
+        
         this.socket.on('projectileExploded', (data) => {
             // Le GameEngine gère les particules
             if (data.type === 'bomb') {
@@ -2519,6 +2533,13 @@ class GameClient {
         
         document.getElementById(screenName).classList.remove('hidden');
         this.currentScreen = screenName;
+        
+        // Hide wrong direction alert when changing screens
+        const wrongDirectionAlert = document.getElementById('wrongDirectionAlert');
+        if (wrongDirectionAlert && !wrongDirectionAlert.classList.contains('hidden')) {
+            wrongDirectionAlert.classList.add('hidden');
+            soundManager.stopWrongDirection();
+        }
         
         // Gérer la vidéo de fond
         const bgVideo = document.getElementById('backgroundVideo');

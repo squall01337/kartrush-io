@@ -513,6 +513,8 @@ class Player {
         this.raceStartTime = 0;       // Timestamp when player started racing
         this.isGoingBackwards = false; // Track if player is going backwards
         this.wrongWayCrossing = false; // Track if player needs to fix a wrong way crossing
+        this.wrongDirectionStartTime = 0; // Track when player started going backwards
+        this.wrongDirectionAlertActive = false; // Track if wrong direction alert is active
     }
 
     // Nouvelle méthode pour infliger des dégâts
@@ -559,6 +561,8 @@ class Player {
         // Just clear the backwards flags
         this.isGoingBackwards = false;
         this.wrongWayCrossing = false;
+        this.wrongDirectionStartTime = 0;
+        this.wrongDirectionAlertActive = false;
         this.invulnerableTime = Date.now() + 2000; // 2 secondes d'invulnérabilité
         
         // Réinitialiser les boosts
@@ -1128,6 +1132,8 @@ class Room {
             player.raceStartTime = 0;
             player.isGoingBackwards = false;
             player.wrongWayCrossing = false;
+            player.wrongDirectionStartTime = 0;
+            player.wrongDirectionAlertActive = false;
         }
     }
 
@@ -1367,6 +1373,17 @@ class Room {
                     
                     // NOUVEAU : Vérifier les objets
                     this.checkItemBoxCollisions(player);
+                    
+                    // Check wrong direction alert even before race starts
+                    if (player.isGoingBackwards && player.wrongDirectionStartTime > 0) {
+                        const wrongDurationMs = now - player.wrongDirectionStartTime;
+                        
+                        // Show alert after 2 seconds of going backwards
+                        if (wrongDurationMs >= 2000 && !player.wrongDirectionAlertActive) {
+                            player.wrongDirectionAlertActive = true;
+                            io.to(player.id).emit('wrongDirectionAlert', { show: true });
+                        }
+                    }
                 }
             }
             
@@ -1531,6 +1548,17 @@ class Room {
                 this.checkBoosterCollisions(player);
                 this.checkItemBoxCollisions(player);
                 this.checkRaceProgress(player, now);
+                
+                // Check wrong direction alert
+                if (player.isGoingBackwards && player.wrongDirectionStartTime > 0) {
+                    const wrongDurationMs = now - player.wrongDirectionStartTime;
+                    
+                    // Show alert after 2 seconds of going backwards
+                    if (wrongDurationMs >= 2000 && !player.wrongDirectionAlertActive) {
+                        player.wrongDirectionAlertActive = true;
+                        io.to(player.id).emit('wrongDirectionAlert', { show: true });
+                    }
+                }
             }
         }
 
@@ -1977,7 +2005,16 @@ class Room {
                 
                 if (dot > 0) { // Passage dans le bon sens
                     // Clear backwards flag when crossing in correct direction
-                    player.isGoingBackwards = false;
+                    if (player.isGoingBackwards) {
+                        player.isGoingBackwards = false;
+                        player.wrongDirectionStartTime = 0;
+                        
+                        // Stop the alert if it was active
+                        if (player.wrongDirectionAlertActive) {
+                            player.wrongDirectionAlertActive = false;
+                            io.to(player.id).emit('wrongDirectionAlert', { show: false });
+                        }
+                    }
                     
                     // If they were fixing a wrong way crossing, just clear it
                     if (player.wrongWayCrossing) {
@@ -2034,7 +2071,10 @@ class Room {
                     }
                 } else if (dot < 0) { // Passage dans le mauvais sens
                     // Mark as going backwards
-                    player.isGoingBackwards = true;
+                    if (!player.isGoingBackwards) {
+                        player.isGoingBackwards = true;
+                        player.wrongDirectionStartTime = Date.now();
+                    }
                     
                     // If player has started racing and crosses finish line backwards
                     if (player.hasPassedStartLine && player.lap > 0) {
@@ -2211,14 +2251,21 @@ class Room {
     preprocessRacingLine(racingLine) {
         if (!racingLine || !racingLine.points || racingLine.points.length < 2) return;
         
+        // Check if first and last points are very close (indicating a closed loop)
+        const firstPoint = racingLine.points[0];
+        const lastPoint = racingLine.points[racingLine.points.length - 1];
+        const closingDistance = distanceXY(firstPoint[0], firstPoint[1], lastPoint[0], lastPoint[1]);
+        
+        // If points are extremely close (< 5 units), remove the last point to avoid tiny segment
+        if (closingDistance < 5 && racingLine.points.length > 2) {
+            racingLine.points.pop();
+            console.log('Removed duplicate closing point from racing line');
+        }
+        
         // Determine if racing line is closed
         const isClosedLine = racingLine.closed || (
             racingLine.points.length >= 3 &&
-            distanceXY(
-                racingLine.points[0][0], racingLine.points[0][1],
-                racingLine.points[racingLine.points.length - 1][0], 
-                racingLine.points[racingLine.points.length - 1][1]
-            ) < 30
+            closingDistance < 30
         );
         
         racingLine.segmentDistances = [0];
@@ -2248,15 +2295,8 @@ class Room {
         let closestPoint = null;
         let closestT = 0;
         
-        // Determine if racing line is closed
-        const isClosedLine = racingLine.closed || (
-            racingLine.points.length >= 3 &&
-            distanceXY(
-                racingLine.points[0][0], racingLine.points[0][1],
-                racingLine.points[racingLine.points.length - 1][0], 
-                racingLine.points[racingLine.points.length - 1][1]
-            ) < 30
-        );
+        // Use the preprocessed closed flag if available
+        const isClosedLine = racingLine.closed !== undefined ? racingLine.closed : false;
         
         // Check each segment of the racing line
         const numSegments = isClosedLine ? racingLine.points.length : racingLine.points.length - 1;
@@ -2316,13 +2356,25 @@ class Room {
                 
                 if (!isLapCrossing) {
                     // Player is going backwards
-                    player.isGoingBackwards = true;
-                    // Don't update progress if going backwards
-                    return;
+                    if (!player.isGoingBackwards) {
+                        player.isGoingBackwards = true;
+                        player.wrongDirectionStartTime = Date.now();
+                    }
+                    // IMPORTANT: Still update trackProgress for position calculation
+                    // The wrongWayCrossing flag already handles position penalty
                 }
             } else if (progressDiff > 10) {
                 // Player is going forward again
-                player.isGoingBackwards = false;
+                if (player.isGoingBackwards) {
+                    player.isGoingBackwards = false;
+                    player.wrongDirectionStartTime = 0;
+                    
+                    // Stop the alert if it was active
+                    if (player.wrongDirectionAlertActive) {
+                        player.wrongDirectionAlertActive = false;
+                        io.to(player.id).emit('wrongDirectionAlert', { show: false });
+                    }
+                }
             }
         } else {
             // For initial position or first calculation

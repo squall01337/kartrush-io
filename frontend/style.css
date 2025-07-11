@@ -2733,3 +2733,79 @@ button:disabled {
         transform: translateX(0);
     }
 }
+
+/* Wrong Direction Alert */
+.wrong-direction-alert {
+    position: fixed;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-50%);
+    z-index: 1001;
+    pointer-events: none;
+}
+
+.wrong-direction-content {
+    background: rgba(255, 0, 0, 0.9);
+    border: 3px solid #fff;
+    border-radius: 20px;
+    padding: 20px 40px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 0 30px rgba(255, 0, 0, 0.8),
+                0 0 60px rgba(255, 0, 0, 0.4),
+                inset 0 0 20px rgba(255, 255, 255, 0.2);
+    animation: wrongWayPulse 0.5s ease-in-out infinite alternate;
+}
+
+.wrong-direction-icon {
+    font-size: 48px;
+    animation: warningBounce 0.5s ease-in-out infinite;
+}
+
+.wrong-direction-text {
+    color: white;
+    font-size: 36px;
+    font-weight: bold;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    letter-spacing: 2px;
+}
+
+.wrong-direction-arrow {
+    font-size: 40px;
+    color: white;
+    animation: arrowSpin 1s linear infinite;
+}
+
+@keyframes wrongWayPulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 30px rgba(255, 0, 0, 0.8),
+                    0 0 60px rgba(255, 0, 0, 0.4),
+                    inset 0 0 20px rgba(255, 255, 255, 0.2);
+    }
+    100% {
+        transform: scale(1.05);
+        box-shadow: 0 0 40px rgba(255, 0, 0, 1),
+                    0 0 80px rgba(255, 0, 0, 0.6),
+                    inset 0 0 25px rgba(255, 255, 255, 0.3);
+    }
+}
+
+@keyframes warningBounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes arrowSpin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(-360deg);
+    }
+}

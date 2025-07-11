@@ -14,7 +14,8 @@ class GameEngine {
             maxTime: null,
             remainingTime: null,
             itemBoxes: [],
-            projectiles: []
+            projectiles: [],
+            poisonSlicks: []
         };
         
         this.track = null;
@@ -59,10 +60,6 @@ class GameEngine {
         this.itemIconsSprite.onload = () => {
             this.itemIconsLoaded = true;
         };
-        
-        // NOUVEAU : Sprite du healthpack (séparé)
-        this.healthpackSprite = new Image();
-        this.healthpackSprite.src = 'assets/healthpack.png';
         
         this.itemSlotAnimation = null;
         this.pendingItem = null; // L'objet réel qu'on cache pendant l'animation
@@ -311,14 +308,6 @@ class GameEngine {
     }
 
         getItemIcon(itemType) {
-        // Cas spécial pour le healthpack qui a son propre sprite
-        if (itemType === 'healthpack') {
-            if (this.healthpackSprite && this.healthpackSprite.complete) {
-                return this.healthpackSprite;
-            }
-            return null;
-        }
-        
         // Si pas encore chargé, retourner null
         if (!this.itemIconsLoaded) return null;
         
@@ -330,9 +319,11 @@ class GameEngine {
         // Positions dans la grille 3x3 (1024x1024 pixels, donc 341.33px par icône)
         const iconSize = 341.33; // 1024 / 3
         const positions = {
+            'healthpack': { row: 0, col: 0 },  // 1ère de la 1ère ligne (top-left)
             'rocket': { row: 1, col: 0 },      // 1ère de la 2ème ligne
             'bomb': { row: 2, col: 0 },        // 1ère de la 3ème ligne
-            'superboost': { row: 0, col: 1 }   // 2ème de la 1ère ligne
+            'superboost': { row: 0, col: 1 },  // 2ème de la 1ère ligne
+            'poisonslick': { row: 2, col: 1 }  // 2ème de la 3ème ligne (bottom-mid)
         };
         
         const pos = positions[itemType];
@@ -409,6 +400,7 @@ class GameEngine {
     this.renderTrack(ctx);
     this.renderBoosters(ctx);
     this.renderItemBoxes(ctx);
+    this.renderPoisonSlicks(ctx);
     this.renderFinishLine(ctx);
     
     this.particleSystem.render(ctx);
@@ -488,6 +480,51 @@ class GameEngine {
                 case 'rocket':
                     this.renderRocket(ctx, projectile);
                     break;
+            }
+            
+            ctx.restore();
+        });
+    }
+    
+    // NOUVEAU : Rendre les poison slicks
+    renderPoisonSlicks(ctx) {
+        if (!this.gameState.poisonSlicks) return;
+        
+        this.gameState.poisonSlicks.forEach(slick => {
+            ctx.save();
+            ctx.translate(slick.x, slick.y);
+            
+            // Effet d'animation
+            const time = Date.now() * 0.001;
+            const pulse = 1 + Math.sin(time * 3) * 0.05;
+            
+            // Draw the poison slick sprite
+            const poisonIcon = this.getItemIcon('poisonslick');
+            if (poisonIcon) {
+                ctx.globalAlpha = 0.9;
+                // Scale the sprite to match the slick radius
+                const spriteSize = slick.radius * 2 * pulse;
+                ctx.drawImage(
+                    poisonIcon,
+                    -spriteSize / 2,
+                    -spriteSize / 2,
+                    spriteSize,
+                    spriteSize
+                );
+            }
+            
+            // Simple bubble effect on top of sprite
+            ctx.globalAlpha = 0.6;
+            for (let i = 0; i < 3; i++) {
+                const bubbleTime = time * 2 + i * 2;
+                const bubbleY = -slick.radius * 0.5 + (bubbleTime % 3) * slick.radius * 0.3;
+                const bubbleX = Math.sin(bubbleTime) * slick.radius * 0.3;
+                const bubbleSize = 4 + Math.sin(bubbleTime * 2) * 2;
+                
+                ctx.fillStyle = 'rgba(200, 150, 255, 0.5)';
+                ctx.beginPath();
+                ctx.arc(bubbleX, bubbleY, bubbleSize, 0, Math.PI * 2);
+                ctx.fill();
             }
             
             ctx.restore();
@@ -1023,6 +1060,8 @@ class GameEngine {
             ctx.fillStyle = auraGradient;
             ctx.fillRect(-size * 2, -size * 2, size * 4, size * 4);
         }
+        
+        // No visual effect on the kart when poisoned - the damage numbers are enough
         
         // Effet de stun
         if (player.isStunned) {
@@ -1670,7 +1709,7 @@ renderItemSlot() {
 
 // Améliorer aussi startItemSlotAnimation pour l'animation casino
 startItemSlotAnimation(finalItem) {
-    const items = ['bomb', 'rocket', 'superboost', 'healthpack'];
+    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick'];
     
     // Stocker l'animation en cours
     this.itemSlotAnimation = {
@@ -1914,7 +1953,8 @@ startItemSlotAnimation(finalItem) {
             'bomb': 'BOMB',
             'rocket': 'ROCKET',
             'superboost': 'SUPER BOOST',
-            'healthpack': 'HEALTH PACK'
+            'healthpack': 'HEALTH PACK',
+            'poisonslick': 'POISON SLICK'
         };
         
         const itemName = itemNames[this.itemNotification.type] || this.itemNotification.type.toUpperCase();

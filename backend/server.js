@@ -346,6 +346,36 @@ class Projectile {
     }
 }
 
+// Poison Slick class
+class PoisonSlick {
+    constructor(owner) {
+        this.id = uuidv4();
+        this.x = owner.x - Math.cos(owner.angle) * 50; // Position further behind the kart (was 30)
+        this.y = owner.y - Math.sin(owner.angle) * 50;
+        this.radius = 35; // Reduced from 40 to 35
+        this.lifetime = 10000; // 10 seconds
+        this.createdAt = Date.now();
+        this.ownerId = owner.id;
+        this.active = true;
+        this.affectedPlayers = new Map(); // Track poison effect on players
+        this.ownerGracePeriod = Date.now() + 1500; // Owner is immune for 1.5 seconds
+    }
+    
+    update(deltaTime) {
+        const elapsed = Date.now() - this.createdAt;
+        if (elapsed >= this.lifetime) {
+            this.active = false;
+        }
+    }
+    
+    checkCollision(player) {
+        const dx = player.x - this.x;
+        const dy = player.y - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        return distance < this.radius + 15; // 15 is player radius
+    }
+}
+
 // Classes du jeu
 class Player {
     constructor(id, pseudo, color) {
@@ -406,6 +436,11 @@ class Player {
         this.itemSlotAnimation = null; // Pour l'animation du casino
         this.isStunned = false;
         this.stunnedUntil = 0;
+        
+        // Poison effect
+        this.isPoisoned = false;
+        this.poisonEndTime = 0;
+        this.lastPoisonDamage = 0;
         
         // Super booster
         this.isSuperBoosting = false;
@@ -471,6 +506,8 @@ class Player {
         this.isSuperBoosting = false;
         this.superBoostEndTime = 0;
         this.isStunned = false;
+        this.isPoisoned = false;
+        this.poisonEndTime = 0;
         
         // Reset drift state
         this.isDrifting = false;
@@ -606,6 +643,9 @@ class Player {
         // Si mort, ne pas update
         if (this.isDead) return;
         
+        // Variable to track if poison damage occurred
+        let poisonDamageResult = null;
+        
         // Gérer le stun
         if (this.isStunned) {
             if (Date.now() > this.stunnedUntil) {
@@ -613,6 +653,21 @@ class Player {
             } else {
                 this.speed *= 0.9; // Ralentir progressivement
                 return; // Ne pas traiter les inputs
+            }
+        }
+        
+        // Gérer l'effet de poison
+        const now = Date.now();
+        if (this.isPoisoned) {
+            if (now > this.poisonEndTime) {
+                this.isPoisoned = false;
+            } else {
+                // Appliquer des dégâts toutes les 500ms
+                if (now - this.lastPoisonDamage > 500) {
+                    const result = this.takeDamage(5); // 5 damage every 500ms
+                    this.lastPoisonDamage = now;
+                    poisonDamageResult = { damage: 5, result: result };
+                }
             }
         }
         
@@ -731,6 +786,9 @@ class Player {
         // Limites de la piste
         this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
         this.y = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_HEIGHT - GAME_CONFIG.KART_SIZE, this.y));
+        
+        // Return poison damage result if any
+        return poisonDamageResult;
     }
 
     accelerate() {
@@ -824,6 +882,7 @@ class Room {
         // NOUVEAU : Système d'objets
         this.itemBoxes = [];
         this.projectiles = new Map();
+        this.poisonSlicks = new Map();
         this.lastItemSpawn = 0;
         
         // Available colors for players
@@ -932,6 +991,7 @@ class Room {
         // Réinitialiser les objets
         this.itemBoxes = [];
         this.projectiles.clear();
+        this.poisonSlicks.clear();
         this.lastItemSpawn = 0;
         
         // NE PAS réinitialiser la selectedMap ici, elle doit persister
@@ -1199,8 +1259,20 @@ class Room {
             // Mettre à jour seulement les positions des joueurs
             for (let player of this.players.values()) {
                 if (!player.finished && !player.isDead) {
-                    player.update(deltaTime);
+                    const poisonDamageResult = player.update(deltaTime);
                     player.raceTime = 0; // Garder à 0 tant que le timer n'a pas démarré
+                    
+                    // Check if poison damage occurred (even before race start)
+                    if (poisonDamageResult) {
+                        io.to(this.id).emit('playerDamaged', {
+                            playerId: player.id,
+                            damage: poisonDamageResult.damage,
+                            hp: player.hp,
+                            damageType: 'poison',
+                            position: { x: player.x, y: player.y },
+                            isDead: poisonDamageResult.result === 'death'
+                        });
+                    }
                     
                     // Collision avec murs
                     this.checkWallCollisions(player);
@@ -1252,6 +1324,52 @@ class Room {
                 this.projectiles.delete(id);
             }
         }
+        
+        // Mettre à jour les poison slicks
+        for (const [id, slick] of this.poisonSlicks) {
+            slick.update(deltaTime);
+            
+            if (!slick.active) {
+                this.poisonSlicks.delete(id);
+                io.to(this.id).emit('poisonSlickRemoved', { id: id });
+            } else {
+                // Vérifier les collisions avec les joueurs
+                for (const [playerId, player] of this.players) {
+                    // Skip if player is the owner and still in grace period
+                    if (playerId === slick.ownerId && Date.now() < slick.ownerGracePeriod) {
+                        continue;
+                    }
+                    
+                    if (!player.isDead && slick.checkCollision(player)) {
+                        // Appliquer l'effet de poison si le joueur n'est pas déjà empoisonné par cette flaque
+                        const lastAffected = slick.affectedPlayers.get(playerId) || 0;
+                        const now = Date.now();
+                        
+                        // Continuously slow the player while in the slick - more aggressive slow
+                        const maxSlowSpeed = GAME_CONFIG.MAX_SPEED * 0.3; // 30% speed instead of 50%
+                        if (player.speed > maxSlowSpeed) {
+                            player.speed = maxSlowSpeed;
+                        }
+                        
+                        // Also apply friction to make it harder to accelerate
+                        player.speed *= 0.95;
+                        
+                        if (now - lastAffected > 1000) { // Réappliquer après 1 seconde
+                            slick.affectedPlayers.set(playerId, now);
+                            
+                            // Appliquer l'effet de poison
+                            player.isPoisoned = true;
+                            player.poisonEndTime = now + 1000; // 1 second of poison after leaving
+                            
+                            io.to(this.id).emit('playerPoisoned', {
+                                playerId: playerId,
+                                slickId: id
+                            });
+                        }
+                    }
+                }
+            }
+        }
 
         // NOUVEAU : Gérer les respawns
         for (let player of this.players.values()) {
@@ -1286,8 +1404,27 @@ class Room {
             
             // Mettre à jour seulement si pas mort
             if (!player.finished && !player.isDead) {
-                player.update(deltaTime);
+                const poisonDamageResult = player.update(deltaTime);
                 player.raceTime = now - this.gameStartTime;
+                
+                // Check if poison damage occurred
+                if (poisonDamageResult) {
+                    io.to(this.id).emit('playerDamaged', {
+                        playerId: player.id,
+                        damage: poisonDamageResult.damage,
+                        hp: player.hp,
+                        damageType: 'poison',
+                        position: { x: player.x, y: player.y },
+                        isDead: poisonDamageResult.result === 'death'
+                    });
+                    
+                    if (poisonDamageResult.result === 'death') {
+                        io.to(this.id).emit('playerDeath', {
+                            playerId: player.id,
+                            killerType: 'poison'
+                        });
+                    }
+                }
                 
                 this.checkWallCollisions(player);
                 this.checkBoosterCollisions(player);
@@ -1329,14 +1466,16 @@ class Room {
                 const rand = Math.random();
                 let itemType;
                 
-                if (rand < 0.45) {
-                    itemType = 'healthpack'; // 45%
-                } else if (rand < 0.70) {
-                    itemType = 'bomb'; // 25%
-                } else if (rand < 0.90) {
-                    itemType = 'rocket'; // 20%
+                if (rand < 0.90) {
+                    itemType = 'poisonslick'; // 90% TEMPORARY FOR TESTING
+                } else if (rand < 0.92) {
+                    itemType = 'healthpack'; // 2%
+                } else if (rand < 0.95) {
+                    itemType = 'bomb'; // 3%
+                } else if (rand < 0.98) {
+                    itemType = 'rocket'; // 3%
                 } else {
-                    itemType = 'superboost'; // 10%
+                    itemType = 'superboost'; // 2%
                 }
                 
                 // Donner l'objet au joueur
@@ -1376,6 +1515,10 @@ class Room {
                 
             case 'healthpack':
                 this.useHealthpack(player);
+                break;
+                
+            case 'poisonslick':
+                this.usePoisonSlick(player);
                 break;
         }
         
@@ -1467,6 +1610,20 @@ class Room {
             position: { x: player.x, y: player.y }
         });
         
+    }
+    
+    usePoisonSlick(player) {
+        const slick = new PoisonSlick(player);
+        this.poisonSlicks.set(slick.id, slick);
+        
+        // Envoyer l'événement de création du poison slick
+        io.to(this.id).emit('poisonSlickDropped', {
+            id: slick.id,
+            x: slick.x,
+            y: slick.y,
+            radius: slick.radius,
+            ownerId: player.id
+        });
     }
     
     // Gérer l'explosion d'un projectile
@@ -2261,6 +2418,7 @@ class Room {
                 // NOUVEAU : États des objets
                 isStunned: p.isStunned,
                 isSuperBoosting: p.isSuperBoosting,
+                isPoisoned: p.isPoisoned,
                 // Drift state
                 isDrifting: p.isDrifting,
                 driftStartTime: p.driftStartTime,
@@ -2289,6 +2447,13 @@ class Room {
                 y: p.y,
                 angle: p.angle,
                 ownerId: p.owner.id
+            })),
+            poisonSlicks: Array.from(this.poisonSlicks.values()).filter(s => s.active).map(s => ({
+                id: s.id,
+                x: s.x,
+                y: s.y,
+                radius: s.radius,
+                ownerId: s.ownerId
             }))
         };
 

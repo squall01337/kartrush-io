@@ -117,3 +117,17 @@ When starting a new session, ask these questions to quickly understand the proje
 - Increased max speed: 145% (was 135%)
 - Increased initial impulse: +2.0 (was +1.6)
 - Makes purple boost harder to achieve but more rewarding
+
+### Poison Slick Item (New)
+- **Effect**: Drops a toxic puddle that slows players to 30% speed and deals damage over time
+- **Duration**: Puddle stays on track for 10 seconds
+- **Damage**: 5 HP every 500ms while poisoned
+- **Poison Duration**: 1 second after leaving the puddle
+- **Drop Rate**: 12% (balanced with other items)
+- **Visual**: Purple/green puddle using sprite from items_icons.png (bottom-mid position)
+- **Audio**: slick_dropping.mp3 when used, slick_crossing.mp3 when hit
+- **Mechanics**: 
+  - Drops 50 pixels behind the kart
+  - Owner has 1.5 second immunity to prevent self-damage
+  - Aggressive slowdown with extra friction while in puddle
+  - Purple screen flash and damage numbers when poisoned

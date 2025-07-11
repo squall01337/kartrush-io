@@ -597,7 +597,7 @@ class GameClient {
     }
 
     // Méthode showScreenFlash à ajouter
-    showScreenFlash(color) {
+    showScreenFlash(color, duration = 200) {
         // Créer un div de flash
         const flash = document.createElement('div');
         flash.className = 'screen-flash';
@@ -620,8 +620,9 @@ class GameClient {
         
         // Animation de fondu
         let opacity = 0.5;
+        const fadeStep = 0.05 * (200 / duration); // Adjust fade speed based on duration
         const fadeOut = () => {
-            opacity -= 0.05;
+            opacity -= fadeStep;
             flash.style.opacity = opacity;
             
             if (opacity > 0) {
@@ -1280,6 +1281,23 @@ class GameClient {
         this.socket.on('rocketLaunched', (data) => {
             // Le GameEngine gère l'affichage
             soundManager.playRocketLaunch();
+        });
+        
+        this.socket.on('poisonSlickDropped', (data) => {
+            // Le GameEngine gère l'affichage
+            soundManager.playSlickDropping();
+        });
+        
+        this.socket.on('poisonSlickRemoved', (data) => {
+            // Handled by game state update
+        });
+        
+        this.socket.on('playerPoisoned', (data) => {
+            if (data.playerId === this.playerId) {
+                // Effet visuel pour le joueur empoisonné
+                this.showScreenFlash('#8B008B', 300); // Purple flash
+                soundManager.playSlickCrossing();
+            }
         });
         
         this.socket.on('superBoostActivated', (data) => {

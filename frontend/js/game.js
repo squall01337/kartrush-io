@@ -1023,120 +1023,296 @@ class GameEngine {
         
         // Ne pas rendre le kart si mort
         if (!player.isDead) {
-            // Effet de boost si actif
+            // Unified boost glow system
+            let glowColor = null;
+            let glowIntensity = 0;
+            let trailColor = null;
+            
+            // Check for different boost types and set appropriate colors
             const boostEffect = this.boosterEffects.get(player.id);
-            if (boostEffect) {
-                // Traînée de vitesse
-                const trailLength = 40;
+            
+            if (player.isSuperBoosting) {
+                // Keep super boost as is (orange aura handled separately)
+                glowColor = null;
+            } else if (player.isBoosting || boostEffect) {
+                // Determine the boost level - prioritize the stored effect level
+                let currentBoostLevel = 0;
+                
+                // First check the stored boost effect
+                if (boostEffect && boostEffect.boostLevel !== undefined) {
+                    currentBoostLevel = boostEffect.boostLevel;
+                } 
+                // Then check the player's current boost level
+                else if (player.boostLevel !== undefined) {
+                    currentBoostLevel = player.boostLevel;
+                }
+                
+                // Set colors based on boost level
+                if (currentBoostLevel === 3) {
+                    glowColor = '#9933ff'; // Purple drift boost
+                    trailColor = 'rgba(153, 51, 255,';
+                } else if (currentBoostLevel === 2) {
+                    glowColor = '#ff6600'; // Orange drift boost
+                    trailColor = 'rgba(255, 102, 0,';
+                } else if (currentBoostLevel === 1) {
+                    glowColor = '#0088ff'; // Blue drift boost
+                    trailColor = 'rgba(0, 136, 255,';
+                } else {
+                    // Regular boost pad (green) - boost level 0 or undefined
+                    glowColor = '#00ff96';
+                    trailColor = 'rgba(0, 255, 150,';
+                }
+                glowIntensity = 0.8;
+            }
+            
+            // Apply boost effects if any boost is active
+            if (boostEffect && trailColor) {
+                const effectDuration = boostEffect ? boostEffect.duration : 1500;
+                const effectIntensity = boostEffect ? (effectDuration / 1500) : 1;
+                
+                // Enhanced speed trail with proper color
+                const trailLength = 60;
                 const gradient = ctx.createLinearGradient(-trailLength, 0, 0, 0);
-                gradient.addColorStop(0, 'rgba(0, 255, 150, 0)');
-                gradient.addColorStop(1, `rgba(0, 255, 150, ${0.6 * (boostEffect.duration / 1500)})`);
+                gradient.addColorStop(0, trailColor + ' 0)');
+                gradient.addColorStop(0.3, trailColor + ` ${0.2 * effectIntensity})`);
+                gradient.addColorStop(0.6, trailColor + ` ${0.5 * effectIntensity})`);
+                gradient.addColorStop(1, trailColor + ` ${0.8 * effectIntensity})`);
                 
                 ctx.fillStyle = gradient;
-                ctx.fillRect(-trailLength, -size/2, trailLength, size);
                 
-                // Particules
+                // Create a tapered trail shape instead of rectangle
+                ctx.beginPath();
+                ctx.moveTo(0, -size/2);
+                ctx.lineTo(-trailLength, -size/2 - 5);
+                ctx.lineTo(-trailLength, size/2 + 5);
+                ctx.lineTo(0, size/2);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Enhanced particles
                 ctx.save();
-                const particleCount = 3;
+                const particleCount = 5;
                 for (let i = 0; i < particleCount; i++) {
-                    const offset = (Date.now() * 0.01 + i * 120) % 360;
-                    const px = -20 - Math.random() * 20;
-                    const py = (Math.sin(offset * 0.1) * 10);
+                    const offset = (Date.now() * 0.015 + i * 72) % 360;
+                    const px = -25 - Math.random() * 25;
+                    const py = (Math.sin(offset * 0.1) * 12);
                     
-                    ctx.fillStyle = `rgba(0, 255, 150, ${0.5 * (boostEffect.duration / 1500)})`;
+                    // Colored particle core
+                    const particleGradient = ctx.createRadialGradient(px, py, 0, px, py, 6);
+                    particleGradient.addColorStop(0, 'rgba(255, 255, 255, ' + effectIntensity + ')');
+                    particleGradient.addColorStop(0.4, trailColor + ` ${0.8 * effectIntensity})`);
+                    particleGradient.addColorStop(1, trailColor + ` ${0.2 * effectIntensity})`);
+                    
+                    ctx.fillStyle = particleGradient;
                     ctx.beginPath();
-                    ctx.arc(px, py, 2, 0, Math.PI * 2);
+                    ctx.arc(px, py, 6, 0, Math.PI * 2);
                     ctx.fill();
                 }
                 ctx.restore();
-                
-                // Aura autour du kart
-                ctx.shadowColor = 'rgba(0, 255, 150, 0.8)';
-                ctx.shadowBlur = 20;
             }
             
             // Drift effects
             if (player.isDrifting) {
-                // Single drift color scheme (blue/white)
-                const colors = { spark: '#66ccff', trail: '#4488ff' };
                 const driftDuration = Date.now() - player.driftStartTime;
                 const driftIntensity = Math.min(1, driftDuration / 1000); // 0 to 1 over 1 second
+                
+                // Determine colors based on charge level
+                let colors = { spark: '#66ccff', trail: '#4488ff', glow: '#0088ff' }; // Blue (default)
+                
+                if (player.driftChargeLevel >= 3) {
+                    // Purple (Ultra mini-turbo)
+                    colors = { spark: '#ff66ff', trail: '#cc44ff', glow: '#9933ff' };
+                } else if (player.driftChargeLevel >= 2) {
+                    // Orange (Super mini-turbo)
+                    colors = { spark: '#ffaa44', trail: '#ff8822', glow: '#ff6600' };
+                } else if (player.driftChargeLevel >= 1) {
+                    // Blue (Mini-turbo)
+                    colors = { spark: '#66ccff', trail: '#4488ff', glow: '#0088ff' };
+                }
                     
-                // Tire smoke effect
+                // Simple visible drift trail
                 ctx.save();
-                ctx.globalAlpha = 0.4 * driftIntensity;
-                const smokeCount = 5;
-                for (let i = 0; i < smokeCount; i++) {
-                    const age = (Date.now() * 0.001 + i * 0.5) % 1;
-                    const smokeX = -size/2 - age * 20;
-                    const smokeY = player.driftDirection * (size/2 + age * 10);
-                    const smokeSize = 10 + age * 20;
+                
+                // Draw multiple trail lines for a flowing effect
+                const trailLines = 3;
+                for (let t = 0; t < trailLines; t++) {
+                    const lineOffset = t * 4;
+                    const lineAlpha = (1 - t * 0.3) * 0.8 * driftIntensity;
+                    const lineLength = 30 - t * 5;
                     
-                    ctx.fillStyle = `rgba(200, 200, 200, ${0.4 * (1 - age)})`;
+                    // Animated wave
+                    const wave = Math.sin(Date.now() * 0.005 + t) * 2;
+                    
+                    const gradient = ctx.createLinearGradient(
+                        -size/2, player.driftDirection * (size/2 + wave),
+                        -size/2 - lineLength, player.driftDirection * (size/2 + wave)
+                    );
+                    
+                    if (player.driftChargeLevel >= 3) {
+                        // Purple
+                        gradient.addColorStop(0, `rgba(255, 100, 255, ${lineAlpha})`);
+                        gradient.addColorStop(0.5, `rgba(200, 50, 255, ${lineAlpha * 0.7})`);
+                        gradient.addColorStop(1, 'transparent');
+                    } else if (player.driftChargeLevel >= 2) {
+                        // Orange
+                        gradient.addColorStop(0, `rgba(255, 150, 50, ${lineAlpha})`);
+                        gradient.addColorStop(0.5, `rgba(255, 100, 0, ${lineAlpha * 0.7})`);
+                        gradient.addColorStop(1, 'transparent');
+                    } else if (player.driftChargeLevel >= 1) {
+                        // Blue
+                        gradient.addColorStop(0, `rgba(100, 200, 255, ${lineAlpha})`);
+                        gradient.addColorStop(0.5, `rgba(50, 150, 255, ${lineAlpha * 0.7})`);
+                        gradient.addColorStop(1, 'transparent');
+                    } else {
+                        // Gray
+                        gradient.addColorStop(0, `rgba(180, 180, 180, ${lineAlpha * 0.6})`);
+                        gradient.addColorStop(1, 'transparent');
+                    }
+                    
+                    ctx.strokeStyle = gradient;
+                    ctx.lineWidth = 6 - t * 1.5;
+                    ctx.lineCap = 'round';
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(-size/2 - lineOffset, player.driftDirection * (size/2 + wave));
+                    ctx.lineTo(-size/2 - lineLength - lineOffset, player.driftDirection * (size/2 + wave - lineOffset * 0.5));
+                    ctx.stroke();
+                }
+                
+                // Add some smoke puffs
+                const smokeCount = 4;
+                for (let i = 0; i < smokeCount; i++) {
+                    const smokeAge = (Date.now() * 0.002 + i * 0.3) % 1;
+                    const smokeX = -size/2 - smokeAge * 25;
+                    const smokeY = player.driftDirection * (size/2 + Math.sin(smokeAge * Math.PI) * 5);
+                    const smokeSize = 8 * (1 - smokeAge);
+                    const smokeAlpha = (1 - smokeAge) * 0.4 * driftIntensity;
+                    
+                    if (player.driftChargeLevel >= 3) {
+                        ctx.fillStyle = `rgba(220, 150, 255, ${smokeAlpha})`;
+                    } else if (player.driftChargeLevel >= 2) {
+                        ctx.fillStyle = `rgba(255, 180, 100, ${smokeAlpha})`;
+                    } else if (player.driftChargeLevel >= 1) {
+                        ctx.fillStyle = `rgba(150, 200, 255, ${smokeAlpha})`;
+                    } else {
+                        ctx.fillStyle = `rgba(200, 200, 200, ${smokeAlpha})`;
+                    }
+                    
                     ctx.beginPath();
                     ctx.arc(smokeX, smokeY, smokeSize, 0, Math.PI * 2);
                     ctx.fill();
                 }
+                
                 ctx.restore();
                     
-                // Spark trail (only after 500ms of drifting)
-                if (driftDuration > 500) {
+                // Spark trail with different timing for each charge level
+                const sparkStartTime = player.driftChargeLevel >= 1 ? 300 : 500; // Earlier sparks for charged
+                if (driftDuration > sparkStartTime) {
                     ctx.save();
-                    const sparkCount = Math.floor(8 * driftIntensity);
-                    for (let i = 0; i < sparkCount; i++) {
-                        const progress = i / sparkCount;
-                        const age = (Date.now() * 0.003 + progress) % 1;
-                        
-                        // Spark position
-                        const sparkX = -size/2 - age * 30 - Math.random() * 5;
-                        const sparkY = player.driftDirection * (size/2 + Math.sin(age * Math.PI * 2) * 6);
-                        
-                        // Spark trail effect
-                        const trailLength = 15;
-                        const gradient = ctx.createLinearGradient(
-                            sparkX, sparkY,
-                            sparkX - trailLength, sparkY - player.driftDirection * 3
-                        );
-                        gradient.addColorStop(0, colors.spark);
-                        gradient.addColorStop(0.5, colors.trail);
-                        gradient.addColorStop(1, 'transparent');
-                        
-                        ctx.strokeStyle = gradient;
-                        ctx.lineWidth = 3;
-                        ctx.globalAlpha = (1 - age) * 0.8 * driftIntensity;
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(sparkX, sparkY);
-                        ctx.lineTo(sparkX - trailLength, sparkY - player.driftDirection * 3);
-                        ctx.stroke();
-                        
-                        // Spark core
-                        ctx.fillStyle = colors.spark;
-                        ctx.globalAlpha = (1 - age) * driftIntensity;
-                        ctx.beginPath();
-                        ctx.arc(sparkX, sparkY, 2, 0, Math.PI * 2);
-                        ctx.fill();
+                    
+                    // Different spark patterns for each tier
+                    if (player.driftChargeLevel >= 3) {
+                        // Purple: Intense sparks (no lightning)
+                        const sparkCount = 15;
+                        for (let i = 0; i < sparkCount; i++) {
+                            const age = (Date.now() * 0.005 + i * 0.15) % 1;
+                            const sparkX = -size/2 - age * 35;
+                            const sparkY = player.driftDirection * (size/2 + Math.sin(age * Math.PI * 5) * 8);
+                            
+                            // Large purple sparks
+                            const sparkSize = 4 * (1 - age);
+                            ctx.fillStyle = 'white';
+                            ctx.shadowColor = colors.glow;
+                            ctx.shadowBlur = 15;
+                            ctx.globalAlpha = (1 - age) * 0.9;
+                            ctx.beginPath();
+                            ctx.arc(sparkX, sparkY, sparkSize, 0, Math.PI * 2);
+                            ctx.fill();
+                            
+                            // Purple outer glow
+                            ctx.shadowBlur = 0;
+                            ctx.fillStyle = colors.spark;
+                            ctx.globalAlpha = (1 - age) * 0.6;
+                            ctx.beginPath();
+                            ctx.arc(sparkX, sparkY, sparkSize * 2, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    } else if (player.driftChargeLevel >= 2) {
+                        // Orange: Flame-like particles
+                        const flameCount = 8;
+                        for (let i = 0; i < flameCount; i++) {
+                            const age = (Date.now() * 0.005 + i * 0.3) % 1;
+                            const flameX = -size/2 - age * 35;
+                            const flameY = player.driftDirection * (size/2 + Math.sin(age * Math.PI * 3) * 10);
+                            
+                            // Flame shape
+                            const flameHeight = 15 * (1 - age);
+                            const flameWidth = 8 * (1 - age);
+                            
+                            ctx.fillStyle = `rgba(255, 255, 100, ${(1 - age) * 0.9})`;
+                            ctx.beginPath();
+                            ctx.moveTo(flameX, flameY);
+                            ctx.quadraticCurveTo(flameX - flameWidth/2, flameY - flameHeight/2, flameX - flameWidth, flameY - flameHeight);
+                            ctx.quadraticCurveTo(flameX - flameWidth/2, flameY - flameHeight*0.8, flameX, flameY - flameHeight);
+                            ctx.quadraticCurveTo(flameX + flameWidth/2, flameY - flameHeight*0.8, flameX + flameWidth, flameY - flameHeight);
+                            ctx.quadraticCurveTo(flameX + flameWidth/2, flameY - flameHeight/2, flameX, flameY);
+                            ctx.fill();
+                            
+                            // Orange core
+                            ctx.fillStyle = colors.spark;
+                            ctx.globalAlpha = (1 - age) * 0.6;
+                            ctx.beginPath();
+                            ctx.arc(flameX, flameY - flameHeight/2, flameWidth/2, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    } else if (player.driftChargeLevel >= 1) {
+                        // Blue: Classic sparks with trails
+                        const sparkCount = 10;
+                        for (let i = 0; i < sparkCount; i++) {
+                            const age = (Date.now() * 0.004 + i * 0.2) % 1;
+                            const sparkX = -size/2 - age * 30;
+                            const sparkY = player.driftDirection * (size/2 + Math.sin(age * Math.PI * 4) * 6);
+                            
+                            // Spark trail
+                            const trailLength = 20 * (1 - age);
+                            const gradient = ctx.createLinearGradient(
+                                sparkX, sparkY,
+                                sparkX - trailLength, sparkY
+                            );
+                            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+                            gradient.addColorStop(0.3, colors.spark);
+                            gradient.addColorStop(1, 'transparent');
+                            
+                            ctx.strokeStyle = gradient;
+                            ctx.lineWidth = 3;
+                            ctx.globalAlpha = (1 - age);
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(sparkX, sparkY);
+                            ctx.lineTo(sparkX - trailLength, sparkY);
+                            ctx.stroke();
+                            
+                            // Spark point
+                            ctx.fillStyle = 'white';
+                            ctx.shadowColor = colors.glow;
+                            ctx.shadowBlur = 10;
+                            ctx.beginPath();
+                            ctx.arc(sparkX, sparkY, 3, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
                     }
+                    
                     ctx.globalAlpha = 1;
+                    ctx.shadowBlur = 0;
                     ctx.restore();
                 }
                     
-                // Ground glow effect
-                ctx.save();
-                const glowGradient = ctx.createRadialGradient(
-                    -size/2, player.driftDirection * size/2, 0,
-                    -size/2, player.driftDirection * size/2, size * 1.5
-                );
-                glowGradient.addColorStop(0, colors.trail + '40');
-                glowGradient.addColorStop(1, 'transparent');
-                ctx.fillStyle = glowGradient;
-                ctx.fillRect(-size * 2, -size * 2, size * 4, size * 4);
-                ctx.restore();
-                
-                // Enhanced shadow/glow
-                ctx.shadowColor = colors.trail;
-                ctx.shadowBlur = 20 * driftIntensity;
+                // Removed energy burst particles
             }
+            
+            // Don't apply glow aura for speed boosts - only for drifting
+            
+            // Draw the actual kart (no glow for speed boosts)
             
             const cachedSprite = this.spriteCache.get(player.color);
             
@@ -1150,6 +1326,9 @@ class GameEngine {
                 ctx.lineWidth = 2;
                 ctx.strokeRect(-size/2, -size/2, size, size);
             }
+            
+            // Reset shadow
+            ctx.shadowBlur = 0;
         }
         
         ctx.restore();
@@ -1567,10 +1746,22 @@ startItemSlotAnimation(finalItem) {
     // Détecter les nouveaux boosts pour les effets visuels
     gameData.players.forEach(player => {
         if (player.isBoosting && !this.boosterEffects.has(player.id)) {
+            // Determine boost duration based on type
+            let duration = 1500; // default
+            if (player.boostLevel === 1) duration = 700;   // Blue drift boost
+            else if (player.boostLevel === 2) duration = 1000; // Orange drift boost
+            else if (player.boostLevel === 3) duration = 1300; // Purple drift boost
+            
             this.boosterEffects.set(player.id, {
-                duration: 1500,
-                startTime: Date.now()
+                duration: duration,
+                startTime: Date.now(),
+                boostLevel: player.boostLevel || 0
             });
+        }
+        
+        // Clean up effects when boost ends
+        if (!player.isBoosting && this.boosterEffects.has(player.id)) {
+            this.boosterEffects.delete(player.id);
         }
     });
     

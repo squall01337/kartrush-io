@@ -535,7 +535,7 @@ class Player {
         
         // Detect start of counter-steer for jump effect
         if (isCounterSteering && !this.wasCounterSteering) {
-            this.counterSteerJump = 1; // Middle value between 1.0 and 1.5
+            this.counterSteerJump = 1.035; // Middle value between 1.0 and 1.5
         }
         this.wasCounterSteering = isCounterSteering;
         
@@ -1561,25 +1561,20 @@ class Room {
     activateBoost(player) {
         if (player.boostCooldown > 0) return;
         
-        // Si déjà en boost, augmenter le niveau (max 3)
-        if (player.isBoosting) {
-            player.boostLevel = Math.min(3, player.boostLevel + 1);
-        } else {
-            // Premier boost
-            player.isBoosting = true;
-            player.boostLevel = 1;
-        }
+        // Regular boost pad - always keep boostLevel at 0 for green color
+        player.isBoosting = true;
+        player.boostEndTime = Date.now() + 1500;
+        player.boostCooldown = 500;
         
-        player.boostEndTime = Date.now() + 1500; // Réinitialiser la durée à chaque nouveau boost
-        player.boostCooldown = 500; // Cooldown réduit à 0.5 secondes pour permettre l'accumulation
+        // Don't change boostLevel for regular boosts - keep it at 0
+        // boostLevel 0 = green (regular boost)
+        // boostLevel 1-3 = blue/orange/purple (drift boosts)
         
-        // Donner une impulsion immédiate selon le niveau
-        const impulse = 1 + (player.boostLevel * 0.5); // 1.5, 2, 2.5
-        player.speed = Math.min(player.speed + impulse, GAME_CONFIG.MAX_SPEED * (1 + player.boostLevel * 0.25));
+        // Give speed impulse
+        player.speed = Math.min(player.speed + 1.5, GAME_CONFIG.MAX_SPEED * 1.25);
         
-        // Émettre l'événement avec le niveau de boost
-        io.to(player.id).emit('boostActivated', { level: player.boostLevel });
-        
+        // Émettre l'événement
+        io.to(player.id).emit('boostActivated', { level: 0 });
     }
 
     // Méthode utilitaire pour calculer la distance d'un point à une ligne
@@ -2271,7 +2266,8 @@ class Room {
                 driftStartTime: p.driftStartTime,
                 driftDirection: p.driftDirection,
                 driftRotation: p.driftRotation,
-                driftChargeLevel: p.driftChargeLevel
+                driftChargeLevel: p.driftChargeLevel,
+                boostLevel: p.boostLevel
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

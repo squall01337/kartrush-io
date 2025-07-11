@@ -442,6 +442,10 @@ class Player {
         this.poisonEndTime = 0;
         this.lastPoisonDamage = 0;
         
+        // Lightning speed reduction
+        this.speedReductionFactor = 1.0;
+        this.speedReductionEndTime = 0;
+        
         // Super booster
         this.isSuperBoosting = false;
         this.superBoostEndTime = 0;
@@ -508,6 +512,8 @@ class Player {
         this.isStunned = false;
         this.isPoisoned = false;
         this.poisonEndTime = 0;
+        this.speedReductionFactor = 1.0;
+        this.speedReductionEndTime = 0;
         
         // Reset drift state
         this.isDrifting = false;
@@ -671,6 +677,15 @@ class Player {
             }
         }
         
+        // Handle Lightning speed reduction
+        if (this.speedReductionEndTime > now) {
+            // Speed reduction is still active
+            // We'll apply this factor when calculating movement
+        } else if (this.speedReductionFactor !== 1.0) {
+            // Reset speed reduction when expired
+            this.speedReductionFactor = 1.0;
+        }
+        
         // Sauvegarder la position précédente
         this.lastX = this.x;
         this.lastY = this.y;
@@ -744,18 +759,22 @@ class Player {
         
         // Update position - during drift, create a noticeable curve towards facing direction
         let moveAngle = this.angle;
+        
+        // Apply speed reduction factor from Lightning
+        const effectiveSpeed = this.speed * this.speedReductionFactor;
+        
         if (this.isDrifting) {
             // Movement follows current angle
             moveAngle = this.angle;
             
             // Lateral drift force based on rotation amount (increased for tighter curves)
             const driftStrength = Math.min(1.0, Math.abs(this.driftRotation) / (Math.PI * 0.5)); // 0 to 1, capped
-            const lateralForce = this.speed * 0.18 * driftStrength; // Increased from 0.12
+            const lateralForce = effectiveSpeed * 0.18 * driftStrength; // Increased from 0.12
             const lateralAngle = this.angle + (this.driftDirection * Math.PI / 2);
             
             // Apply forward movement
-            this.x += Math.cos(moveAngle) * this.speed;
-            this.y += Math.sin(moveAngle) * this.speed;
+            this.x += Math.cos(moveAngle) * effectiveSpeed;
+            this.y += Math.sin(moveAngle) * effectiveSpeed;
             
             // Apply lateral drift movement (increased)
             this.x += Math.cos(lateralAngle) * lateralForce * this.driftDirection;
@@ -765,7 +784,7 @@ class Player {
             const isCounterSteering = (this.driftDirection === -1 && this.inputs.right) || 
                                      (this.driftDirection === 1 && this.inputs.left);
             const baseInertia = isCounterSteering ? 0.15 : 0.05; // Triple inertia when counter-steering
-            const inertiaForce = baseInertia * this.speed;
+            const inertiaForce = baseInertia * effectiveSpeed;
             const inertiaAngle = this.originalAngle - (this.driftDirection * Math.PI / 2);
             this.x += Math.cos(inertiaAngle) * inertiaForce;
             this.y += Math.sin(inertiaAngle) * inertiaForce;
@@ -773,14 +792,14 @@ class Player {
             // Apply counter-steer jump effect
             if (this.counterSteerJump > 0) {
                 const jumpAngle = this.angle - (this.driftDirection * Math.PI / 2); // Outward from drift
-                const jumpForce = this.counterSteerJump * this.speed * 0.8; // Middle value between 0.8 and 1.0
+                const jumpForce = this.counterSteerJump * effectiveSpeed * 0.8; // Middle value between 0.8 and 1.0
                 this.x += Math.cos(jumpAngle) * jumpForce;
                 this.y += Math.sin(jumpAngle) * jumpForce;
             }
         } else {
             // Normal movement when not drifting
-            this.x += Math.cos(moveAngle) * this.speed;
-            this.y += Math.sin(moveAngle) * this.speed;
+            this.x += Math.cos(moveAngle) * effectiveSpeed;
+            this.y += Math.sin(moveAngle) * effectiveSpeed;
         }
         
         // Limites de la piste
@@ -1467,15 +1486,17 @@ class Room {
                 let itemType;
                 
                 if (rand < 0.90) {
-                    itemType = 'poisonslick'; // 90% TEMPORARY FOR TESTING
+                    itemType = 'lightning'; // 90% TEMPORARY FOR TESTING
                 } else if (rand < 0.92) {
                     itemType = 'healthpack'; // 2%
                 } else if (rand < 0.95) {
                     itemType = 'bomb'; // 3%
-                } else if (rand < 0.98) {
-                    itemType = 'rocket'; // 3%
-                } else {
+                } else if (rand < 0.97) {
+                    itemType = 'rocket'; // 2%
+                } else if (rand < 0.99) {
                     itemType = 'superboost'; // 2%
+                } else {
+                    itemType = 'poisonslick'; // 1%
                 }
                 
                 // Donner l'objet au joueur
@@ -1519,6 +1540,10 @@ class Room {
                 
             case 'poisonslick':
                 this.usePoisonSlick(player);
+                break;
+                
+            case 'lightning':
+                this.useLightning(player);
                 break;
         }
         
@@ -1623,6 +1648,39 @@ class Room {
             y: slick.y,
             radius: slick.radius,
             ownerId: player.id
+        });
+    }
+    
+    useLightning(player) {
+        const affectedPlayers = [];
+        
+        // Find all players ahead of the caster based on position (not coordinates)
+        for (const [playerId, targetPlayer] of this.players) {
+            if (playerId === player.id) continue; // Skip the caster
+            if (targetPlayer.isDead) continue; // Skip dead players
+            
+            // Only affect players with better position (lower number = ahead)
+            if (targetPlayer.position < player.position) {
+                // Apply stun effect (1 second)
+                targetPlayer.isStunned = true;
+                targetPlayer.stunnedUntil = Date.now() + 1000;
+                
+                // Apply speed reduction (50% for 7 seconds)
+                targetPlayer.speedReductionFactor = 0.5;
+                targetPlayer.speedReductionEndTime = Date.now() + 7000;
+                
+                affectedPlayers.push({
+                    playerId: targetPlayer.id,
+                    x: targetPlayer.x,
+                    y: targetPlayer.y
+                });
+            }
+        }
+        
+        // Emit lightning event with all affected players
+        io.to(this.id).emit('lightningUsed', {
+            casterId: player.id,
+            affectedPlayers: affectedPlayers
         });
     }
     
@@ -2419,6 +2477,8 @@ class Room {
                 isStunned: p.isStunned,
                 isSuperBoosting: p.isSuperBoosting,
                 isPoisoned: p.isPoisoned,
+                speedReductionFactor: p.speedReductionFactor,
+                speedReductionEndTime: p.speedReductionEndTime,
                 // Drift state
                 isDrifting: p.isDrifting,
                 driftStartTime: p.driftStartTime,

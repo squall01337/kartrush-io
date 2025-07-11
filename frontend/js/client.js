@@ -1308,6 +1308,23 @@ class GameClient {
             }
         });
         
+        this.socket.on('lightningUsed', (data) => {
+            // Play lightning sound
+            soundManager.playLightningStrike();
+            
+            // Create lightning effects for all affected players
+            if (this.gameEngine) {
+                data.affectedPlayers.forEach(player => {
+                    this.gameEngine.createLightningEffect(player.x, player.y);
+                    
+                    // If we're one of the affected players, show stun effect
+                    if (player.playerId === this.playerId) {
+                        this.showScreenFlash('#ffff88', 500); // Yellow flash for lightning
+                    }
+                });
+            }
+        });
+        
         this.socket.on('projectileExploded', (data) => {
             // Le GameEngine gère les particules
             if (data.type === 'bomb') {

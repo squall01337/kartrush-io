@@ -30,7 +30,8 @@ class SoundManager {
             rocketExplode: 0.8,
             superboost: 0.8,
             slickDropping: 0.6,
-            slickCrossing: 0.5
+            slickCrossing: 0.5,
+            lightningStrike: 0.9
 
         };
         
@@ -76,6 +77,7 @@ class SoundManager {
         this.sounds.superboost = new Audio('assets/audio/superboost.mp3');
         this.sounds.slickDropping = new Audio('assets/audio/slick_dropping.mp3');
         this.sounds.slickCrossing = new Audio('assets/audio/slick_crossing.mp3');
+        this.sounds.lightningStrike = new Audio('assets/audio/lightningstrike.mp3');
 
     }
     
@@ -311,6 +313,15 @@ class SoundManager {
             cross.volume = this.getEffectiveVolume() * this.volumeMultipliers.slickCrossing;
             cross.currentTime = 0;
             cross.play().catch(e => console.log('Erreur lecture slick_crossing:', e));
+        }
+    }
+    
+    playLightningStrike() {
+        const lightning = this.sounds.lightningStrike;
+        if (lightning) {
+            lightning.volume = this.getEffectiveVolume() * this.volumeMultipliers.lightningStrike;
+            lightning.currentTime = 0;
+            lightning.play().catch(e => console.log('Erreur lecture lightning_strike:', e));
         }
     }
     

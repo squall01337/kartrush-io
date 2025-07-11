@@ -323,7 +323,8 @@ class GameEngine {
             'rocket': { row: 1, col: 0 },      // 1ère de la 2ème ligne
             'bomb': { row: 2, col: 0 },        // 1ère de la 3ème ligne
             'superboost': { row: 0, col: 1 },  // 2ème de la 1ère ligne
-            'poisonslick': { row: 2, col: 1 }  // 2ème de la 3ème ligne (bottom-mid)
+            'poisonslick': { row: 2, col: 1 }, // 2ème de la 3ème ligne (bottom-mid)
+            'lightning': { row: 1, col: 2 }    // 3ème de la 2ème ligne (middle-right)
         };
         
         const pos = positions[itemType];
@@ -1004,6 +1005,51 @@ class GameEngine {
         ctx.save();
         ctx.translate(player.x, player.y);
         
+        // Draw speed reduction effect if active
+        if (player.speedReductionFactor && player.speedReductionFactor < 1 && 
+            player.speedReductionEndTime && player.speedReductionEndTime > Date.now()) {
+            ctx.save();
+            
+            // Pulsing blue circle effect
+            const pulseTime = Date.now() * 0.003;
+            const pulseScale = 1 + Math.sin(pulseTime) * 0.1;
+            
+            // Blue chains/slow effect
+            ctx.strokeStyle = '#4488ff';
+            ctx.lineWidth = 3;
+            ctx.globalAlpha = 0.4;
+            ctx.setLineDash([10, 10]);
+            ctx.lineDashOffset = pulseTime * 10;
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, 35 * pulseScale, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Inner circle
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.6;
+            ctx.beginPath();
+            ctx.arc(0, 0, 25 * pulseScale, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Snowflake/ice particles around the player
+            ctx.setLineDash([]);
+            ctx.fillStyle = '#88ccff';
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI * 2 / 6) * i + pulseTime * 0.5;
+                const distance = 30 + Math.sin(pulseTime + i) * 5;
+                const x = Math.cos(angle) * distance;
+                const y = Math.sin(angle) * distance;
+                
+                ctx.globalAlpha = 0.6 + Math.sin(pulseTime + i) * 0.2;
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+        
         // Calculate jump effect
         const jumpHeight = player.counterSteerJump || 0;
         const jumpScale = 1 + jumpHeight * 0.4; // Kart gets 40% bigger when jumping
@@ -1475,6 +1521,8 @@ class GameEngine {
         for (const [key, explosionData] of this.damageEffects.entries()) {
             if (key.startsWith('projectile_explosion_')) {
                 this.renderExplosion(ctx, explosionData.x, explosionData.y, key);
+            } else if (key.startsWith('lightning_')) {
+                this.renderLightningEffect(ctx, explosionData.x, explosionData.y, key);
             }
         }
     }
@@ -1683,7 +1731,9 @@ renderItemSlot() {
                 'bomb': '💣',
                 'rocket': '🚀',
                 'superboost': '⚡',
-                'healthpack': '💚'
+                'healthpack': '💚',
+                'poisonslick': '☠️',
+                'lightning': '⚡'
             };
             
             ctx.fillStyle = '#ffffff';
@@ -1709,7 +1759,7 @@ renderItemSlot() {
 
 // Améliorer aussi startItemSlotAnimation pour l'animation casino
 startItemSlotAnimation(finalItem) {
-    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick'];
+    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick', 'lightning'];
     
     // Stocker l'animation en cours
     this.itemSlotAnimation = {
@@ -1954,7 +2004,8 @@ startItemSlotAnimation(finalItem) {
             'rocket': 'ROCKET',
             'superboost': 'SUPER BOOST',
             'healthpack': 'HEALTH PACK',
-            'poisonslick': 'POISON SLICK'
+            'poisonslick': 'POISON SLICK',
+            'lightning': 'LIGHTNING'
         };
         
         const itemName = itemNames[this.itemNotification.type] || this.itemNotification.type.toUpperCase();
@@ -1970,6 +2021,117 @@ startItemSlotAnimation(finalItem) {
         ctx.shadowColor = `rgba(255, 255, 255, ${0.5 * alpha})`;
         ctx.shadowBlur = glowSize * this.scale;
         ctx.fillText(itemName, centerX, centerY + 35 * this.scale);
+        
+        ctx.restore();
+    }
+    
+    createLightningEffect(x, y) {
+        // Create lightning strike visual effect at the given position
+        const key = `lightning_${Date.now()}_${x}_${y}`;
+        
+        this.damageEffects.set(key, {
+            type: 'lightning',
+            x: x,
+            y: y,
+            startTime: Date.now(),
+            duration: 800 // 0.8 seconds
+        });
+        
+        // Add particles for lightning effect
+        if (this.particleSystem) {
+            // Lightning bolts
+            for (let i = 0; i < 5; i++) {
+                const angle = (Math.PI * 2) * (i / 5);
+                this.particleSystem.addParticle({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(angle) * 100,
+                    vy: Math.sin(angle) * 100,
+                    size: 3,
+                    color: '#ffff88',
+                    type: 'spark',
+                    life: 0.5,
+                    maxLife: 0.5
+                });
+            }
+            
+            // Electric sparks
+            for (let i = 0; i < 10; i++) {
+                this.particleSystem.addParticle({
+                    x: x + (Math.random() - 0.5) * 40,
+                    y: y + (Math.random() - 0.5) * 40,
+                    vx: (Math.random() - 0.5) * 200,
+                    vy: (Math.random() - 0.5) * 200,
+                    size: 2,
+                    color: '#ffffff',
+                    type: 'spark',
+                    life: 0.3,
+                    maxLife: 0.3
+                });
+            }
+        }
+    }
+    
+    renderLightningEffect(ctx, x, y, effectKey) {
+        const effectData = this.damageEffects.get(effectKey);
+        if (!effectData) return;
+        
+        const progress = (Date.now() - effectData.startTime) / effectData.duration;
+        if (progress > 1) {
+            this.damageEffects.delete(effectKey);
+            return;
+        }
+        
+        ctx.save();
+        ctx.translate(x, y);
+        
+        // Draw lightning sprite using the item icon
+        const lightningIcon = this.getItemIcon('lightning');
+        if (lightningIcon) {
+            const maxSize = 100;
+            const size = maxSize * (1.5 - progress * 0.5); // Starts big, shrinks
+            const alpha = 1 - progress * 0.8; // Fades out
+            
+            ctx.globalAlpha = alpha;
+            ctx.drawImage(
+                lightningIcon,
+                -size / 2,
+                -size / 2,
+                size,
+                size
+            );
+            
+            // Add glow effect
+            ctx.shadowColor = '#ffff88';
+            ctx.shadowBlur = 20 * (1 - progress);
+            ctx.drawImage(
+                lightningIcon,
+                -size / 2,
+                -size / 2,
+                size,
+                size
+            );
+            ctx.shadowBlur = 0;
+        } else {
+            // Fallback: draw lightning bolt shape
+            const boltHeight = 80 * (1.5 - progress * 0.5);
+            const alpha = 1 - progress * 0.8;
+            
+            ctx.strokeStyle = `rgba(255, 255, 136, ${alpha})`;
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#ffff88';
+            ctx.shadowBlur = 10;
+            
+            ctx.beginPath();
+            ctx.moveTo(0, -boltHeight / 2);
+            ctx.lineTo(-10, -boltHeight / 4);
+            ctx.lineTo(5, 0);
+            ctx.lineTo(-5, boltHeight / 4);
+            ctx.lineTo(0, boltHeight / 2);
+            ctx.stroke();
+            
+            ctx.shadowBlur = 0;
+        }
         
         ctx.restore();
     }

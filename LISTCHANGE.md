@@ -131,3 +131,12 @@ When starting a new session, ask these questions to quickly understand the proje
   - Owner has 1.5 second immunity to prevent self-damage
   - Aggressive slowdown with extra friction while in puddle
   - Purple screen flash and damage numbers when poisoned
+
+### Racing Line Position System (New)
+- **Precise Position Tracking**: Real-time position calculation based on distance along racing line
+- **Map Editor Tool**: New "🏎️ Ligne de course" button to draw racing lines
+- **Visual Feedback**: Click-to-close system like continuous curves, shows closing preview
+- **Server Integration**: Automatic position updates using racing line when available
+- **Fallback System**: Uses checkpoint-based positioning if no racing line exists
+- **No Duplicate Points**: Closed loops don't store duplicate first point
+- **JSON Export**: Racing line data included in map files with proper formatting

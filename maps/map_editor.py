@@ -46,10 +46,12 @@ class MapEditor:
             "maxTimeWarning": 240000
         }
 
-        self.mode = "wall"  # wall, curve, finish, checkpoint, edit, modify_curve, spawnpoint, spawnpoint_horizontal, booster, item, continuous_curve
+        self.mode = "wall"  # wall, curve, finish, checkpoint, edit, modify_curve, spawnpoint, spawnpoint_horizontal, booster, item, continuous_curve, racing_line
         self.current_curve = []
         self.current_continuous_curve = []  # Pour les courbes continues
         self.is_drawing_continuous = False
+        self.is_drawing_racing_line = False  # Pour la ligne de course
+        self.current_racing_line = []  # Points de la ligne de course en cours
         self.rectangles = []
         self.curves = []
         self.continuous_curves = []  # Nouveau : pour stocker les courbes continues comme un seul objet
@@ -58,6 +60,7 @@ class MapEditor:
         self.boosters = []  # Maintenant des lignes
         self.items = []  # Maintenant des lignes
         self.finish_line = None  # Maintenant une ligne
+        self.racing_line = None  # Ligne de course pour le calcul des positions
         self.actions_stack = []
 
         self.selected_object = None
@@ -153,6 +156,8 @@ class MapEditor:
                  bg="#f39c12", fg="white", width=20).pack(pady=2)
         tk.Button(objects_frame, text="🎁 Item", command=lambda: self.set_mode("item"), 
                  bg="#1abc9c", fg="white", width=20).pack(pady=2)
+        tk.Button(objects_frame, text="🏎️ Ligne de course", command=lambda: self.set_mode("racing_line"), 
+                 bg="#e74c3c", fg="white", width=20).pack(pady=2)
         
         # Section Édition
         edit_frame = tk.LabelFrame(parent_frame, text="ÉDITION", bg="gray20", fg="white",
@@ -177,8 +182,8 @@ class MapEditor:
         # Raccourcis clavier pour le mode édition
         self.root.bind("<g>", lambda e: self.start_edit_operation('grab') if self.mode == "edit" else None)
         self.root.bind("<r>", lambda e: self.start_edit_operation('rotate') if self.mode == "edit" else None)
-        self.root.bind("<Escape>", lambda e: self.cancel_edit_operation() if self.edit_mode else self.stop_continuous_curve())
-        self.root.bind("<Return>", lambda e: self.confirm_edit_operation() if self.edit_mode else self.stop_continuous_curve())
+        self.root.bind("<Escape>", lambda e: self.cancel_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_racing_line() if self.is_drawing_racing_line else None)))
+        self.root.bind("<Return>", lambda e: self.confirm_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_racing_line() if self.is_drawing_racing_line else None)))
         self.root.bind("<Delete>", lambda e: self.delete_selected())
         self.root.bind("<Control-z>", lambda e: self.undo())
 
@@ -209,6 +214,11 @@ class MapEditor:
             info += "\nCliquez pour placer un booster (ligne 32px)"
         elif self.mode == "item":
             info += "\nCliquez pour placer un item (ligne 32px)"
+        elif self.mode == "racing_line":
+            if self.is_drawing_racing_line:
+                info += f"\nPoints: {len(self.current_racing_line)}\nCliquez pour ajouter des points\nEnter pour terminer, Echap pour annuler"
+            else:
+                info += f"\nCliquez pour commencer la ligne de course"
         info += f"\n\nMap: {self.map_name}\nTours: {self.race_settings['laps']}"
         self.info_label.config(text=info)
 
@@ -217,6 +227,10 @@ class MapEditor:
             # Terminer la courbe continue si on change de mode
             if self.mode == "continuous_curve" and self.is_drawing_continuous:
                 self.stop_continuous_curve()
+            
+            # Terminer la ligne de course si on change de mode
+            if self.mode == "racing_line" and self.is_drawing_racing_line:
+                self.stop_racing_line()
             
             # Annuler le dessin de ligne en cours
             if self.drawing_line:
@@ -343,6 +357,52 @@ class MapEditor:
         self.redraw()
         self.update_info()
 
+    def stop_racing_line(self):
+        """Arrête le dessin de la ligne de course"""
+        if self.is_drawing_racing_line and len(self.current_racing_line) >= 2:
+            # Vérifier si la ligne doit être fermée
+            first_point = self.current_racing_line[0]
+            last_point = self.current_racing_line[-1]
+            
+            # Utiliser le flag force_close ou vérifier la distance
+            is_closed = (hasattr(self, 'force_close_racing_line') and self.force_close_racing_line) or \
+                       math.dist(first_point, last_point) < 30
+            
+            # Réinitialiser le flag
+            if hasattr(self, 'force_close_racing_line'):
+                delattr(self, 'force_close_racing_line')
+            
+            # Calculer la longueur totale de la ligne
+            total_length = 0
+            points_to_calculate = self.current_racing_line.copy()
+            
+            # Si c'est fermé, ajouter le segment du dernier au premier point pour le calcul
+            if is_closed:
+                points_to_calculate.append(first_point)
+            
+            for i in range(len(points_to_calculate) - 1):
+                p1 = points_to_calculate[i]
+                p2 = points_to_calculate[i + 1]
+                total_length += math.dist(p1, p2)
+            
+            # Créer l'objet racing line (sans dupliquer le premier point)
+            self.racing_line = {
+                "points": list(self.current_racing_line),
+                "totalLength": total_length,
+                "type": "racing_line",
+                "closed": is_closed
+            }
+            
+            self.actions_stack.append(("add_racing_line", self.racing_line))
+            status = "fermée" if is_closed else "ouverte"
+            self.log(f"Ligne de course créée ({status}) avec {len(self.current_racing_line)} points, longueur totale: {total_length:.2f}")
+        
+        self.is_drawing_racing_line = False
+        self.current_racing_line = []
+        self.canvas.delete("temp_racing_line")
+        self.redraw()
+        self.update_info()
+
     def clear_all(self):
         if messagebox.askyesno("Confirmation", "Êtes-vous sûr de vouloir tout effacer ?"):
             self.rectangles = []
@@ -353,15 +413,19 @@ class MapEditor:
             self.boosters = []
             self.items = []
             self.finish_line = None
+            self.racing_line = None
             self.actions_stack = []
             self.selected_object = None
             self.current_curve = []
             self.current_continuous_curve = []
+            self.current_racing_line = []
             self.is_drawing_continuous = False
+            self.is_drawing_racing_line = False
             self.drawing_line = False
             self.line_start = None
             self.canvas.delete("temp_continuous")
             self.canvas.delete("temp_line")
+            self.canvas.delete("temp_racing_line")
             self.redraw()
 
     def get_resize_handles(self, rect):
@@ -638,6 +702,31 @@ class MapEditor:
                     self.redraw()
                 self.update_info()
                 
+            elif self.mode == "racing_line":
+                if not self.is_drawing_racing_line:
+                    # Commencer une nouvelle ligne de course
+                    self.is_drawing_racing_line = True
+                    self.current_racing_line = [(event.x, event.y)]
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="red", tags="temp_racing_line")
+                    self.log(f"Ligne de course commencée - Cliquez pour ajouter des points")
+                else:
+                    # Vérifier si on clique sur le premier point pour fermer la ligne
+                    if len(self.current_racing_line) >= 3:
+                        first_point = self.current_racing_line[0]
+                        if math.dist((event.x, event.y), first_point) < 15:
+                            # Marquer comme fermée en mettant un flag spécial
+                            self.force_close_racing_line = True
+                            self.log(f"Ligne de course fermée - circuit complet!")
+                            self.stop_racing_line()
+                            return
+                    
+                    # Sinon, ajouter un point normal
+                    self.current_racing_line.append((event.x, event.y))
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="red", tags="temp_racing_line")
+                    self.redraw()
+                
+                self.update_info()
+                
             elif self.mode == "continuous_curve":
                 if not self.is_drawing_continuous:
                     # Commencer une nouvelle courbe continue
@@ -830,6 +919,15 @@ class MapEditor:
                 # Sinon, sélectionner l'objet cliqué
                 self.selected_object = None
                 
+                # Vérifier d'abord la ligne de course
+                if self.racing_line:
+                    for point in self.racing_line["points"]:
+                        if math.dist((event.x, event.y), point) < 20:
+                            self.selected_object = self.racing_line
+                            self.log(f"Ligne de course sélectionnée")
+                            self.redraw()
+                            return
+                
                 # Vérifier tous les objets
                 all_objects = (self.rectangles + self.spawnpoints + self.continuous_curves)
                 
@@ -986,6 +1084,9 @@ class MapEditor:
             elif obj_type == "continuous_curve":
                 self.continuous_curves.remove(self.selected_object)
                 self.actions_stack.append(("remove_continuous_curve", self.selected_object))
+            elif obj_type == "racing_line":
+                self.actions_stack.append(("remove_racing_line", self.racing_line))
+                self.racing_line = None
                 
             self.selected_object = None
             self.redraw()
@@ -1195,6 +1296,106 @@ class MapEditor:
             self.canvas.create_text(cx, cy, text="?", fill="white", 
                                   font=("Arial", 16, "bold"))
 
+    def draw_racing_line(self, racing_line, selected=False):
+        """Dessine la ligne de course"""
+        points = racing_line["points"]
+        if len(points) < 2:
+            return
+        
+        # Déterminer si la ligne est fermée
+        is_closed = racing_line.get("closed", False)
+        
+        # Dessiner tous les segments
+        for i in range(len(points) - 1):
+            p1 = points[i]
+            p2 = points[i + 1]
+            
+            # Ligne principale
+            color = "cyan" if selected else "red"
+            width = 4 if selected else 2
+            self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=width)
+            
+            # Flèches directionnelles tous les 5 segments
+            if i % 5 == 0:
+                dx = p2[0] - p1[0]
+                dy = p2[1] - p1[1]
+                length = math.sqrt(dx*dx + dy*dy)
+                if length > 0:
+                    dx /= length
+                    dy /= length
+                    
+                    # Point au milieu du segment
+                    mx = (p1[0] + p2[0]) / 2
+                    my = (p1[1] + p2[1]) / 2
+                    
+                    # Flèche
+                    arrow_length = 15
+                    arrow_angle = 0.4
+                    
+                    arrow_x = mx + dx * arrow_length
+                    arrow_y = my + dy * arrow_length
+                    
+                    left_x = mx - dx * arrow_length/3 - dy * arrow_length * arrow_angle
+                    left_y = my - dy * arrow_length/3 + dx * arrow_length * arrow_angle
+                    
+                    right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
+                    right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
+                    
+                    self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
+                                             fill="yellow", outline="darkred", width=1)
+        
+        # Si la ligne est fermée, dessiner le segment de fermeture
+        if is_closed and len(points) >= 3:
+            p1 = points[-1]  # Dernier point
+            p2 = points[0]   # Premier point
+            
+            # Ligne de fermeture
+            color = "cyan" if selected else "red"
+            width = 4 if selected else 2
+            self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=width)
+            
+            # Flèche sur le segment de fermeture si c'est un multiple de 5
+            if (len(points) - 1) % 5 == 0:
+                dx = p2[0] - p1[0]
+                dy = p2[1] - p1[1]
+                length = math.sqrt(dx*dx + dy*dy)
+                if length > 0:
+                    dx /= length
+                    dy /= length
+                    
+                    mx = (p1[0] + p2[0]) / 2
+                    my = (p1[1] + p2[1]) / 2
+                    
+                    arrow_length = 15
+                    arrow_angle = 0.4
+                    
+                    arrow_x = mx + dx * arrow_length
+                    arrow_y = my + dy * arrow_length
+                    
+                    left_x = mx - dx * arrow_length/3 - dy * arrow_length * arrow_angle
+                    left_y = my - dy * arrow_length/3 + dx * arrow_length * arrow_angle
+                    
+                    right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
+                    right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
+                    
+                    self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
+                                             fill="yellow", outline="darkred", width=1)
+        
+        # Afficher les points en mode édition
+        if self.mode == "modify_curve" or selected:
+            for i, point in enumerate(points):
+                # Taille et couleur selon la sélection
+                size = 6
+                fill_color = "orange"
+                
+                # Premier point en vert
+                if i == 0:
+                    fill_color = "lime"
+                
+                self.canvas.create_oval(point[0]-size, point[1]-size, 
+                                      point[0]+size, point[1]+size, 
+                                      fill=fill_color, outline="white", width=2)
+    
     def draw_continuous_curve(self, curve, selected=False):
         """Dessine une courbe continue comme un seul chemin"""
         points = curve["points"]
@@ -1233,6 +1434,32 @@ class MapEditor:
         
         # Ajouter le dernier point
         path_points.append(points[-1])
+        
+        # Si la courbe est fermée, ajouter le segment de fermeture
+        if curve.get("closed", False) and len(points) >= 3:
+            # Ajouter des points interpolés entre le dernier et le premier point
+            p0 = points[-2]
+            p1 = points[-1]
+            p2 = points[0]
+            p3 = points[1]
+            
+            for t in range(1, 11):  # 10 points pour le segment de fermeture
+                t = t / 10.0
+                
+                t2 = t * t
+                t3 = t2 * t
+                
+                x = 0.5 * ((2 * p1[0]) +
+                          (-p0[0] + p2[0]) * t +
+                          (2*p0[0] - 5*p1[0] + 4*p2[0] - p3[0]) * t2 +
+                          (-p0[0] + 3*p1[0] - 3*p2[0] + p3[0]) * t3)
+                
+                y = 0.5 * ((2 * p1[1]) +
+                          (-p0[1] + p2[1]) * t +
+                          (2*p0[1] - 5*p1[1] + 4*p2[1] - p3[1]) * t2 +
+                          (-p0[1] + 3*p1[1] - 3*p2[1] + p3[1]) * t3)
+                
+                path_points.append((x, y))
         
         # Dessiner la courbe comme une ligne continue épaisse
         for i in range(len(path_points) - 1):
@@ -1359,6 +1586,95 @@ class MapEditor:
             for item in self.items:
                 self.draw_line(item, selected=(item == self.selected_object))
                 
+            # Dessiner la ligne de course
+            if self.racing_line:
+                self.draw_racing_line(self.racing_line, selected=(self.racing_line == self.selected_object))
+                
+            # Dessiner la ligne de course en cours de création
+            if self.is_drawing_racing_line and len(self.current_racing_line) > 0:
+                # Dessiner les lignes temporaires
+                for i in range(len(self.current_racing_line) - 1):
+                    p1 = self.current_racing_line[i]
+                    p2 = self.current_racing_line[i + 1]
+                    self.canvas.create_line(p1[0], p1[1], p2[0], p2[1],
+                                          fill="red", width=2, dash=(5, 5), tags="temp_racing_line")
+                    
+                    # Dessiner des flèches directionnelles
+                    if i % 3 == 0:  # Toutes les 3 segments
+                        dx = p2[0] - p1[0]
+                        dy = p2[1] - p1[1]
+                        length = math.sqrt(dx*dx + dy*dy)
+                        if length > 0:
+                            dx /= length
+                            dy /= length
+                            mx = (p1[0] + p2[0]) / 2
+                            my = (p1[1] + p2[1]) / 2
+                            
+                            arrow_length = 10
+                            arrow_angle = 0.4
+                            arrow_x = mx + dx * arrow_length
+                            arrow_y = my + dy * arrow_length
+                            left_x = mx - dx * arrow_length/3 - dy * arrow_length * arrow_angle
+                            left_y = my - dy * arrow_length/3 + dx * arrow_length * arrow_angle
+                            right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
+                            right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
+                            
+                            self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
+                                                     fill="yellow", outline="red", width=1, tags="temp_racing_line")
+                
+                # Si on a au moins 3 points, montrer où on peut fermer la ligne
+                if len(self.current_racing_line) >= 3:
+                    first_point = self.current_racing_line[0]
+                    last_point = self.current_racing_line[-1]
+                    
+                    # Vérifier si on est proche du premier point (presque fermé)
+                    is_near_closing = math.dist(last_point, first_point) < 50
+                    
+                    # Dessiner un cercle plus grand autour du premier point pour indiquer qu'on peut fermer
+                    self.canvas.create_oval(first_point[0]-12, first_point[1]-12, 
+                                          first_point[0]+12, first_point[1]+12, 
+                                          fill="", outline="lime", width=3, dash=(3, 3), tags="temp_racing_line")
+                    
+                    # Si on est proche, dessiner la ligne de fermeture
+                    if is_near_closing:
+                        # Ligne solide pour montrer que ça va se fermer
+                        self.canvas.create_line(last_point[0], last_point[1],
+                                              first_point[0], first_point[1],
+                                              fill="red", width=2, tags="temp_racing_line")
+                        
+                        # Flèche sur le segment de fermeture
+                        dx = first_point[0] - last_point[0]
+                        dy = first_point[1] - last_point[1]
+                        length = math.sqrt(dx*dx + dy*dy)
+                        if length > 0:
+                            dx /= length
+                            dy /= length
+                            mx = (last_point[0] + first_point[0]) / 2
+                            my = (last_point[1] + first_point[1]) / 2
+                            
+                            arrow_length = 10
+                            arrow_angle = 0.4
+                            arrow_x = mx + dx * arrow_length
+                            arrow_y = my + dy * arrow_length
+                            left_x = mx - dx * arrow_length/3 - dy * arrow_length * arrow_angle
+                            left_y = my - dy * arrow_length/3 + dx * arrow_length * arrow_angle
+                            right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
+                            right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
+                            
+                            self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
+                                                     fill="yellow", outline="red", width=1, tags="temp_racing_line")
+                    else:
+                        # Ligne en pointillés si on est loin
+                        self.canvas.create_line(last_point[0], last_point[1],
+                                              first_point[0], first_point[1],
+                                              fill="lime", width=1, dash=(5, 5), tags="temp_racing_line")
+                
+                # Dessiner les points
+                for i, point in enumerate(self.current_racing_line):
+                    color = "lime" if i == 0 and len(self.current_racing_line) >= 3 else "red"
+                    self.canvas.create_oval(point[0]-5, point[1]-5, point[0]+5, point[1]+5, 
+                                          fill=color, outline="white", tags="temp_racing_line")
+                
         except Exception as e:
             self.log(f"Erreur dans redraw: {str(e)}")
             traceback.print_exc()
@@ -1407,6 +1723,10 @@ class MapEditor:
                 obj, old_state = data
                 for key, value in old_state.items():
                     obj[key] = value
+            elif action == "add_racing_line":
+                self.racing_line = None
+            elif action == "remove_racing_line":
+                self.racing_line = data
                     
             self.redraw()
 
@@ -1550,6 +1870,15 @@ class MapEditor:
                         item["type"] = "item"
                         self.items.append(item)
                 
+                # Charger la ligne de course
+                if "racingLine" in data:
+                    self.racing_line = {
+                        "points": data["racingLine"].get("points", []),
+                        "totalLength": data["racingLine"].get("totalLength", 0),
+                        "type": "racing_line"
+                    }
+                    self.log(f"Ligne de course importée avec {len(self.racing_line['points'])} points")
+                
                 self.redraw()
                 self.update_info()
                 messagebox.showinfo("Import", "Map importée avec succès !")
@@ -1601,9 +1930,28 @@ class MapEditor:
                          for i in self.items]
             }
             
+            # Ajouter la ligne de course si elle existe
+            if self.racing_line:
+                # S'assurer que les points sont dans le bon format
+                racing_points = []
+                for point in self.racing_line["points"]:
+                    if isinstance(point, tuple):
+                        racing_points.append([point[0], point[1]])
+                    else:
+                        racing_points.append(point)
+                
+                data["racingLine"] = {
+                    "points": racing_points,
+                    "totalLength": self.racing_line.get("totalLength", 0)
+                }
+                self.log(f"Racing line ajoutée à l'export: {len(racing_points)} points, longueur: {self.racing_line.get('totalLength', 0):.2f}")
+            else:
+                self.log("Pas de ligne de course à exporter")
+            
             self.log(f"Export - Murs: {len(self.rectangles)}, Courbes: {len(self.curves)}, " +
                     f"Courbes continues: {len(self.continuous_curves)}, Checkpoints: {len(self.checkpoints)}, " +
-                    f"Spawns: {len(self.spawnpoints)}, Boosters: {len(self.boosters)}, Items: {len(self.items)}")
+                    f"Spawns: {len(self.spawnpoints)}, Boosters: {len(self.boosters)}, Items: {len(self.items)}" +
+                    (f", Ligne de course: {len(self.racing_line['points'])} points" if self.racing_line else ""))
             
             file_path = filedialog.asksaveasfilename(defaultextension=".json", 
                                                     filetypes=[("JSON files", "*.json")])
@@ -1626,8 +1974,80 @@ class MapEditor:
                 json_str = re.sub(r'{\s*"x1":\s*(\d+(?:\.\d+)?),\s*"y1":\s*(\d+(?:\.\d+)?),\s*"x2":\s*(\d+(?:\.\d+)?),\s*"y2":\s*(\d+(?:\.\d+)?)\s*}', 
                                  r'{"x1": \1, "y1": \2, "x2": \3, "y2": \4}', json_str)
                 
-                # Pour les points dans les courbes
-                json_str = re.sub(r'\[\s*(\d+),\s*(\d+)\s*\]', r'[\1, \2]', json_str)
+                # Pour les points dans les courbes et la ligne de course - format individuel
+                json_str = re.sub(r'\[\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\s*\]', r'[\1, \2]', json_str)
+                
+                # Pour mettre tous les tableaux de points sur une seule ligne
+                # Approche plus robuste avec gestion correcte des arrays imbriqués
+                def format_points_arrays(json_str):
+                    lines = json_str.split('\n')
+                    result = []
+                    i = 0
+                    
+                    while i < len(lines):
+                        line = lines[i].rstrip()
+                        
+                        # Chercher une ligne avec "points": [
+                        if '"points": [' in line:
+                            indent = len(line) - len(line.lstrip())
+                            indent_str = ' ' * indent
+                            
+                            # Si la ligne se termine par ], c'est déjà sur une ligne
+                            if line.rstrip().endswith(']') or line.rstrip().endswith('],'):
+                                result.append(line)
+                                i += 1
+                                continue
+                            
+                            # Collecter tous les points jusqu'au ] de fermeture
+                            points = []
+                            i += 1
+                            
+                            while i < len(lines):
+                                point_line = lines[i].strip()
+                                
+                                # Extraire les coordonnées [x, y]
+                                point_match = re.match(r'\[(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\],?', point_line)
+                                if point_match:
+                                    x, y = point_match.groups()
+                                    points.append(f'[{x}, {y}]')
+                                    i += 1
+                                elif point_line.startswith(']'):
+                                    # Fin du tableau de points
+                                    # Construire la ligne finale
+                                    if points:
+                                        points_str = ', '.join(points)
+                                        if point_line.endswith(','):
+                                            result.append(f'{indent_str}"points": [{points_str}],')
+                                        else:
+                                            result.append(f'{indent_str}"points": [{points_str}]')
+                                    else:
+                                        result.append(f'{indent_str}"points": []')
+                                    
+                                    # Si la ligne contient autre chose après ], l'ajouter
+                                    remaining = point_line[1:].strip()
+                                    if remaining and remaining != ',':
+                                        result.append(indent_str + remaining)
+                                    
+                                    i += 1
+                                    break
+                                else:
+                                    # Ligne inattendue, arrêter
+                                    result.append(line)  # Ajouter la ligne "points": [
+                                    break
+                        else:
+                            result.append(line)
+                            i += 1
+                    
+                    return '\n'.join(result)
+                
+                # Appliquer le formatage
+                json_str = format_points_arrays(json_str)
+                
+                # Vérifier si racingLine est dans le JSON
+                if "racingLine" in json_str:
+                    self.log("✓ Racing line trouvée dans le JSON exporté")
+                else:
+                    self.log("✗ Racing line NON trouvée dans le JSON exporté")
                 
                 with open(file_path, "w") as f:
                     f.write(json_str)

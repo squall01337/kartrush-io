@@ -85,7 +85,15 @@ function loadMapData(mapName = 'beach') {
         // Convertir les anciens rectangles en lignes si nécessaire
         convertRectsToLines(trackData);
         
+        // Preprocess racing line if it exists
+        if (trackData.racingLine) {
+            // Create temporary room to use preprocessing method
+            const tempRoom = new Room('temp', 'public', null, io);
+            tempRoom.preprocessRacingLine(trackData.racingLine);
+            console.log(`✅ Racing line preprocessed: ${trackData.racingLine.points.length} points, total length: ${trackData.racingLine.totalLength?.toFixed(2) || 0}`);
+        }
         
+        console.log(`✅ Map "${mapName}" chargée avec succès`);
         return true;
         
     } catch (error) {
@@ -376,6 +384,43 @@ class PoisonSlick {
     }
 }
 
+// Helper functions for racing line calculations
+function getClosestPointOnSegment(px, py, x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lengthSquared = dx * dx + dy * dy;
+    
+    if (lengthSquared === 0) {
+        // The segment is actually a point
+        return { x: x1, y: y1, t: 0 };
+    }
+    
+    // Calculate the parameter t that represents the position along the segment
+    let t = ((px - x1) * dx + (py - y1) * dy) / lengthSquared;
+    
+    // Clamp t to [0, 1] to handle points outside the segment
+    t = Math.max(0, Math.min(1, t));
+    
+    // Calculate the closest point
+    return {
+        x: x1 + t * dx,
+        y: y1 + t * dy,
+        t: t
+    };
+}
+
+function distance(p1, p2) {
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function distanceXY(x1, y1, x2, y2) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
 // Classes du jeu
 class Player {
     constructor(id, pseudo, color) {
@@ -460,6 +505,11 @@ class Player {
         this.driftChargeLevel = 0; // 0 = none, 1 = blue, 2 = orange, 3 = purple
         this.wasCounterSteering = false; // Track counter-steer state
         this.counterSteerJump = 0; // Jump force when starting counter-steer
+        
+        // Racing line tracking (new)
+        this.trackProgress = 0;       // Total distance traveled along racing line
+        this.currentSegment = 0;      // Which segment of racing line (index)
+        this.segmentProgress = 0;     // Progress within current segment (0-1)
     }
 
     // Nouvelle méthode pour infliger des dégâts
@@ -1062,6 +1112,11 @@ class Room {
             player.driftChargeLevel = 0;
             player.driftDirection = 0;
             player.driftAngle = 0;
+            
+            // Reset racing line tracking
+            player.trackProgress = 0;
+            player.currentSegment = 0;
+            player.segmentProgress = 0;
         }
     }
 
@@ -2097,41 +2152,155 @@ class Room {
         return `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
     }
 
+    preprocessRacingLine(racingLine) {
+        if (!racingLine || !racingLine.points || racingLine.points.length < 2) return;
+        
+        // Determine if racing line is closed
+        const isClosedLine = racingLine.closed || (
+            racingLine.points.length >= 3 &&
+            distanceXY(
+                racingLine.points[0][0], racingLine.points[0][1],
+                racingLine.points[racingLine.points.length - 1][0], 
+                racingLine.points[racingLine.points.length - 1][1]
+            ) < 30
+        );
+        
+        racingLine.segmentDistances = [0];
+        let totalDistance = 0;
+        
+        // Calculate segments
+        const numSegments = isClosedLine ? racingLine.points.length : racingLine.points.length - 1;
+        
+        for (let i = 0; i < numSegments; i++) {
+            const p1 = racingLine.points[i];
+            const p2 = racingLine.points[(i + 1) % racingLine.points.length];
+            const dist = distanceXY(p1[0], p1[1], p2[0], p2[1]);
+            totalDistance += dist;
+            racingLine.segmentDistances.push(totalDistance);
+        }
+        
+        racingLine.totalLength = totalDistance;
+        racingLine.closed = isClosedLine;
+    }
+
+    calculateTrackProgress(player, racingLine) {
+        if (!racingLine || !racingLine.points || racingLine.points.length < 2) return;
+        
+        // Find the closest segment of the racing line
+        let closestSegment = -1;
+        let closestDistance = Infinity;
+        let closestPoint = null;
+        let closestT = 0;
+        
+        // Determine if racing line is closed
+        const isClosedLine = racingLine.closed || (
+            racingLine.points.length >= 3 &&
+            distanceXY(
+                racingLine.points[0][0], racingLine.points[0][1],
+                racingLine.points[racingLine.points.length - 1][0], 
+                racingLine.points[racingLine.points.length - 1][1]
+            ) < 30
+        );
+        
+        // Check each segment of the racing line
+        const numSegments = isClosedLine ? racingLine.points.length : racingLine.points.length - 1;
+        
+        for (let i = 0; i < numSegments; i++) {
+            const p1 = racingLine.points[i];
+            const p2 = racingLine.points[(i + 1) % racingLine.points.length];
+            
+            // Find closest point on this segment
+            const closest = getClosestPointOnSegment(
+                player.x, player.y, p1[0], p1[1], p2[0], p2[1]
+            );
+            
+            const dist = distanceXY(player.x, player.y, closest.x, closest.y);
+            if (dist < closestDistance) {
+                closestDistance = dist;
+                closestSegment = i;
+                closestPoint = closest;
+                closestT = closest.t;
+            }
+        }
+        
+        if (closestSegment === -1) return;
+        
+        // Calculate total progress
+        const segmentStartDistance = racingLine.segmentDistances[closestSegment];
+        const segmentLength = racingLine.segmentDistances[closestSegment + 1] - segmentStartDistance;
+        const currentLapProgress = segmentStartDistance + (segmentLength * closestT);
+        
+        // Total progress includes completed laps
+        player.trackProgress = (player.lap - 1) * racingLine.totalLength + currentLapProgress;
+        player.currentSegment = closestSegment;
+        player.segmentProgress = closestT;
+    }
+
     updatePositions() {
         const activePlayers = Array.from(this.players.values()).filter(p => !p.finished);
         
-        // Séparer ceux qui ont passé la ligne de ceux qui ne l'ont pas encore fait
-        const racingPlayers = activePlayers.filter(p => p.hasPassedStartLine);
-        const waitingPlayers = activePlayers.filter(p => !p.hasPassedStartLine);
-        
-        // Trier les joueurs en course
-        racingPlayers.sort((a, b) => {
-            // D'abord par nombre de tours
-            if (a.lap !== b.lap) return b.lap - a.lap;
+        // If we have a racing line, use it for precise position calculation
+        if (trackData && trackData.racingLine && trackData.racingLine.points) {
+            // Calculate track progress for each player
+            activePlayers.forEach(player => {
+                if (player.hasPassedStartLine) {
+                    this.calculateTrackProgress(player, trackData.racingLine);
+                }
+            });
             
-            // Ensuite par checkpoints passés
-            if (a.nextCheckpoint !== b.nextCheckpoint) {
-                return b.nextCheckpoint - a.nextCheckpoint;
-            }
+            // Separate racing and waiting players
+            const racingPlayers = activePlayers.filter(p => p.hasPassedStartLine);
+            const waitingPlayers = activePlayers.filter(p => !p.hasPassedStartLine);
             
-            // Enfin par temps de course
-            return a.raceTime - b.raceTime;
-        });
+            // Sort by track progress (higher = further ahead)
+            racingPlayers.sort((a, b) => b.trackProgress - a.trackProgress);
+            
+            // Assign positions
+            let position = 1;
+            
+            // First those who have started racing
+            racingPlayers.forEach(player => {
+                player.position = position++;
+            });
+            
+            // Then those who haven't passed the start line yet
+            waitingPlayers.forEach(player => {
+                player.position = position++;
+            });
+        } else {
+            // Fallback to checkpoint-based system if no racing line
+            const racingPlayers = activePlayers.filter(p => p.hasPassedStartLine);
+            const waitingPlayers = activePlayers.filter(p => !p.hasPassedStartLine);
+            
+            // Sort players in race
+            racingPlayers.sort((a, b) => {
+                // First by lap count
+                if (a.lap !== b.lap) return b.lap - a.lap;
+                
+                // Then by checkpoints passed
+                if (a.nextCheckpoint !== b.nextCheckpoint) {
+                    return b.nextCheckpoint - a.nextCheckpoint;
+                }
+                
+                // Finally by race time
+                return a.raceTime - b.raceTime;
+            });
 
-        // Assigner les positions
-        let position = 1;
+            // Assign positions
+            let position = 1;
+            
+            // First those who have started racing
+            racingPlayers.forEach(player => {
+                player.position = position++;
+            });
+            
+            // Then those who haven't passed the start line yet
+            waitingPlayers.forEach(player => {
+                player.position = position++;
+            });
+        }
         
-        // D'abord ceux qui ont commencé la course
-        racingPlayers.forEach(player => {
-            player.position = position++;
-        });
-        
-        // Puis ceux qui n'ont pas encore passé la ligne (dernières positions)
-        waitingPlayers.forEach(player => {
-            player.position = position++;
-        });
-        
-        // Les joueurs finis gardent leur position finale
+        // Finished players keep their final position
         const finishedPlayers = Array.from(this.players.values()).filter(p => p.finished);
         finishedPlayers.sort((a, b) => a.finishTime - b.finishTime);
         finishedPlayers.forEach((player, index) => {
@@ -2486,7 +2655,11 @@ class Room {
                 driftRotation: p.driftRotation,
                 driftChargeLevel: p.driftChargeLevel,
                 boostLevel: p.boostLevel,
-                counterSteerJump: p.counterSteerJump
+                counterSteerJump: p.counterSteerJump,
+                // Racing line tracking
+                trackProgress: p.trackProgress,
+                currentSegment: p.currentSegment,
+                segmentProgress: p.segmentProgress
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

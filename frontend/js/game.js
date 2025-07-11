@@ -966,7 +966,40 @@ class GameEngine {
     renderPlayer(ctx, player) {
         ctx.save();
         ctx.translate(player.x, player.y);
+        
+        // Calculate jump effect
+        const jumpHeight = player.counterSteerJump || 0;
+        const jumpScale = 1 + jumpHeight * 0.4; // Kart gets 40% bigger when jumping
+        const shadowOffset = jumpHeight * 35; // Shadow separates much more from kart
+        
+        // Only draw shadow when jumping
+        if (jumpHeight > 0.1) {
+            ctx.save();
+            const shadowAlpha = 0.4 * (1 - jumpHeight * 0.5);
+            ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+            ctx.translate(-shadowOffset * 0.7, shadowOffset); // Shadow moves down and left
+            ctx.rotate(player.angle);
+            ctx.scale(0.9 - jumpHeight * 0.2, 0.5 - jumpHeight * 0.2); // Shadow gets smaller when jumping
+            ctx.beginPath();
+            ctx.ellipse(0, 0, 32, 32, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+        
+        // Add jump boost effect
+        if (jumpHeight > 0.5) {
+            ctx.save();
+            ctx.globalAlpha = jumpHeight - 0.5;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(0, 0, 40 * jumpHeight, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+        
         ctx.rotate(player.angle);
+        ctx.scale(jumpScale, jumpScale); // Apply jump scale
         
         const size = 28;
         
@@ -1313,6 +1346,44 @@ class GameEngine {
             // Don't apply glow aura for speed boosts - only for drifting
             
             // Draw the actual kart (no glow for speed boosts)
+            
+            // Add jump landing particles and effects
+            if (player.counterSteerJump > 0) {
+                ctx.save();
+                
+                // Takeoff particles (when jumping up)
+                if (player.counterSteerJump > 0.7) {
+                    const particleCount = 8;
+                    for (let i = 0; i < particleCount; i++) {
+                        const angle = (Math.PI * 2 / particleCount) * i;
+                        const dist = 15 + (player.counterSteerJump - 0.7) * 50;
+                        const px = Math.cos(angle) * dist;
+                        const py = Math.sin(angle) * dist;
+                        
+                        ctx.fillStyle = `rgba(255, 255, 200, ${(player.counterSteerJump - 0.7) * 2})`;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                
+                // Landing particles (when coming down)
+                if (player.counterSteerJump < 0.3) {
+                    const particleCount = 10;
+                    for (let i = 0; i < particleCount; i++) {
+                        const angle = (Math.PI * 2 / particleCount) * i + Date.now() * 0.01;
+                        const dist = 40 * (0.3 - player.counterSteerJump);
+                        const px = Math.cos(angle) * dist;
+                        const py = Math.sin(angle) * dist;
+                        
+                        ctx.fillStyle = `rgba(255, 255, 255, ${player.counterSteerJump * 3})`;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+                ctx.restore();
+            }
             
             const cachedSprite = this.spriteCache.get(player.color);
             

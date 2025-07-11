@@ -517,8 +517,8 @@ class Player {
         const driftDuration = (Date.now() - this.driftStartTime) / 1000;
         
         // Update drift charge level based on duration (3 levels)
-        if (driftDuration >= 1.5 && this.driftChargeLevel < 3) {
-            this.driftChargeLevel = 3; // Purple (ultra)
+        if (driftDuration >= 2.0 && this.driftChargeLevel < 3) {
+            this.driftChargeLevel = 3; // Purple (ultra) - now requires 2 seconds
         } else if (driftDuration >= 0.8 && this.driftChargeLevel < 2) {
             this.driftChargeLevel = 2; // Orange (super)
         } else if (driftDuration >= 0.3 && this.driftChargeLevel < 1) {
@@ -585,8 +585,8 @@ class Player {
                     break;
                 case 3: // Purple ultra mini-turbo
                     this.boostLevel = 3;
-                    this.boostEndTime = Date.now() + 1300; // 1.3 seconds
-                    this.speed = Math.min(this.speed + 1.6, GAME_CONFIG.MAX_SPEED * 1.35); // 135% speed
+                    this.boostEndTime = Date.now() + 1500; // 1.5 seconds (longer boost)
+                    this.speed = Math.min(this.speed + 2.0, GAME_CONFIG.MAX_SPEED * 1.45); // 145% speed (faster)
                     break;
             }
             
@@ -2267,7 +2267,8 @@ class Room {
                 driftDirection: p.driftDirection,
                 driftRotation: p.driftRotation,
                 driftChargeLevel: p.driftChargeLevel,
-                boostLevel: p.boostLevel
+                boostLevel: p.boostLevel,
+                counterSteerJump: p.counterSteerJump
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

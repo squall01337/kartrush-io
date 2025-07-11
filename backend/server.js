@@ -512,6 +512,7 @@ class Player {
         this.segmentProgress = 0;     // Progress within current segment (0-1)
         this.raceStartTime = 0;       // Timestamp when player started racing
         this.isGoingBackwards = false; // Track if player is going backwards
+        this.wrongWayCrossing = false; // Track if player needs to fix a wrong way crossing
     }
 
     // Nouvelle méthode pour infliger des dégâts
@@ -555,8 +556,9 @@ class Player {
         this.speed = 0;
         
         // Don't reset racing line position - it will be recalculated based on new position
-        // Just clear the backwards flag
+        // Just clear the backwards flags
         this.isGoingBackwards = false;
+        this.wrongWayCrossing = false;
         this.invulnerableTime = Date.now() + 2000; // 2 secondes d'invulnérabilité
         
         // Réinitialiser les boosts
@@ -1125,6 +1127,7 @@ class Room {
             player.segmentProgress = 0;
             player.raceStartTime = 0;
             player.isGoingBackwards = false;
+            player.wrongWayCrossing = false;
         }
     }
 
@@ -1462,11 +1465,10 @@ class Room {
                 // Si on a validé au moins 2 checkpoints, respawn à l'avant-dernier
                 if (player.lastValidatedCheckpoint > 1 && player.checkpointPositions[player.lastValidatedCheckpoint - 2]) {
                     spawnPoint = player.checkpointPositions[player.lastValidatedCheckpoint - 2];
-                } else if (player.lastValidatedCheckpoint > 0 && player.checkpointPositions[player.lastValidatedCheckpoint - 1]) {
-                    // Si on n'a validé qu'un seul checkpoint, respawn au point de départ
-                    const spawnPoints = trackData.spawnPoints;
-                    const index = Array.from(this.players.values()).indexOf(player);
-                    spawnPoint = spawnPoints[index % spawnPoints.length];
+                } else if (player.lastValidatedCheckpoint === 1 && player.checkpointPositions[0]) {
+                    // Si on n'a validé qu'un seul checkpoint, respawn à ce checkpoint
+                    // Cela évite de respawn derrière la ligne de départ et d'être compté comme 1er
+                    spawnPoint = player.checkpointPositions[0];
                 } else {
                     // Sinon, respawn au point de départ
                     const spawnPoints = trackData.spawnPoints;
@@ -1476,8 +1478,20 @@ class Room {
                 
                 player.respawn(spawnPoint);
                 
+                // If player is respawning but has already started racing (validated checkpoints),
+                // ensure they maintain their racing status
+                if (player.lastValidatedCheckpoint > 0 && !player.hasPassedStartLine) {
+                    // Player has made progress but respawned behind start line
+                    // Keep them in the race with lap 0 to avoid being excluded from positions
+                    player.hasPassedStartLine = true;
+                    player.lap = 0;
+                }
+                
                 // Recalculate racing line position after respawn
                 if (trackData.racingLine && trackData.racingLine.points) {
+                    // Reset backwards flags on respawn
+                    player.isGoingBackwards = false;
+                    player.wrongWayCrossing = false;
                     this.calculateTrackProgress(player, trackData.racingLine, true); // true = initial position
                 }
                 
@@ -1965,6 +1979,12 @@ class Room {
                     // Clear backwards flag when crossing in correct direction
                     player.isGoingBackwards = false;
                     
+                    // If they were fixing a wrong way crossing, just clear it
+                    if (player.wrongWayCrossing) {
+                        player.wrongWayCrossing = false;
+                        // Continue normal flow - don't return early
+                    }
+                    
                     // Premier passage = début de la course
                     if (!player.hasPassedStartLine) {
                         player.hasPassedStartLine = true;
@@ -1972,11 +1992,9 @@ class Room {
                         player.nextCheckpoint = 0;
                         player.raceStartTime = Date.now(); // Track when player started racing
                         
-                        // Initialize racing line position at start
-                        if (trackData.racingLine && trackData.racingLine.points) {
-                            // Calculate actual position on racing line when crossing
-                            this.calculateTrackProgress(player, trackData.racingLine, true); // true = initial position
-                        }
+                        // IMPORTANT: Don't recalculate racing line position when crossing start
+                        // The player's position should remain continuous to avoid jumps
+                        // Their lap count changing from 0 to 1 is already handled in calculateTrackProgress
                         
                         io.to(player.id).emit('lapStarted', {
                             message: '1st Lap',
@@ -2015,10 +2033,18 @@ class Room {
                         });
                     }
                 } else if (dot < 0) { // Passage dans le mauvais sens
-                    // Mark player as going backwards
+                    // Mark as going backwards
                     player.isGoingBackwards = true;
                     
-                    // Don't update any position or lap information
+                    // If player has started racing and crosses finish line backwards
+                    if (player.hasPassedStartLine && player.lap > 0) {
+                        // Mark that they need to fix this by crossing forward
+                        player.wrongWayCrossing = true;
+                        
+                        // Don't change lap count - let position calculation handle it
+                        // The wrongWayCrossing flag will affect their calculated position
+                    }
+                    
                     io.to(player.id).emit('wrongWay', {
                         message: 'Wrong way!'
                     });
@@ -2261,7 +2287,22 @@ class Room {
         const currentLapProgress = segmentStartDistance + (segmentLength * closestT);
         
         // Calculate new track progress
-        const newTrackProgress = (player.lap - 1) * racingLine.totalLength + currentLapProgress;
+        // Important: Only count COMPLETED laps in the progress calculation
+        // A player on lap 1 has completed 0 laps, on lap 2 has completed 1 lap, etc.
+        let completedLaps = player.lap - 1;
+        if (player.lap === 0) {
+            // Player hasn't crossed finish line yet, so their progress is negative
+            // This ensures they're always behind players on lap 1+
+            completedLaps = -1;
+        }
+        
+        // If player has a wrong way crossing to fix, penalize their progress
+        // This puts them effectively one lap behind without changing their actual lap count
+        if (player.wrongWayCrossing) {
+            completedLaps = Math.max(-1, completedLaps - 1);
+        }
+        
+        const newTrackProgress = completedLaps * racingLine.totalLength + currentLapProgress;
         
         // Prevent going backwards on the racing line (unless it's initial position)
         // Allow some tolerance for normal movement (50 units)
@@ -2302,11 +2343,8 @@ class Room {
             // Calculate track progress for each player
             activePlayers.forEach(player => {
                 if (player.hasPassedStartLine) {
-                    // Don't update progress calculation if we already know they're going backwards
-                    // This prevents position jumps when crossing finish line backwards
-                    if (!player.isGoingBackwards) {
-                        this.calculateTrackProgress(player, trackData.racingLine);
-                    }
+                    // Always update position calculation to ensure accuracy
+                    this.calculateTrackProgress(player, trackData.racingLine);
                 }
             });
             
@@ -2315,24 +2353,19 @@ class Room {
             const waitingPlayers = activePlayers.filter(p => !p.hasPassedStartLine);
             
             // Sort by track progress (higher = further ahead)
-            // Penalize players going backwards
             racingPlayers.sort((a, b) => {
-                // First check if either player is going backwards
-                if (a.isGoingBackwards && !b.isGoingBackwards) {
-                    return 1; // a goes after b
-                }
-                if (!a.isGoingBackwards && b.isGoingBackwards) {
-                    return -1; // a goes before b
-                }
-                
-                // If both are going same direction, compare track progress
+                // Compare by actual race progress
+                // Track progress already includes lap information (completedLaps * totalLength + currentProgress)
+                // Players who crossed backwards will have lower progress due to lap reduction
                 const progressDiff = b.trackProgress - a.trackProgress;
-                if (Math.abs(progressDiff) > 0.1) { // If significant difference
+                
+                // If there's a significant difference in progress, use it
+                if (Math.abs(progressDiff) > 0.1) {
                     return progressDiff;
                 }
                 
                 // If track progress is essentially the same, use race start time
-                // Players who started earlier should be ahead
+                // Players who started racing earlier should be ranked higher
                 return (a.raceStartTime || 0) - (b.raceStartTime || 0);
             });
             

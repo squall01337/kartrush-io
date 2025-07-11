@@ -132,7 +132,7 @@ When starting a new session, ask these questions to quickly understand the proje
   - Aggressive slowdown with extra friction while in puddle
   - Purple screen flash and damage numbers when poisoned
 
-### Racing Line Position System (New)
+### Racing Line Position System (Updated)
 - **Precise Position Tracking**: Real-time position calculation based on distance along racing line
 - **Map Editor Tool**: New "🏎️ Ligne de course" button to draw racing lines
 - **Visual Feedback**: Click-to-close system like continuous curves, shows closing preview
@@ -140,3 +140,10 @@ When starting a new session, ask these questions to quickly understand the proje
 - **Fallback System**: Uses checkpoint-based positioning if no racing line exists
 - **No Duplicate Points**: Closed loops don't store duplicate first point
 - **JSON Export**: Racing line data included in map files with proper formatting
+- **Wrong Way Handling**: New `wrongWayCrossing` flag system prevents exploits
+  - Crossing finish line backwards sets flag (no lap change)
+  - Position penalty applied through track progress calculation
+  - Crossing forward again clears the penalty smoothly
+  - No position flickering or sudden jumps
+- **Respawn Fix**: Players with checkpoints who respawn behind start line maintain race status
+- **Smooth Transitions**: Position changes based on actual track progress, not hard penalties

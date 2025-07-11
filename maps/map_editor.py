@@ -337,19 +337,28 @@ class MapEditor:
     def stop_continuous_curve(self):
         """Arrête le dessin de la courbe continue"""
         if self.is_drawing_continuous and len(self.current_continuous_curve) >= 2:
+            # Vérifier si la courbe est fermée (dernier point identique au premier)
+            is_closed = False
+            points = list(self.current_continuous_curve)
+            
+            if len(points) >= 3 and points[0] == points[-1]:
+                # La courbe est fermée - retirer le dernier point dupliqué
+                points = points[:-1]
+                is_closed = True
+            
             # Créer un objet courbe continue
             continuous_curve = {
-                "points": list(self.current_continuous_curve),
+                "points": points,
                 "type": "continuous_curve",
-                "closed": self.current_continuous_curve[0] == self.current_continuous_curve[-1]  # Marquer si fermée
+                "closed": is_closed
             }
             self.continuous_curves.append(continuous_curve)
             self.actions_stack.append(("add_continuous_curve", continuous_curve))
             
-            if continuous_curve["closed"]:
-                self.log(f"Circuit fermé créé avec {len(self.current_continuous_curve)-1} points")
+            if is_closed:
+                self.log(f"Circuit fermé créé avec {len(points)} points")
             else:
-                self.log(f"Courbe continue terminée avec {len(self.current_continuous_curve)} points")
+                self.log(f"Courbe continue terminée avec {len(points)} points")
         
         self.is_drawing_continuous = False
         self.current_continuous_curve = []
@@ -807,8 +816,8 @@ class MapEditor:
             elif self.mode == "spawnpoint":
                 # Créer 6 spawn points en grille 2x3 (2 lignes, 3 colonnes) - Vertical
                 # Pour départ vertical, les karts doivent regarder vers le haut (angle 270) ou bas (angle 90)
-                spacing_x = 30  # Espacement horizontal entre les spawn points (resserré)
-                spacing_y = 40  # Espacement vertical entre les lignes (écarté)
+                spacing_x = 35  # Espacement horizontal entre les spawn points (augmenté légèrement)
+                spacing_y = 45  # Espacement vertical entre les lignes (augmenté légèrement)
                 
                 # Position du centre de la grille
                 center_x = event.x
@@ -818,7 +827,8 @@ class MapEditor:
                 group_id = f"group_{len(self.actions_stack)}_{int(event.x)}_{int(event.y)}"
                 
                 spawn_group = []
-                # Créer 2 lignes
+                # Créer 2 lignes - la première ligne (plus proche de la ligne d'arrivée) doit être 1,2,3
+                # La deuxième ligne (derrière) doit être 4,5,6
                 for row in range(2):
                     # Créer 3 colonnes par ligne
                     for col in range(3):
@@ -833,7 +843,8 @@ class MapEditor:
                             "type": "spawnpoint",
                             "width": 30,
                             "height": 20,
-                            "group_id": group_id  # ID unique du groupe
+                            "group_id": group_id,  # ID unique du groupe
+                            "position": row * 3 + col + 1  # Position explicite: 1-3 pour première ligne, 4-6 pour deuxième
                         }
                         self.spawnpoints.append(sp)
                         spawn_group.append(sp)
@@ -845,8 +856,8 @@ class MapEditor:
             elif self.mode == "spawnpoint_horizontal":
                 # Créer 6 spawn points en grille 3x2 (3 lignes, 2 colonnes) - Horizontal
                 # Pour départ horizontal, les karts doivent regarder vers la droite (angle 0) ou gauche (angle 180)
-                spacing_x = 40  # Espacement horizontal entre les spawn points (écarté)
-                spacing_y = 30  # Espacement vertical entre les lignes (resserré)
+                spacing_x = 45  # Espacement horizontal entre les spawn points (augmenté légèrement)
+                spacing_y = 35  # Espacement vertical entre les lignes (augmenté légèrement)
                 
                 # Position du centre de la grille
                 center_x = event.x
@@ -856,13 +867,22 @@ class MapEditor:
                 group_id = f"group_{len(self.actions_stack)}_{int(event.x)}_{int(event.y)}"
                 
                 spawn_group = []
-                # Créer 3 lignes
-                for row in range(3):
-                    # Créer 2 colonnes par ligne
-                    for col in range(2):
+                # Créer 3 lignes de 2 colonnes
+                # Pour un départ horizontal vers la droite:
+                # Colonne 1 (plus proche de la ligne): positions 1, 2, 3
+                # Colonne 2 (derrière): positions 4, 5, 6
+                # On parcourt par colonne d'abord pour avoir le bon ordre
+                temp_spawns = []
+                
+                # Parcourir par colonne en premier pour l'ordre correct
+                for col in range(2):
+                    for row in range(3):
                         # Calculer la position de chaque spawn point
                         x = center_x + (col - 0.5) * spacing_x  # -0.5, 0.5 pour centrer
                         y = center_y + (row - 1) * spacing_y  # -1, 0, 1 pour centrer
+                        
+                        # Position basée sur l'ordre colonne par colonne
+                        position = col * 3 + row + 1  # Col 0: 1,2,3; Col 1: 4,5,6
                         
                         sp = {
                             "x": x - 15,  # Centrer le spawn point (largeur 30)
@@ -871,7 +891,8 @@ class MapEditor:
                             "type": "spawnpoint",
                             "width": 30,
                             "height": 20,
-                            "group_id": group_id  # ID unique du groupe
+                            "group_id": group_id,  # ID unique du groupe
+                            "position": position
                         }
                         self.spawnpoints.append(sp)
                         spawn_group.append(sp)
@@ -972,10 +993,6 @@ class MapEditor:
                 # Pour les courbes continues
                 for curve in self.continuous_curves:
                     for i, point in enumerate(curve["points"]):
-                        # Si c'est une courbe fermée, ignorer le dernier point (qui est identique au premier)
-                        if curve.get("closed", False) and i == len(curve["points"]) - 1:
-                            continue
-                        
                         if math.dist((event.x, event.y), point) < 15:
                             self.selected_object = (curve, i)
                             self.log(f"Point de courbe continue sélectionné")
@@ -989,14 +1006,9 @@ class MapEditor:
         if self.mode == "modify_curve" and self.selected_object:
             curve, point_index = self.selected_object
             
-            # Si c'est une courbe fermée et qu'on modifie le premier point
-            if curve.get("closed", False) and point_index == 0:
-                # Mettre à jour aussi le dernier point pour maintenir la fermeture
-                curve["points"][point_index] = (event.x, event.y)
-                curve["points"][-1] = (event.x, event.y)
-            else:
-                # Modification normale
-                curve["points"][point_index] = (event.x, event.y)
+            # Modification normale - pas besoin de gérer spécialement les courbes fermées
+            # car on ne duplique plus le dernier point
+            curve["points"][point_index] = (event.x, event.y)
             
             self.redraw()
 
@@ -1406,11 +1418,23 @@ class MapEditor:
         # Utiliser l'interpolation de Catmull-Rom pour une courbe lisse
         path_points = []
         
-        for i in range(len(points) - 1):
-            p0 = points[max(0, i-1)]
-            p1 = points[i]
-            p2 = points[min(len(points)-1, i+1)]
-            p3 = points[min(len(points)-1, i+2)]
+        # Déterminer le nombre de segments à dessiner
+        is_closed = curve.get("closed", False)
+        num_segments = len(points) if is_closed else len(points) - 1
+        
+        for i in range(num_segments):
+            # Pour une courbe fermée, on boucle sur les indices
+            if is_closed:
+                p0 = points[(i - 1) % len(points)]
+                p1 = points[i]
+                p2 = points[(i + 1) % len(points)]
+                p3 = points[(i + 2) % len(points)]
+            else:
+                # Pour une courbe ouverte, on limite aux bornes
+                p0 = points[max(0, i-1)]
+                p1 = points[i]
+                p2 = points[min(len(points)-1, i+1)]
+                p3 = points[min(len(points)-1, i+2)]
             
             # Générer des points intermédiaires
             for t in range(0, 11):  # 11 points entre chaque paire
@@ -1432,34 +1456,9 @@ class MapEditor:
                 
                 path_points.append((x, y))
         
-        # Ajouter le dernier point
-        path_points.append(points[-1])
-        
-        # Si la courbe est fermée, ajouter le segment de fermeture
-        if curve.get("closed", False) and len(points) >= 3:
-            # Ajouter des points interpolés entre le dernier et le premier point
-            p0 = points[-2]
-            p1 = points[-1]
-            p2 = points[0]
-            p3 = points[1]
-            
-            for t in range(1, 11):  # 10 points pour le segment de fermeture
-                t = t / 10.0
-                
-                t2 = t * t
-                t3 = t2 * t
-                
-                x = 0.5 * ((2 * p1[0]) +
-                          (-p0[0] + p2[0]) * t +
-                          (2*p0[0] - 5*p1[0] + 4*p2[0] - p3[0]) * t2 +
-                          (-p0[0] + 3*p1[0] - 3*p2[0] + p3[0]) * t3)
-                
-                y = 0.5 * ((2 * p1[1]) +
-                          (-p0[1] + p2[1]) * t +
-                          (2*p0[1] - 5*p1[1] + 4*p2[1] - p3[1]) * t2 +
-                          (-p0[1] + 3*p1[1] - 3*p2[1] + p3[1]) * t3)
-                
-                path_points.append((x, y))
+        # Pour une courbe non fermée, ajouter le dernier point
+        if not is_closed:
+            path_points.append(points[-1])
         
         # Dessiner la courbe comme une ligne continue épaisse
         for i in range(len(path_points) - 1):
@@ -1472,10 +1471,6 @@ class MapEditor:
         # Afficher les points de contrôle si en mode modify_curve
         if self.mode == "modify_curve":
             for i, point in enumerate(points):
-                # Ne pas afficher le dernier point si c'est une courbe fermée
-                if curve.get("closed", False) and i == len(points) - 1:
-                    continue
-                
                 # Vérifier si ce point est sélectionné
                 is_selected = (selected and isinstance(self.selected_object, tuple) and 
                              self.selected_object[1] == i)
@@ -1892,15 +1887,8 @@ class MapEditor:
             # Convertir les courbes continues en format exportable
             continuous_curves_export = []
             for cc in self.continuous_curves:
-                points = cc["points"].copy()  # Copier pour ne pas modifier l'original
-                
-                # Si la courbe est fermée et que le dernier point est identique au premier, le retirer
-                if cc.get("closed", False) and len(points) >= 2:
-                    if points[0] == points[-1]:
-                        points = points[:-1]  # Retirer le dernier point dupliqué
-                
                 continuous_curves_export.append({
-                    "points": points,
+                    "points": cc["points"],
                     "type": "continuous",
                     "closed": cc.get("closed", False)
                 })

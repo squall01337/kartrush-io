@@ -219,23 +219,37 @@ When starting a new session, ask these questions to quickly understand the proje
 - Chat clears when joining a new room
 - 100 character message limit
 
-### Drift Mechanic (Final Version)
+### Drift Mechanic (Final Version - Mario Kart Style)
 - Hold Shift to activate drift when moving at 30%+ speed
 - Direction locked based on turn direction when drift starts
 - While drifting:
-  - Immediate speed reduction to 45% when starting drift
-  - Kart sprite rotates at 3.2 rad/s in drift direction
-  - **Counter-steering**: Hold opposite direction to stop rotation
-  - Movement curves significantly towards facing direction (45% curve factor)
-  - Outward drift inertia pushes kart to the outside of the turn
-  - Inertia force increases over time (simulating centrifugal force)
-  - Max rotation limited to 90° for better control
-  - 50% turn rate reduction
-  - Continuous speed reduction (caps at 25% of max speed)
-- Release Shift to boost:
-  - Single boost level (1 second duration)
-  - Requires minimum 200ms drift to activate boost
-  - Kart moves fully in new facing direction after boost
+  - Speed reduction to 70% (increased from previous versions)
+  - Speed drops to 50% if drifting while boosting (prevents going too fast)
+  - Boost is cancelled when starting drift
+  - **Drift control system**:
+    - Left/Right keys directly control drift angle (2.0 rad/s turn speed)
+    - No rotation limits - can spin indefinitely
+    - Counter-steering (opposite direction) blocks rotation completely
+    - Can resume rotation by pressing original direction again
+  - **Counter-steer jump mechanic**:
+    - Pressing opposite direction triggers outward "hop"
+    - Initial jump force of 1.25 that decays over time
+    - Provides 0.9x speed worth of outward push
+    - Helps adjust racing line mid-drift
+  - **Three-tier boost system**:
+    - Blue sparks (0.3s): Mini-turbo - 0.7s boost at 115% speed
+    - Orange sparks (0.8s): Super mini-turbo - 1.0s boost at 125% speed
+    - Purple sparks (1.5s): Ultra mini-turbo - 1.3s boost at 135% speed
+  - **Curve movement**:
+    - Increased inner lateral force (18% of speed based on angle)
+    - Base outward inertia: 5% of speed
+    - Counter-steer outward inertia: 15% of speed (3x normal)
+    - Counter-steer jump adds additional outward movement
+  - Normal turning disabled during drift
+  - Visual effects needed for different boost tiers
+- Visual feedback needed:
+  - Blue/orange spark effects based on charge level
+  - More intense effects with higher charge
 - Visual effects:
   - Blue/white spark trails appear after 500ms
   - Tire smoke effects with intensity based on drift duration

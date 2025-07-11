@@ -418,6 +418,9 @@ class Player {
         this.driftRotation = 0; // Current rotation amount during drift
         this.originalAngle = 0; // Angle when drift started
         this.lastDriftBoostTime = 0; // Cooldown between drift boosts
+        this.driftChargeLevel = 0; // 0 = none, 1 = blue, 2 = orange, 3 = purple
+        this.wasCounterSteering = false; // Track counter-steer state
+        this.counterSteerJump = 0; // Jump force when starting counter-steer
     }
 
     // Nouvelle méthode pour infliger des dégâts
@@ -492,37 +495,71 @@ class Player {
         this.driftDirection = direction; // -1 for left, 1 for right
         this.originalAngle = this.angle; // Store the angle when drift started
         this.driftRotation = 0;
+        this.driftChargeLevel = 0; // Reset charge level
+        this.wasCounterSteering = false;
+        this.counterSteerJump = 0;
         
-        // Immediate speed reduction when starting drift
-        this.speed *= 0.45; // Reduce speed to 45% immediately
+        // Reduce speed for drift - more reduction if boosting
+        if (this.isBoosting || this.isSuperBoosting) {
+            this.speed *= 0.5; // 50% if boosting (bigger reduction)
+            // Also end the boost when starting drift
+            this.isBoosting = false;
+            this.boostEndTime = 0;
+            this.boostLevel = 0;
+        } else {
+            this.speed *= 0.7; // 70% normal drift speed (increased from 65%)
+        }
     }
     
     updateDrift(deltaTime) {
         if (!this.isDrifting) return;
         
-        // Check if player is counter-steering (pressing opposite direction)
+        const driftDuration = (Date.now() - this.driftStartTime) / 1000;
+        
+        // Update drift charge level based on duration (3 levels)
+        if (driftDuration >= 1.5 && this.driftChargeLevel < 3) {
+            this.driftChargeLevel = 3; // Purple (ultra)
+        } else if (driftDuration >= 0.8 && this.driftChargeLevel < 2) {
+            this.driftChargeLevel = 2; // Orange (super)
+        } else if (driftDuration >= 0.3 && this.driftChargeLevel < 1) {
+            this.driftChargeLevel = 1; // Blue (mini)
+        }
+        
+        // Drift control with counter-steer blocking
+        const rotationSpeed = 2.0; // radians per second (reduced from 2.5)
+        const maxRotation = Math.PI * 0.5; // 90 degrees max
+        
+        // Check if we're counter-steering (opposite to drift direction)
         const isCounterSteering = (this.driftDirection === -1 && this.inputs.right) || 
                                  (this.driftDirection === 1 && this.inputs.left);
         
-        // Rotate the kart while drifting
-        const baseRotationSpeed = 3.2; // radians per second
-        const rotationSpeed = isCounterSteering ? 0 : baseRotationSpeed; // Stop rotation if counter-steering
-        const maxRotation = Math.PI * 0.5; // 90 degrees max
+        // Detect start of counter-steer for jump effect
+        if (isCounterSteering && !this.wasCounterSteering) {
+            this.counterSteerJump = 1; // Middle value between 1.0 and 1.5
+        }
+        this.wasCounterSteering = isCounterSteering;
         
-        // Calculate new rotation
-        const rotationDelta = this.driftDirection * rotationSpeed * deltaTime;
-        const newRotation = this.driftRotation + rotationDelta;
-        
-        // Limit rotation to prevent spinning too far
-        if (Math.abs(newRotation) <= maxRotation) {
-            this.driftRotation = newRotation;
-            this.angle = this.originalAngle + this.driftRotation;
+        // Decay jump force more slowly
+        if (this.counterSteerJump > 0) {
+            this.counterSteerJump = Math.max(0, this.counterSteerJump - deltaTime * 3.0);
         }
         
-        // More significant speed reduction during drift
-        if (this.speed > GAME_CONFIG.MAX_SPEED * 0.25) {
-            this.speed *= 0.91; // Even faster deceleration, cap at 25% speed
+        // Apply rotation based on input
+        if (!isCounterSteering) {
+            // Not counter-steering, allow normal rotation
+            if (this.inputs.left) {
+                this.driftRotation -= rotationSpeed * deltaTime;
+            }
+            if (this.inputs.right) {
+                this.driftRotation += rotationSpeed * deltaTime;
+            }
         }
+        // If counter-steering, rotation is blocked (maintains current angle)
+        
+        // No clamping - let rotation continue indefinitely
+        
+        // Update angle
+        this.angle = this.originalAngle + this.driftRotation;
     }
     
     endDrift() {
@@ -530,21 +567,39 @@ class Player {
         
         this.isDrifting = false;
         
-        // Apply single level boost if we drifted for at least 200ms
-        const driftDuration = Date.now() - this.driftStartTime;
-        if (driftDuration > 200 && Date.now() - this.lastDriftBoostTime > 1000) {
-            this.lastDriftBoostTime = Date.now();
-            
-            // Single boost level
+        // Apply boost based on charge level
+        if (this.driftChargeLevel > 0 && Date.now() - this.lastDriftBoostTime > 500) {
             this.isBoosting = true;
-            this.boostEndTime = Date.now() + 1000; // 1 second boost
-            this.boostLevel = 2; // Medium boost level
+            
+            // Different boost levels and durations (very low power)
+            switch(this.driftChargeLevel) {
+                case 1: // Blue mini-turbo
+                    this.boostLevel = 1;
+                    this.boostEndTime = Date.now() + 700; // 0.7 second
+                    this.speed = Math.min(this.speed + 0.8, GAME_CONFIG.MAX_SPEED * 1.15); // 115% speed
+                    break;
+                case 2: // Orange super mini-turbo
+                    this.boostLevel = 2;
+                    this.boostEndTime = Date.now() + 1000; // 1.0 second
+                    this.speed = Math.min(this.speed + 1.2, GAME_CONFIG.MAX_SPEED * 1.25); // 125% speed
+                    break;
+                case 3: // Purple ultra mini-turbo
+                    this.boostLevel = 3;
+                    this.boostEndTime = Date.now() + 1300; // 1.3 seconds
+                    this.speed = Math.min(this.speed + 1.6, GAME_CONFIG.MAX_SPEED * 1.35); // 135% speed
+                    break;
+            }
+            
+            this.lastDriftBoostTime = Date.now();
             this.boostCooldown = 0;
         }
         
         // Reset drift properties
         this.driftRotation = 0;
         this.driftDirection = 0;
+        this.driftChargeLevel = 0;
+        this.wasCounterSteering = false;
+        this.counterSteerJump = 0;
     }
 
     update(deltaTime) {
@@ -606,14 +661,19 @@ class Player {
         let maxSpeedLimit = GAME_CONFIG.MAX_SPEED;
         if (this.isBoosting) {
             switch(this.boostLevel) {
-                case 1: maxSpeedLimit *= 1.25; break;
-                case 2: maxSpeedLimit *= 1.50; break;
-                case 3: maxSpeedLimit *= 1.75; break;
+                case 1: maxSpeedLimit *= 1.15; break;  // 115%
+                case 2: maxSpeedLimit *= 1.25; break;  // 125%
+                case 3: maxSpeedLimit *= 1.35; break;  // 135%
             }
         }
         
         if (this.isSuperBoosting) {
             maxSpeedLimit *= 1.5; // 150% de vitesse avec super booster
+        }
+        
+        // During drift, maintain constant reduced speed
+        if (this.isDrifting && !this.isBoosting && !this.isSuperBoosting) {
+            maxSpeedLimit = GAME_CONFIG.MAX_SPEED * 0.7; // Drift speed is 70% of max
         }
         
         if (this.speed > maxSpeedLimit) {
@@ -630,22 +690,42 @@ class Player {
         // Update position - during drift, create a noticeable curve towards facing direction
         let moveAngle = this.angle;
         if (this.isDrifting) {
-            // Blend between original angle and current angle for a curved drift
-            const curveFactor = 0.45; // Increased for more noticeable curve (0 = straight, 1 = full turn)
-            moveAngle = this.originalAngle + (this.angle - this.originalAngle) * curveFactor;
-        }
-        this.x += Math.cos(moveAngle) * this.speed;
-        this.y += Math.sin(moveAngle) * this.speed;
-        
-        // Add outward drift inertia (centrifugal force effect)
-        if (this.isDrifting) {
-            const driftTime = (Date.now() - this.driftStartTime) / 1000; // Time in seconds
-            const inertiaForce = Math.min(1.6, driftTime * 0.8) * this.speed; // Further increased force
+            // Movement follows current angle
+            moveAngle = this.angle;
             
-            // Calculate perpendicular direction (opposite to drift direction)
+            // Lateral drift force based on rotation amount (increased for tighter curves)
+            const driftStrength = Math.min(1.0, Math.abs(this.driftRotation) / (Math.PI * 0.5)); // 0 to 1, capped
+            const lateralForce = this.speed * 0.18 * driftStrength; // Increased from 0.12
+            const lateralAngle = this.angle + (this.driftDirection * Math.PI / 2);
+            
+            // Apply forward movement
+            this.x += Math.cos(moveAngle) * this.speed;
+            this.y += Math.sin(moveAngle) * this.speed;
+            
+            // Apply lateral drift movement (increased)
+            this.x += Math.cos(lateralAngle) * lateralForce * this.driftDirection;
+            this.y += Math.sin(lateralAngle) * lateralForce * this.driftDirection;
+            
+            // Outward inertia - more when counter-steering
+            const isCounterSteering = (this.driftDirection === -1 && this.inputs.right) || 
+                                     (this.driftDirection === 1 && this.inputs.left);
+            const baseInertia = isCounterSteering ? 0.15 : 0.05; // Triple inertia when counter-steering
+            const inertiaForce = baseInertia * this.speed;
             const inertiaAngle = this.originalAngle - (this.driftDirection * Math.PI / 2);
             this.x += Math.cos(inertiaAngle) * inertiaForce;
             this.y += Math.sin(inertiaAngle) * inertiaForce;
+            
+            // Apply counter-steer jump effect
+            if (this.counterSteerJump > 0) {
+                const jumpAngle = this.angle - (this.driftDirection * Math.PI / 2); // Outward from drift
+                const jumpForce = this.counterSteerJump * this.speed * 0.8; // Middle value between 0.8 and 1.0
+                this.x += Math.cos(jumpAngle) * jumpForce;
+                this.y += Math.sin(jumpAngle) * jumpForce;
+            }
+        } else {
+            // Normal movement when not drifting
+            this.x += Math.cos(moveAngle) * this.speed;
+            this.y += Math.sin(moveAngle) * this.speed;
         }
         
         // Limites de la piste
@@ -658,10 +738,10 @@ class Player {
         let speedMultiplier = 1.0;
         if (this.isBoosting) {
             switch(this.boostLevel) {
-                case 1: speedMultiplier = 1.25; break;  // 125%
-                case 2: speedMultiplier = 1.50; break;  // 150%
-                case 3: speedMultiplier = 1.75; break;  // 175%
-                default: speedMultiplier = 1.25; break;
+                case 1: speedMultiplier = 1.15; break;  // 115%
+                case 2: speedMultiplier = 1.25; break;  // 125%
+                case 3: speedMultiplier = 1.35; break;  // 135%
+                default: speedMultiplier = 1.15; break;
             }
         }
         
@@ -692,18 +772,15 @@ class Player {
 
     turnLeft() {
         if (Math.abs(this.speed) > 0.1) {
-            // Block turning in opposite direction during drift
-            if (this.isDrifting && this.driftDirection > 0) {
-                return; // Can't turn left while drifting right
+            // Don't actually turn the kart during drift - it's handled by drift mechanics
+            if (this.isDrifting) {
+                return; // Drift handles rotation
             }
             
-            // Réduire le turn rate pour tous les boosts et drift
+            // Réduire le turn rate pour tous les boosts
             let turnRateMultiplier = 1.0;
             if (this.isBoosting || this.isSuperBoosting) {
                 turnRateMultiplier *= 0.6;
-            }
-            if (this.isDrifting) {
-                turnRateMultiplier *= 0.5; // More reduced turning during drift
             }
             this.angle -= GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED) * turnRateMultiplier;
         }
@@ -711,18 +788,15 @@ class Player {
 
     turnRight() {
         if (Math.abs(this.speed) > 0.1) {
-            // Block turning in opposite direction during drift
-            if (this.isDrifting && this.driftDirection < 0) {
-                return; // Can't turn right while drifting left
+            // Don't actually turn the kart during drift - it's handled by drift mechanics
+            if (this.isDrifting) {
+                return; // Drift handles rotation
             }
             
-            // Réduire le turn rate pour tous les boosts et drift
+            // Réduire le turn rate pour tous les boosts
             let turnRateMultiplier = 1.0;
             if (this.isBoosting || this.isSuperBoosting) {
                 turnRateMultiplier *= 0.6;
-            }
-            if (this.isDrifting) {
-                turnRateMultiplier *= 0.5; // More reduced turning during drift
             }
             this.angle += GAME_CONFIG.TURN_SPEED * (this.speed / GAME_CONFIG.MAX_SPEED) * turnRateMultiplier;
         }
@@ -2196,7 +2270,8 @@ class Room {
                 isDrifting: p.isDrifting,
                 driftStartTime: p.driftStartTime,
                 driftDirection: p.driftDirection,
-                driftRotation: p.driftRotation
+                driftRotation: p.driftRotation,
+                driftChargeLevel: p.driftChargeLevel
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

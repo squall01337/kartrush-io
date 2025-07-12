@@ -184,3 +184,19 @@ When starting a new session, ask these questions to quickly understand the proje
 - **Removed Checkpoint Notifications**: No more "Il vous reste X checkpoints" messages
 - **Streamlined Detection**: Single direction-based system handles all wrong way scenarios
 - **Fixed TypeScript Warning**: Removed unused `isInitialPosition` parameter from `calculateTrackProgress`
+
+### Rocket Racing Line Following (New)
+- **Smart Trajectory**: Rockets now follow the racing line before targeting players
+- **Two-Phase System**: 
+  - Phase 1: Follow racing line to avoid walls (blue glow indicator)
+  - Phase 2: Target acquisition when within 300 pixels AND line of sight (red glow indicator)
+- **Enhanced Line of Sight**: 
+  - Initial check: If target visible at launch, skip racing line entirely
+  - Continuous monitoring: Returns to racing line if line of sight is lost
+  - Prevents wall collisions on parallel track sections
+- **No Distance Limit**: Rockets follow racing line for their entire 3.5-second lifetime
+  - Similar to Mario Kart red shells behavior
+- **Smooth Navigation**: Rockets navigate around corners using racing line segments
+- **Clean Visual**: No additional indicators, just the rocket sprite and effects
+- **Same Damage/Explosion**: All existing rocket mechanics remain unchanged
+- **Fallback Behavior**: Works normally on maps without racing lines

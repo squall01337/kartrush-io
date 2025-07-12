@@ -258,14 +258,21 @@ class Projectile {
                 this.x += Math.cos(owner.angle) * 30;
                 this.y += Math.sin(owner.angle) * 30;
                 this.speed = 8; // Rapide
-                this.lifetime = 5000; // 5 secondes max
+                this.lifetime = 3500; // 3.5 secondes max
                 this.radius = 20;
                 this.damage = 75;
+                // Racing line following properties
+                this.followingRacingLine = true;
+                this.racingLineSegment = -1;
+                this.racingLineProgress = 0;
+                this.targetAcquired = false;
+                this.minDistanceToTarget = 300; // Distance to start targeting
+                this.initialLineOfSightCheck = false; // Will be checked in first update
                 break;
         }
     }
     
-    update(deltaTime, players, walls) {
+    update(deltaTime, players, walls, racingLine = null) {
         if (!this.active) return;
         
         this.lifetime -= deltaTime * 1000;
@@ -277,32 +284,168 @@ class Projectile {
         
         switch(this.type) {
             case 'rocket':
-                this.updateRocket(deltaTime, players, walls);
+                this.updateRocket(deltaTime, players, walls, racingLine);
                 break;
         }
     }
     
-    updateRocket(_, players, walls) {
-        if (this.target && players.has(this.target)) {
+    updateRocket(_, players, walls, racingLine) {
+        // Initial line of sight check - if we can see target immediately, don't use racing line
+        if (!this.initialLineOfSightCheck && this.target && players.has(this.target)) {
+            this.initialLineOfSightCheck = true;
             const target = players.get(this.target);
             if (!target.isDead) {
-                // Calculer l'angle vers la cible
+                const hasLineOfSight = !this.checkWallCollision(this.x, this.y, target.x, target.y, walls);
+                if (hasLineOfSight) {
+                    // Direct line of sight from start, no need for racing line
+                    this.targetAcquired = true;
+                    this.followingRacingLine = false;
+                }
+            }
+        }
+        
+        // Check if we should acquire target during racing line following
+        if (this.target && players.has(this.target) && !this.targetAcquired && this.followingRacingLine) {
+            const target = players.get(this.target);
+            if (!target.isDead) {
                 const dx = target.x - this.x;
                 const dy = target.y - this.y;
-                const targetAngle = Math.atan2(dy, dx);
-                
-                // Tourner progressivement vers la cible
-                let angleDiff = targetAngle - this.angle;
-                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-                
-                this.angle += angleDiff * 0.1; // Vitesse de rotation
-                
-                // Vérifier la distance
                 const distance = Math.sqrt(dx * dx + dy * dy);
-                if (distance < this.radius) {
-                    this.explode();
-                    return;
+                
+                // Start targeting when close enough AND have line of sight
+                if (distance < this.minDistanceToTarget) {
+                    // Check line of sight to target
+                    const hasLineOfSight = !this.checkWallCollision(this.x, this.y, target.x, target.y, walls);
+                    
+                    if (hasLineOfSight) {
+                        this.targetAcquired = true;
+                        this.followingRacingLine = false;
+                    }
+                }
+            }
+        }
+        
+        // Follow racing line or target
+        if (this.followingRacingLine && racingLine && racingLine.points && racingLine.points.length > 2) {
+            // Initialize racing line segment if needed
+            if (this.racingLineSegment === -1) {
+                // Find closest segment on racing line
+                let closestSegment = 0;
+                let closestDistance = Infinity;
+                
+                const numSegments = racingLine.closed ? racingLine.points.length : racingLine.points.length - 1;
+                
+                for (let i = 0; i < numSegments; i++) {
+                    const p1 = racingLine.points[i];
+                    const p2 = racingLine.points[(i + 1) % racingLine.points.length];
+                    
+                    const closest = getClosestPointOnSegment(
+                        this.x, this.y, p1[0], p1[1], p2[0], p2[1]
+                    );
+                    
+                    const dist = distanceXY(this.x, this.y, closest.x, closest.y);
+                    if (dist < closestDistance) {
+                        closestDistance = dist;
+                        closestSegment = i;
+                        this.racingLineProgress = closest.t;
+                    }
+                }
+                
+                this.racingLineSegment = closestSegment;
+            }
+            
+            // Calculate target point ahead on racing line
+            const lookAheadDistance = 100; // pixels ahead
+            let remainingDistance = lookAheadDistance;
+            let currentSegment = this.racingLineSegment;
+            let segmentProgress = this.racingLineProgress;
+            
+            // Move along racing line to find target point
+            while (remainingDistance > 0 && racingLine.points.length > 0) {
+                const p1 = racingLine.points[currentSegment];
+                const p2 = racingLine.points[(currentSegment + 1) % racingLine.points.length];
+                
+                const segmentLength = distanceXY(p1[0], p1[1], p2[0], p2[1]);
+                const remainingSegmentLength = segmentLength * (1 - segmentProgress);
+                
+                if (remainingDistance <= remainingSegmentLength) {
+                    // Target point is on current segment
+                    const t = segmentProgress + (remainingDistance / segmentLength);
+                    const targetX = p1[0] + t * (p2[0] - p1[0]);
+                    const targetY = p1[1] + t * (p2[1] - p1[1]);
+                    
+                    // Turn towards target point
+                    const targetAngle = Math.atan2(targetY - this.y, targetX - this.x);
+                    let angleDiff = targetAngle - this.angle;
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                    
+                    this.angle += angleDiff * 0.15; // Smooth turning
+                    break;
+                } else {
+                    // Move to next segment
+                    remainingDistance -= remainingSegmentLength;
+                    currentSegment = (currentSegment + 1) % racingLine.points.length;
+                    segmentProgress = 0;
+                }
+            }
+            
+            // Update rocket's position on racing line
+            const moveDistance = this.speed;
+            let distanceMoved = 0;
+            
+            while (distanceMoved < moveDistance) {
+                const p1 = racingLine.points[this.racingLineSegment];
+                const p2 = racingLine.points[(this.racingLineSegment + 1) % racingLine.points.length];
+                
+                const segmentLength = distanceXY(p1[0], p1[1], p2[0], p2[1]);
+                const remainingSegmentLength = segmentLength * (1 - this.racingLineProgress);
+                const moveInSegment = Math.min(moveDistance - distanceMoved, remainingSegmentLength);
+                
+                this.racingLineProgress += moveInSegment / segmentLength;
+                distanceMoved += moveInSegment;
+                
+                if (this.racingLineProgress >= 1) {
+                    this.racingLineSegment = (this.racingLineSegment + 1) % racingLine.points.length;
+                    this.racingLineProgress = 0;
+                }
+            }
+            
+            // No distance limit - rocket follows racing line until timeout or target acquisition
+            
+        } else if (this.targetAcquired && this.target && players.has(this.target)) {
+            // Original targeting logic with continuous line of sight check
+            const target = players.get(this.target);
+            if (!target.isDead) {
+                // Check if we still have line of sight
+                const hasLineOfSight = !this.checkWallCollision(this.x, this.y, target.x, target.y, walls);
+                
+                if (!hasLineOfSight) {
+                    // Lost line of sight, go back to racing line following if possible
+                    if (racingLine && racingLine.points && racingLine.points.length > 2) {
+                        this.targetAcquired = false;
+                        this.followingRacingLine = true;
+                        this.racingLineSegment = -1; // Reinitialize to find closest segment
+                    }
+                } else {
+                    // We have line of sight, continue targeting
+                    const dx = target.x - this.x;
+                    const dy = target.y - this.y;
+                    const targetAngle = Math.atan2(dy, dx);
+                    
+                    // Tourner progressivement vers la cible
+                    let angleDiff = targetAngle - this.angle;
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                    
+                    this.angle += angleDiff * 0.1; // Vitesse de rotation
+                    
+                    // Vérifier la distance
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if (distance < this.radius) {
+                        this.explode();
+                        return;
+                    }
                 }
             }
         }
@@ -1418,7 +1561,7 @@ class Room {
         
         // Mettre à jour les projectiles
         for (const [id, projectile] of this.projectiles) {
-            projectile.update(deltaTime, this.players, trackData.continuousCurves);
+            projectile.update(deltaTime, this.players, trackData.continuousCurves, trackData.racingLine);
             
             if (!projectile.active) {
                 // Explosion !
@@ -1595,19 +1738,19 @@ class Room {
                 const rand = Math.random();
                 let itemType;
                 
-                // Equal drop rates for testing (1/6 each ≈ 16.67%)
-                if (rand < 1/6) {
-                    itemType = 'lightning';
-                } else if (rand < 2/6) {
-                    itemType = 'healthpack';
-                } else if (rand < 3/6) {
-                    itemType = 'bomb';
-                } else if (rand < 4/6) {
-                    itemType = 'rocket';
-                } else if (rand < 5/6) {
-                    itemType = 'superboost';
+                // TESTING: Mostly rockets (80% rockets for testing)
+                if (rand < 0.80) {
+                    itemType = 'rocket';  // 80% chance
+                } else if (rand < 0.84) {
+                    itemType = 'healthpack';  // 4% chance
+                } else if (rand < 0.88) {
+                    itemType = 'bomb';  // 4% chance
+                } else if (rand < 0.92) {
+                    itemType = 'superboost';  // 4% chance
+                } else if (rand < 0.96) {
+                    itemType = 'lightning';  // 4% chance
                 } else {
-                    itemType = 'poisonslick';
+                    itemType = 'poisonslick';  // 4% chance
                 }
                 
                 // Donner l'objet au joueur
@@ -2848,7 +2991,9 @@ class Room {
                 x: p.x,
                 y: p.y,
                 angle: p.angle,
-                ownerId: p.owner.id
+                ownerId: p.owner.id,
+                followingRacingLine: p.followingRacingLine || false,
+                targetAcquired: p.targetAcquired || false
             })),
             poisonSlicks: Array.from(this.poisonSlicks.values()).filter(s => s.active).map(s => ({
                 id: s.id,

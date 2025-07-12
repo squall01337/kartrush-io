@@ -1310,8 +1310,11 @@ class GameClient {
             
             // Create lightning effects for all affected players
             if (this.gameEngine) {
-                data.affectedPlayers.forEach(player => {
-                    this.gameEngine.createLightningEffect(player.x, player.y);
+                data.affectedPlayers.forEach((player, index) => {
+                    // Add a small delay to ensure unique timestamps
+                    setTimeout(() => {
+                        this.gameEngine.createLightningEffect(player.x, player.y, player.playerId);
+                    }, index * 10);
                     
                     // If we're one of the affected players, show stun effect
                     if (player.playerId === this.playerId) {

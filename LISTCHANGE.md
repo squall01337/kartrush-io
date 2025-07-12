@@ -167,8 +167,20 @@ When starting a new session, ask these questions to quickly understand the proje
 - **Replaces HTML Alert**: No more DOM-based alerts, everything rendered on canvas
 - **Consistent Styling**: Matches lap notification visual style with rounded corners and glow
 
+### Lightning Item (New)
+- **Effect**: Stuns and slows all players ahead of the user
+- **Stun Duration**: 1 second (players cannot move or use items)
+- **Speed Reduction**: 50% speed for 7 seconds after stun
+- **Visual Effects**: 
+  - Lightning sprite appears on all affected players
+  - Blue circle aura shows speed reduction
+  - Yellow screen flash for affected players
+- **Drop Rate**: Currently set to 16.67% for testing (equal with other items)
+- **Bug Fix**: Fixed issue where lightning sprite only appeared on one player instead of all affected players
+
 ### Code Cleanup
 - **Removed Unused Variables**: Cleaned up `closestPoint` and `elapsed` variables
 - **Removed Redundant Notifications**: No more yellow "Wrong way!" popup when crossing finish backwards
 - **Removed Checkpoint Notifications**: No more "Il vous reste X checkpoints" messages
 - **Streamlined Detection**: Single direction-based system handles all wrong way scenarios
+- **Fixed TypeScript Warning**: Removed unused `isInitialPosition` parameter from `calculateTrackProgress`

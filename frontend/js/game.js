@@ -1533,7 +1533,13 @@ class GameEngine {
             if (key.startsWith('projectile_explosion_')) {
                 this.renderExplosion(ctx, explosionData.x, explosionData.y, key);
             } else if (key.startsWith('lightning_')) {
-                this.renderLightningEffect(ctx, explosionData.x, explosionData.y, key);
+                // If we have a playerId, follow the player; otherwise use static position
+                if (explosionData.playerId && this.gameState.players[explosionData.playerId]) {
+                    const player = this.gameState.players[explosionData.playerId];
+                    this.renderLightningEffect(ctx, player.x, player.y, key);
+                } else {
+                    this.renderLightningEffect(ctx, explosionData.x, explosionData.y, key);
+                }
             }
         }
     }
@@ -2195,24 +2201,25 @@ startItemSlotAnimation(finalItem) {
         ctx.restore();
     }
     
-    createLightningEffect(x, y) {
-        // Create lightning strike visual effect at the given position
-        const key = `lightning_${Date.now()}_${x}_${y}`;
+    createLightningEffect(x, y, playerId) {
+        // Create lightning strike visual effect attached to a player
+        const key = `lightning_${playerId}_${Date.now()}_${Math.random()}`;
         
         this.damageEffects.set(key, {
             type: 'lightning',
             x: x,
             y: y,
+            playerId: playerId,
             startTime: Date.now(),
             duration: 800 // 0.8 seconds
         });
         
         // Add particles for lightning effect
-        if (this.particleSystem) {
+        if (this.particleSystem && this.particleSystem.particles) {
             // Lightning bolts
             for (let i = 0; i < 5; i++) {
                 const angle = (Math.PI * 2) * (i / 5);
-                this.particleSystem.addParticle({
+                this.particleSystem.particles.push({
                     x: x,
                     y: y,
                     vx: Math.cos(angle) * 100,
@@ -2227,7 +2234,7 @@ startItemSlotAnimation(finalItem) {
             
             // Electric sparks
             for (let i = 0; i < 10; i++) {
-                this.particleSystem.addParticle({
+                this.particleSystem.particles.push({
                     x: x + (Math.random() - 0.5) * 40,
                     y: y + (Math.random() - 0.5) * 40,
                     vx: (Math.random() - 0.5) * 200,

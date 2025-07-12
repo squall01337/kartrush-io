@@ -1509,7 +1509,7 @@ class Room {
                     // Reset backwards flags on respawn
                     player.isGoingBackwards = false;
                     player.wrongWayCrossing = false;
-                    this.calculateTrackProgress(player, trackData.racingLine, true); // true = initial position
+                    this.calculateTrackProgress(player, trackData.racingLine);
                 }
                 
                 // Émettre l'événement de respawn
@@ -1595,18 +1595,19 @@ class Room {
                 const rand = Math.random();
                 let itemType;
                 
-                if (rand < 0.90) {
-                    itemType = 'lightning'; // 90% TEMPORARY FOR TESTING
-                } else if (rand < 0.92) {
-                    itemType = 'healthpack'; // 2%
-                } else if (rand < 0.95) {
-                    itemType = 'bomb'; // 3%
-                } else if (rand < 0.97) {
-                    itemType = 'rocket'; // 2%
-                } else if (rand < 0.99) {
-                    itemType = 'superboost'; // 2%
+                // Equal drop rates for testing (1/6 each ≈ 16.67%)
+                if (rand < 1/6) {
+                    itemType = 'lightning';
+                } else if (rand < 2/6) {
+                    itemType = 'healthpack';
+                } else if (rand < 3/6) {
+                    itemType = 'bomb';
+                } else if (rand < 4/6) {
+                    itemType = 'rocket';
+                } else if (rand < 5/6) {
+                    itemType = 'superboost';
                 } else {
-                    itemType = 'poisonslick'; // 1%
+                    itemType = 'poisonslick';
                 }
                 
                 // Donner l'objet au joueur
@@ -2273,7 +2274,7 @@ class Room {
         racingLine.closed = isClosedLine;
     }
 
-    calculateTrackProgress(player, racingLine, isInitialPosition = false) {
+    calculateTrackProgress(player, racingLine) {
         if (!racingLine || !racingLine.points || racingLine.points.length < 2) return;
         
         // Find the closest segment of the racing line

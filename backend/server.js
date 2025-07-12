@@ -2004,17 +2004,7 @@ class Room {
                 const dot = normal.x * movement.x + normal.y * movement.y;
                 
                 if (dot > 0) { // Passage dans le bon sens
-                    // Clear backwards flag when crossing in correct direction
-                    if (player.isGoingBackwards) {
-                        player.isGoingBackwards = false;
-                        player.wrongDirectionStartTime = 0;
-                        
-                        // Stop the alert if it was active
-                        if (player.wrongDirectionAlertActive) {
-                            player.wrongDirectionAlertActive = false;
-                            io.to(player.id).emit('wrongDirectionAlert', { show: false });
-                        }
-                    }
+                    // The racing line direction detection now handles wrong way flags
                     
                     // If they were fixing a wrong way crossing, just clear it
                     if (player.wrongWayCrossing) {
@@ -2070,11 +2060,8 @@ class Room {
                         });
                     }
                 } else if (dot < 0) { // Passage dans le mauvais sens
-                    // Mark as going backwards
-                    if (!player.isGoingBackwards) {
-                        player.isGoingBackwards = true;
-                        player.wrongDirectionStartTime = Date.now();
-                    }
+                    // The racing line direction detection now handles isGoingBackwards flag
+                    // We only need to handle the special wrongWayCrossing case for finish line
                     
                     // If player has started racing and crosses finish line backwards
                     if (player.hasPassedStartLine && player.lap > 0) {
@@ -2292,7 +2279,6 @@ class Room {
         // Find the closest segment of the racing line
         let closestSegment = -1;
         let closestDistance = Infinity;
-        let closestPoint = null;
         let closestT = 0;
         
         // Use the preprocessed closed flag if available
@@ -2314,12 +2300,64 @@ class Room {
             if (dist < closestDistance) {
                 closestDistance = dist;
                 closestSegment = i;
-                closestPoint = closest;
                 closestT = closest.t;
             }
         }
         
         if (closestSegment === -1) return;
+        
+        // NEW: Direction-based wrong way detection
+        // This system detects wrong way driving by comparing the player's facing direction
+        // with the racing line direction at their current position.
+        // Much more responsive than the old progress-based system!
+        
+        // Calculate the direction of the current racing line segment
+        const p1 = racingLine.points[closestSegment];
+        const p2 = racingLine.points[(closestSegment + 1) % racingLine.points.length];
+        const segmentDir = {
+            x: p2[0] - p1[0],
+            y: p2[1] - p1[1]
+        };
+        
+        // Normalize segment direction
+        const segmentDirLength = Math.sqrt(segmentDir.x ** 2 + segmentDir.y ** 2);
+        if (segmentDirLength > 0) {
+            segmentDir.x /= segmentDirLength;
+            segmentDir.y /= segmentDirLength;
+        }
+        
+        // Calculate player's facing direction
+        const playerDir = {
+            x: Math.cos(player.angle),
+            y: Math.sin(player.angle)
+        };
+        
+        // Dot product: >0 = correct way, <0 = wrong way
+        const dotProduct = segmentDir.x * playerDir.x + segmentDir.y * playerDir.y;
+        
+        // Track previous state
+        const wasGoingBackwards = player.isGoingBackwards;
+        
+        // Consider wrong way if:
+        // 1. Facing opposite direction (dot product < -0.1 to avoid flickering)
+        // 2. Moving with some speed (to avoid false positives when stationary)
+        // 3. Has started the race (optional: only after crossing start line)
+        player.isGoingBackwards = dotProduct < -0.1 && player.speed > 0.5;
+        
+        // Handle wrong way state changes
+        if (player.isGoingBackwards && !wasGoingBackwards) {
+            // Just started going wrong way
+            player.wrongDirectionStartTime = Date.now();
+        } else if (!player.isGoingBackwards && wasGoingBackwards) {
+            // Stopped going wrong way
+            player.wrongDirectionStartTime = 0;
+            
+            // Clear the alert if it was active
+            if (player.wrongDirectionAlertActive) {
+                player.wrongDirectionAlertActive = false;
+                io.to(player.id).emit('wrongDirectionAlert', { show: false });
+            }
+        }
         
         // Calculate total progress
         const segmentStartDistance = racingLine.segmentDistances[closestSegment];
@@ -2344,42 +2382,8 @@ class Room {
         
         const newTrackProgress = completedLaps * racingLine.totalLength + currentLapProgress;
         
-        // Prevent going backwards on the racing line (unless it's initial position)
-        // Allow some tolerance for normal movement (50 units)
-        if (!isInitialPosition && player.trackProgress > 0) {
-            const progressDiff = newTrackProgress - player.trackProgress;
-            
-            // If trying to go backwards more than tolerance
-            if (progressDiff < -50) {
-                // Check if it's a legitimate lap completion (crossing from end to start)
-                const isLapCrossing = player.currentSegment > numSegments - 3 && closestSegment < 3;
-                
-                if (!isLapCrossing) {
-                    // Player is going backwards
-                    if (!player.isGoingBackwards) {
-                        player.isGoingBackwards = true;
-                        player.wrongDirectionStartTime = Date.now();
-                    }
-                    // IMPORTANT: Still update trackProgress for position calculation
-                    // The wrongWayCrossing flag already handles position penalty
-                }
-            } else if (progressDiff > 10) {
-                // Player is going forward again
-                if (player.isGoingBackwards) {
-                    player.isGoingBackwards = false;
-                    player.wrongDirectionStartTime = 0;
-                    
-                    // Stop the alert if it was active
-                    if (player.wrongDirectionAlertActive) {
-                        player.wrongDirectionAlertActive = false;
-                        io.to(player.id).emit('wrongDirectionAlert', { show: false });
-                    }
-                }
-            }
-        } else {
-            // For initial position or first calculation
-            player.isGoingBackwards = false;
-        }
+        // The direction-based detection above handles wrong way detection now
+        // We just need to update the track progress regardless of direction
         
         // Update progress
         player.trackProgress = newTrackProgress;
@@ -2394,10 +2398,8 @@ class Room {
         if (trackData && trackData.racingLine && trackData.racingLine.points) {
             // Calculate track progress for each player
             activePlayers.forEach(player => {
-                if (player.hasPassedStartLine) {
-                    // Always update position calculation to ensure accuracy
-                    this.calculateTrackProgress(player, trackData.racingLine);
-                }
+                // Always calculate track progress to detect wrong way, even before crossing start line
+                this.calculateTrackProgress(player, trackData.racingLine);
             });
             
             // Separate racing and waiting players

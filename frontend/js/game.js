@@ -71,6 +71,14 @@ class GameEngine {
         // Item pickup notification
         this.itemNotification = null;    
         
+        // Wrong way alert
+        this.wrongWayAlert = {
+            active: false,
+            startTime: 0,
+            pulsePhase: 0,
+            hideDelay: null  // Timer for delayed hiding
+        };
+        
         // Charger les sprites d'effets
         this.loadEffectSprites();
         
@@ -428,6 +436,9 @@ class GameEngine {
     
     // Render item pickup notification
     this.renderItemNotification();
+    
+    // Render wrong way alert
+    this.renderWrongWayAlert();
 }
 
     renderTrack(ctx) {
@@ -1941,6 +1952,32 @@ startItemSlotAnimation(finalItem) {
         };
     }
     
+    showWrongWayAlert() {
+        // Clear any pending hide
+        if (this.wrongWayAlert.hideDelay) {
+            clearTimeout(this.wrongWayAlert.hideDelay);
+            this.wrongWayAlert.hideDelay = null;
+        }
+        
+        if (!this.wrongWayAlert.active) {
+            this.wrongWayAlert.active = true;
+            this.wrongWayAlert.startTime = Date.now();
+            this.wrongWayAlert.pulsePhase = 0;
+            soundManager.playWrongDirection();
+        }
+    }
+    
+    hideWrongWayAlert() {
+        // Don't hide immediately - add a 1 second delay
+        if (this.wrongWayAlert.active && !this.wrongWayAlert.hideDelay) {
+            this.wrongWayAlert.hideDelay = setTimeout(() => {
+                this.wrongWayAlert.active = false;
+                this.wrongWayAlert.hideDelay = null;
+                soundManager.stopWrongDirection();
+            }, 1000); // 1 second delay
+        }
+    }
+    
     renderItemNotification() {
         if (!this.itemNotification) return;
         
@@ -2021,6 +2058,139 @@ startItemSlotAnimation(finalItem) {
         ctx.shadowColor = `rgba(255, 255, 255, ${0.5 * alpha})`;
         ctx.shadowBlur = glowSize * this.scale;
         ctx.fillText(itemName, centerX, centerY + 35 * this.scale);
+        
+        ctx.restore();
+    }
+    
+    renderWrongWayAlert() {
+        if (!this.wrongWayAlert.active) return;
+        
+        const ctx = this.ctx;
+        ctx.save();
+        
+        // Update pulse phase for animation
+        this.wrongWayAlert.pulsePhase += 0.08;
+        
+        // Center of screen
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        
+        // Subtle pulse effect (no growing)
+        const pulseAlpha = 0.8 + Math.sin(this.wrongWayAlert.pulsePhase) * 0.1;
+        
+        // Purple semi-transparent background overlay
+        const overlayAlpha = 0.2 + Math.abs(Math.sin(this.wrongWayAlert.pulsePhase * 1.5)) * 0.1;
+        ctx.fillStyle = `rgba(147, 51, 234, ${overlayAlpha})`;
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Alert box (similar to lap notification style) with subtle pulsing
+        const pulseScale = 1 + Math.sin(this.wrongWayAlert.pulsePhase) * 0.05; // 5% scale variation
+        const boxWidth = 280 * this.scale * pulseScale;
+        const boxHeight = 60 * this.scale * pulseScale;
+        const boxX = centerX - boxWidth / 2;
+        const boxY = centerY - boxHeight / 2;
+        const borderRadius = 20 * this.scale;
+        
+        // Purple gradient background (like lap notification)
+        const gradient = ctx.createLinearGradient(boxX, boxY, boxX + boxWidth, boxY + boxHeight);
+        gradient.addColorStop(0, `rgba(147, 51, 234, ${pulseAlpha})`);
+        gradient.addColorStop(1, `rgba(236, 72, 153, ${pulseAlpha})`);
+        
+        ctx.fillStyle = gradient;
+        ctx.shadowColor = 'rgba(236, 72, 153, 0.8)';
+        ctx.shadowBlur = 40 * this.scale;
+        this.drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, borderRadius);
+        ctx.fill();
+        
+        // White border with inner glow
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2 * this.scale;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.2)';
+        ctx.shadowBlur = 20 * this.scale;
+        ctx.shadowInset = true;
+        this.drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, borderRadius);
+        ctx.stroke();
+        
+        // Reset shadow
+        ctx.shadowBlur = 0;
+        
+        // Icons and text all in one line with pulsing
+        const iconSize = 24 * this.scale * pulseScale;
+        const spacing = 15 * this.scale;
+        
+        // Calculate total width for centering
+        ctx.font = `bold ${28 * this.scale * pulseScale}px Arial`;
+        const textWidth = ctx.measureText('WRONG WAY').width;
+        const totalWidth = iconSize + spacing + textWidth + spacing + iconSize;
+        const startX = centerX - totalWidth / 2;
+        
+        // Warning icon (left)
+        ctx.save();
+        ctx.translate(startX + iconSize / 2, centerY);
+        ctx.scale(pulseScale, pulseScale);
+        
+        // Simple warning triangle
+        ctx.beginPath();
+        ctx.moveTo(0, -iconSize / 2 / pulseScale);
+        ctx.lineTo(-iconSize / 2 / pulseScale, iconSize / 2 / pulseScale);
+        ctx.lineTo(iconSize / 2 / pulseScale, iconSize / 2 / pulseScale);
+        ctx.closePath();
+        
+        ctx.fillStyle = '#ffff00';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5 * this.scale;
+        ctx.stroke();
+        
+        // Exclamation mark
+        ctx.fillStyle = '#000000';
+        ctx.font = `bold ${16 * this.scale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', 0, 2 * this.scale);
+        ctx.restore();
+        
+        // "WRONG WAY" text (center) with pulsing
+        ctx.font = `bold ${28 * this.scale * pulseScale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 3 * this.scale;
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+        ctx.shadowBlur = 10 * this.scale;
+        
+        // Text with black outline
+        const textX = startX + iconSize + spacing + textWidth / 2;
+        ctx.strokeText('WRONG WAY', textX, centerY);
+        ctx.fillText('WRONG WAY', textX, centerY);
+        
+        // Second warning icon (right) instead of arrow
+        ctx.save();
+        ctx.translate(startX + iconSize + spacing + textWidth + spacing + iconSize / 2, centerY);
+        ctx.scale(pulseScale, pulseScale);
+        
+        // Another warning triangle
+        ctx.beginPath();
+        ctx.moveTo(0, -iconSize / 2 / pulseScale);
+        ctx.lineTo(-iconSize / 2 / pulseScale, iconSize / 2 / pulseScale);
+        ctx.lineTo(iconSize / 2 / pulseScale, iconSize / 2 / pulseScale);
+        ctx.closePath();
+        
+        ctx.fillStyle = '#ffff00';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 1.5 * this.scale;
+        ctx.stroke();
+        
+        // Exclamation mark
+        ctx.fillStyle = '#000000';
+        ctx.font = `bold ${16 * this.scale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', 0, 2 * this.scale);
+        
+        ctx.restore();
         
         ctx.restore();
     }

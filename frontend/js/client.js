@@ -1148,11 +1148,7 @@ class GameClient {
         });
 
         this.socket.on('invalidFinish', (data) => {
-            this.showNotification({
-                text: data.message,
-                type: 'warning',
-                icon: '⚠️'
-            });
+            // Do nothing - we don't show checkpoint remaining notifications anymore
         });
 
         this.socket.on('lapCompleted', (data) => {
@@ -1326,17 +1322,18 @@ class GameClient {
         });
         
         this.socket.on('wrongDirectionAlert', (data) => {
-            const alertElement = document.getElementById('wrongDirectionAlert');
-            
-            if (data.show) {
-                // Show alert and play sound
-                alertElement.classList.remove('hidden');
-                soundManager.playWrongDirection();
-            } else {
-                // Hide alert and stop sound
-                alertElement.classList.add('hidden');
-                soundManager.stopWrongDirection();
+            if (this.gameEngine) {
+                if (data.show) {
+                    this.gameEngine.showWrongWayAlert();
+                } else {
+                    this.gameEngine.hideWrongWayAlert();
+                }
             }
+        });
+        
+        this.socket.on('wrongWay', (data) => {
+            // Do nothing - the wrongDirectionAlert handles this visually
+            // We don't need an additional notification
         });
         
         this.socket.on('projectileExploded', (data) => {
@@ -2534,11 +2531,9 @@ class GameClient {
         document.getElementById(screenName).classList.remove('hidden');
         this.currentScreen = screenName;
         
-        // Hide wrong direction alert when changing screens
-        const wrongDirectionAlert = document.getElementById('wrongDirectionAlert');
-        if (wrongDirectionAlert && !wrongDirectionAlert.classList.contains('hidden')) {
-            wrongDirectionAlert.classList.add('hidden');
-            soundManager.stopWrongDirection();
+        // Hide canvas-based wrong direction alert when changing screens
+        if (this.gameEngine) {
+            this.gameEngine.hideWrongWayAlert();
         }
         
         // Gérer la vidéo de fond

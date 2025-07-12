@@ -147,3 +147,28 @@ When starting a new session, ask these questions to quickly understand the proje
   - No position flickering or sudden jumps
 - **Respawn Fix**: Players with checkpoints who respawn behind start line maintain race status
 - **Smooth Transitions**: Position changes based on actual track progress, not hard penalties
+
+### Direction-Based Wrong Way Detection (Enhanced)
+- **Instant Detection**: Compares player's facing direction with racing line direction
+- **Works at Lap 0**: Detection now works even before crossing finish line for first time
+- **Vector-Based**: Uses dot product of player direction vs racing line segment direction
+- **Threshold System**: Triggers when facing > 90° from correct direction (dot < -0.1)
+- **Speed Check**: Only activates when moving (speed > 0.5) to avoid false positives
+- **2-Second Alert Delay**: Alert shows after 2 seconds of wrong way driving to prevent false positives
+- **Replaces Progress-Based System**: More accurate than old system that waited for position loss
+
+### Canvas-Based Wrong Way Alert (New)
+- **Centered Display**: Alert appears in center of screen for maximum visibility
+- **Purple Theme**: Uses game's signature purple gradient to match aesthetic
+- **Subtle Pulsing**: 5% scale pulsing on box, text, and icons for attention
+- **Warning Icons**: Dual warning triangles (⚠️) flanking the "WRONG WAY" text
+- **Semi-Transparent Overlay**: Purple background overlay with pulsing effect
+- **1-Second Hide Delay**: Alert stays visible for 1 second after correcting direction
+- **Replaces HTML Alert**: No more DOM-based alerts, everything rendered on canvas
+- **Consistent Styling**: Matches lap notification visual style with rounded corners and glow
+
+### Code Cleanup
+- **Removed Unused Variables**: Cleaned up `closestPoint` and `elapsed` variables
+- **Removed Redundant Notifications**: No more yellow "Wrong way!" popup when crossing finish backwards
+- **Removed Checkpoint Notifications**: No more "Il vous reste X checkpoints" messages
+- **Streamlined Detection**: Single direction-based system handles all wrong way scenarios

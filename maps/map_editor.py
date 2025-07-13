@@ -46,15 +46,18 @@ class MapEditor:
             "maxTimeWarning": 240000
         }
 
-        self.mode = "wall"  # wall, curve, finish, checkpoint, edit, modify_curve, spawnpoint, spawnpoint_horizontal, booster, item, continuous_curve, racing_line
+        self.mode = "wall"  # wall, curve, finish, checkpoint, edit, modify_curve, spawnpoint, spawnpoint_horizontal, booster, item, continuous_curve, racing_line, void_zone
         self.current_curve = []
         self.current_continuous_curve = []  # Pour les courbes continues
+        self.current_void_zone = []  # Pour les zones de vide en cours
         self.is_drawing_continuous = False
+        self.is_drawing_void_zone = False
         self.is_drawing_racing_line = False  # Pour la ligne de course
         self.current_racing_line = []  # Points de la ligne de course en cours
         self.rectangles = []
         self.curves = []
         self.continuous_curves = []  # Nouveau : pour stocker les courbes continues comme un seul objet
+        self.void_zones = []  # Pour stocker les zones de vide (chute)
         self.checkpoints = []  # Maintenant des lignes
         self.spawnpoints = []
         self.boosters = []  # Maintenant des lignes
@@ -158,6 +161,8 @@ class MapEditor:
                  bg="#1abc9c", fg="white", width=20).pack(pady=2)
         tk.Button(objects_frame, text="🏎️ Ligne de course", command=lambda: self.set_mode("racing_line"), 
                  bg="#e74c3c", fg="white", width=20).pack(pady=2)
+        tk.Button(objects_frame, text="☠️ Zone de vide", command=lambda: self.set_mode("void_zone"), 
+                 bg="#ff6b35", fg="white", width=20).pack(pady=2)
         
         # Section Édition
         edit_frame = tk.LabelFrame(parent_frame, text="ÉDITION", bg="gray20", fg="white",
@@ -182,7 +187,7 @@ class MapEditor:
         # Raccourcis clavier pour le mode édition
         self.root.bind("<g>", lambda e: self.start_edit_operation('grab') if self.mode == "edit" else None)
         self.root.bind("<r>", lambda e: self.start_edit_operation('rotate') if self.mode == "edit" else None)
-        self.root.bind("<Escape>", lambda e: self.cancel_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_racing_line() if self.is_drawing_racing_line else None)))
+        self.root.bind("<Escape>", lambda e: self.cancel_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_void_zone() if self.is_drawing_void_zone else (self.stop_racing_line() if self.is_drawing_racing_line else None))))
         self.root.bind("<Return>", lambda e: self.confirm_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_racing_line() if self.is_drawing_racing_line else None)))
         self.root.bind("<Delete>", lambda e: self.delete_selected())
         self.root.bind("<Control-z>", lambda e: self.undo())
@@ -219,6 +224,11 @@ class MapEditor:
                 info += f"\nPoints: {len(self.current_racing_line)}\nCliquez pour ajouter des points\nEnter pour terminer, Echap pour annuler"
             else:
                 info += f"\nCliquez pour commencer la ligne de course"
+        elif self.mode == "void_zone":
+            if self.is_drawing_void_zone:
+                info += f"\nPoints: {len(self.current_void_zone)}\nCliquez pour ajouter des points\nCliquez sur le premier point pour fermer"
+            else:
+                info += f"\nCliquez pour commencer une zone de vide"
         info += f"\n\nMap: {self.map_name}\nTours: {self.race_settings['laps']}"
         self.info_label.config(text=info)
 
@@ -231,6 +241,10 @@ class MapEditor:
             # Terminer la ligne de course si on change de mode
             if self.mode == "racing_line" and self.is_drawing_racing_line:
                 self.stop_racing_line()
+            
+            # Terminer la zone de vide si on change de mode
+            if self.mode == "void_zone" and self.is_drawing_void_zone:
+                self.stop_void_zone()
             
             # Annuler le dessin de ligne en cours
             if self.drawing_line:
@@ -411,12 +425,32 @@ class MapEditor:
         self.canvas.delete("temp_racing_line")
         self.redraw()
         self.update_info()
+    
+    def stop_void_zone(self):
+        """Arrête le dessin de la zone de vide"""
+        if self.is_drawing_void_zone and len(self.current_void_zone) >= 3:
+            # Les zones de vide sont toujours fermées
+            void_zone = {
+                "points": list(self.current_void_zone),
+                "type": "void_zone",
+                "closed": True
+            }
+            self.void_zones.append(void_zone)
+            self.actions_stack.append(("add_void_zone", void_zone))
+            self.log(f"Zone de vide créée avec {len(self.current_void_zone)} points")
+        
+        self.is_drawing_void_zone = False
+        self.current_void_zone = []
+        self.canvas.delete("temp_void_zone")
+        self.redraw()
+        self.update_info()
 
     def clear_all(self):
         if messagebox.askyesno("Confirmation", "Êtes-vous sûr de vouloir tout effacer ?"):
             self.rectangles = []
             self.curves = []
             self.continuous_curves = []
+            self.void_zones = []
             self.checkpoints = []
             self.spawnpoints = []
             self.boosters = []
@@ -427,13 +461,16 @@ class MapEditor:
             self.selected_object = None
             self.current_curve = []
             self.current_continuous_curve = []
+            self.current_void_zone = []
             self.current_racing_line = []
             self.is_drawing_continuous = False
+            self.is_drawing_void_zone = False
             self.is_drawing_racing_line = False
             self.drawing_line = False
             self.line_start = None
             self.canvas.delete("temp_continuous")
             self.canvas.delete("temp_line")
+            self.canvas.delete("temp_void_zone")
             self.canvas.delete("temp_racing_line")
             self.redraw()
 
@@ -761,6 +798,30 @@ class MapEditor:
                 
                 self.update_info()
                 
+            elif self.mode == "void_zone":
+                if not self.is_drawing_void_zone:
+                    # Commencer une nouvelle zone de vide
+                    self.is_drawing_void_zone = True
+                    self.current_void_zone = [(event.x, event.y)]
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="orange", tags="temp_void_zone")
+                    self.log(f"Zone de vide commencée")
+                else:
+                    # Vérifier si on clique sur le premier point pour fermer la zone
+                    if len(self.current_void_zone) >= 3:
+                        first_point = self.current_void_zone[0]
+                        if math.dist((event.x, event.y), first_point) < 15:
+                            # Fermer la zone
+                            self.log(f"Zone de vide fermée!")
+                            self.stop_void_zone()
+                            return
+                    
+                    # Sinon, ajouter un point normal
+                    self.current_void_zone.append((event.x, event.y))
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="orange", tags="temp_void_zone")
+                    self.redraw()
+                
+                self.update_info()
+                
             elif self.mode == "checkpoint":
                 if not self.drawing_line:
                     # Premier clic - début de la ligne
@@ -950,7 +1011,7 @@ class MapEditor:
                             return
                 
                 # Vérifier tous les objets
-                all_objects = (self.rectangles + self.spawnpoints + self.continuous_curves)
+                all_objects = (self.rectangles + self.spawnpoints + self.continuous_curves + self.void_zones)
                 
                 # Ajouter les lignes (checkpoints, ligne d'arrivée, boosters, items)
                 all_lines = self.checkpoints.copy() + self.boosters.copy() + self.items.copy()
@@ -996,6 +1057,14 @@ class MapEditor:
                         if math.dist((event.x, event.y), point) < 15:
                             self.selected_object = (curve, i)
                             self.log(f"Point de courbe continue sélectionné")
+                            return
+                
+                # Pour les zones de vide
+                for zone in self.void_zones:
+                    for i, point in enumerate(zone["points"]):
+                        if math.dist((event.x, event.y), point) < 15:
+                            self.selected_object = (zone, i)
+                            self.log(f"Point de zone de vide sélectionné")
                             return
                             
         except Exception as e:
@@ -1096,6 +1165,9 @@ class MapEditor:
             elif obj_type == "continuous_curve":
                 self.continuous_curves.remove(self.selected_object)
                 self.actions_stack.append(("remove_continuous_curve", self.selected_object))
+            elif obj_type == "void_zone":
+                self.void_zones.remove(self.selected_object)
+                self.actions_stack.append(("remove_void_zone", self.selected_object))
             elif obj_type == "racing_line":
                 self.actions_stack.append(("remove_racing_line", self.racing_line))
                 self.racing_line = None
@@ -1510,6 +1582,48 @@ class MapEditor:
                 self.canvas.create_oval(point[0]-size, point[1]-size, 
                                       point[0]+size, point[1]+size, 
                                       fill=color, outline="white")
+    
+    def draw_void_zone(self, zone, selected=False):
+        """Dessine une zone de vide avec un remplissage semi-transparent"""
+        points = zone["points"]
+        if len(points) < 3:
+            return
+            
+        # Créer un polygone semi-transparent
+        # Convertir les points en liste plate pour create_polygon
+        flat_points = []
+        for point in points:
+            flat_points.extend([point[0], point[1]])
+        
+        # Dessiner le polygone avec remplissage semi-transparent
+        fill_color = "#ff6b35" if not selected else "#ff8855"
+        outline_color = "#ff4500" if not selected else "#ff6600"
+        
+        # Zone remplie semi-transparente
+        self.canvas.create_polygon(flat_points, 
+                                 fill=fill_color, 
+                                 outline=outline_color,
+                                 width=3,
+                                 stipple="gray50")  # Motif pour simuler la transparence
+        
+        # Contour plus visible
+        for i in range(len(points)):
+            p1 = points[i]
+            p2 = points[(i + 1) % len(points)]
+            self.canvas.create_line(p1[0], p1[1], p2[0], p2[1],
+                                  fill=outline_color, width=3)
+        
+        # Afficher les points de contrôle si en mode modify_curve
+        if self.mode == "modify_curve":
+            for i, point in enumerate(points):
+                is_selected = (selected and isinstance(self.selected_object, tuple) and 
+                             self.selected_object[1] == i)
+                size = 8 if is_selected else 6
+                fill_color = "red" if is_selected else "orange"
+                
+                self.canvas.create_oval(point[0]-size, point[1]-size, 
+                                      point[0]+size, point[1]+size, 
+                                      fill=fill_color, outline="white", width=2)
 
     def redraw(self):
         try:
@@ -1541,6 +1655,12 @@ class MapEditor:
                            self.selected_object[0] == continuous_curve)
                 self.draw_continuous_curve(continuous_curve, selected)
                 
+            # Dessiner les zones de vide
+            for void_zone in self.void_zones:
+                selected = (self.selected_object and isinstance(self.selected_object, tuple) and 
+                           self.selected_object[0] == void_zone)
+                self.draw_void_zone(void_zone, selected)
+                
             # Dessiner la courbe continue en cours
             if self.is_drawing_continuous and len(self.current_continuous_curve) > 1:
                 # Dessiner les lignes temporaires
@@ -1569,6 +1689,35 @@ class MapEditor:
                     color = "lime" if i == 0 and len(self.current_continuous_curve) >= 3 else "yellow"
                     self.canvas.create_oval(point[0]-5, point[1]-5, point[0]+5, point[1]+5, 
                                           fill=color, outline="white", tags="temp_continuous")
+                
+            # Dessiner la zone de vide en cours
+            if self.is_drawing_void_zone and len(self.current_void_zone) > 1:
+                # Dessiner les lignes temporaires
+                for i in range(len(self.current_void_zone) - 1):
+                    self.canvas.create_line(self.current_void_zone[i][0], 
+                                          self.current_void_zone[i][1],
+                                          self.current_void_zone[i+1][0], 
+                                          self.current_void_zone[i+1][1],
+                                          fill="orange", width=2, dash=(5, 5))
+                
+                # Si on a au moins 3 points, montrer où on peut fermer la zone
+                if len(self.current_void_zone) >= 3:
+                    first_point = self.current_void_zone[0]
+                    # Dessiner un cercle plus grand autour du premier point pour indiquer qu'on peut fermer
+                    self.canvas.create_oval(first_point[0]-12, first_point[1]-12, 
+                                          first_point[0]+12, first_point[1]+12, 
+                                          fill="", outline="red", width=3, dash=(3, 3))
+                    # Ligne en pointillés du dernier point au premier
+                    last_point = self.current_void_zone[-1]
+                    self.canvas.create_line(last_point[0], last_point[1],
+                                          first_point[0], first_point[1],
+                                          fill="red", width=1, dash=(5, 5))
+                
+                # Dessiner les points
+                for i, point in enumerate(self.current_void_zone):
+                    color = "red" if i == 0 and len(self.current_void_zone) >= 3 else "orange"
+                    self.canvas.create_oval(point[0]-5, point[1]-5, point[0]+5, point[1]+5, 
+                                          fill=color, outline="white", tags="temp_void_zone")
                 
             for spawnpoint in self.spawnpoints:
                 self.draw_rotated_rect(spawnpoint, selected=(spawnpoint == self.selected_object))
@@ -1690,6 +1839,10 @@ class MapEditor:
                 self.continuous_curves.remove(data)
             elif action == "remove_continuous_curve":
                 self.continuous_curves.append(data)
+            elif action == "add_void_zone":
+                self.void_zones.remove(data)
+            elif action == "remove_void_zone":
+                self.void_zones.append(data)
             elif action == "add_checkpoint":
                 self.checkpoints.remove(data)
             elif action == "remove_checkpoint":
@@ -1765,6 +1918,15 @@ class MapEditor:
                         "closed": cc_data.get("closed", False)
                     }
                     self.continuous_curves.append(cc)
+                
+                # Charger les zones de vide
+                for vz_data in data.get("voidZones", []):
+                    vz = {
+                        "points": vz_data.get("points", []),
+                        "type": "void_zone",
+                        "closed": True
+                    }
+                    self.void_zones.append(vz)
                 
                 # Charger les checkpoints
                 for cp in data.get("checkpoints", []):
@@ -1915,7 +2077,9 @@ class MapEditor:
                 "boosters": [{"x1": b["x1"], "y1": b["y1"], "x2": b["x2"], "y2": b["y2"]} 
                             for b in self.boosters],
                 "items": [{"x1": i["x1"], "y1": i["y1"], "x2": i["x2"], "y2": i["y2"]} 
-                         for i in self.items]
+                         for i in self.items],
+                "voidZones": [{"points": vz["points"], "closed": True} 
+                            for vz in self.void_zones]
             }
             
             # Ajouter la ligne de course si elle existe

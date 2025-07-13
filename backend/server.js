@@ -630,6 +630,13 @@ class Player {
         this.poisonEndTime = 0;
         this.lastPoisonDamage = 0;
         
+        // Falling state for void zones
+        this.isFalling = false;
+        this.fallStartTime = 0;
+        this.fallVelocityX = 0;
+        this.fallVelocityY = 0;
+        this.canControl = true;
+        
         // Lightning speed reduction
         this.speedReductionFactor = 1.0;
         this.speedReductionEndTime = 0;
@@ -677,6 +684,32 @@ class Player {
         }
         
         return 'damage';
+    }
+    
+    // Point-in-polygon algorithm for void zone detection
+    isPointInPolygon(x, y, points) {
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const xi = points[i][0], yi = points[i][1];
+            const xj = points[j][0], yj = points[j][1];
+            
+            const intersect = ((yi > y) !== (yj > y))
+                && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    }
+    
+    // Check collision with void zones
+    checkVoidZoneCollision(voidZones) {
+        if (!voidZones || this.isDead) return false;
+        
+        for (const zone of voidZones) {
+            if (zone.closed && this.isPointInPolygon(this.x, this.y, zone.points)) {
+                return zone;
+            }
+        }
+        return null;
     }
     
     // Méthode pour mourir
@@ -857,6 +890,30 @@ class Player {
         // Variable to track if poison damage occurred
         let poisonDamageResult = null;
         
+        // Global constant for fall duration
+        const FALL_DURATION = 1500; // 1.5 seconds - same for all void zones
+        
+        // Handle falling state
+        if (this.isFalling) {
+            const now = Date.now();
+            const elapsed = now - this.fallStartTime;
+            
+            // Continue drifting based on initial velocity
+            this.x += this.fallVelocityX * deltaTime * 2; // Increased from 0.5 to 2 to match client
+            this.y += this.fallVelocityY * deltaTime * 2;
+            
+            if (elapsed >= FALL_DURATION) {
+                // Instant death - no damage calculation
+                this.hp = 0;
+                this.isDead = true;
+                this.isFalling = false;
+                this.canControl = true;
+                // Normal death/respawn logic will handle the rest
+            }
+            
+            return poisonDamageResult; // Skip normal update while falling
+        }
+        
         // Gérer le stun
         if (this.isStunned) {
             if (Date.now() > this.stunnedUntil) {
@@ -914,11 +971,13 @@ class Player {
         // Update drift state
         this.updateDrift(deltaTime);
         
-        // Traiter les inputs
-        if (this.inputs.up) this.accelerate();
-        if (this.inputs.down) this.brake();
-        if (this.inputs.left) this.turnLeft();
-        if (this.inputs.right) this.turnRight();
+        // Traiter les inputs (only if player can control)
+        if (this.canControl) {
+            if (this.inputs.up) this.accelerate();
+            if (this.inputs.down) this.brake();
+            if (this.inputs.left) this.turnLeft();
+            if (this.inputs.right) this.turnRight();
+        }
         
         // Appliquer la friction différemment selon l'état
         if (this.inputs.up && this.speed > 0) {
@@ -1517,6 +1576,9 @@ class Room {
                     // NOUVEAU : Vérifier les objets
                     this.checkItemBoxCollisions(player);
                     
+                    // Check void zone collisions
+                    this.checkVoidZoneCollisions(player);
+                    
                     // Check wrong direction alert even before race starts
                     if (player.isGoingBackwards && player.wrongDirectionStartTime > 0) {
                         const wrongDurationMs = now - player.wrongDirectionStartTime;
@@ -1690,6 +1752,7 @@ class Room {
                 this.checkWallCollisions(player);
                 this.checkBoosterCollisions(player);
                 this.checkItemBoxCollisions(player);
+                this.checkVoidZoneCollisions(player);
                 this.checkRaceProgress(player, now);
                 
                 // Check wrong direction alert
@@ -1765,6 +1828,34 @@ class Room {
                 
                 break;
             }
+        }
+    }
+    
+    // Check void zone collisions and handle falling
+    checkVoidZoneCollisions(player) {
+        if (!trackData || !trackData.voidZones || player.isFalling) return;
+        
+        const voidZone = player.checkVoidZoneCollision(trackData.voidZones);
+        if (voidZone && !player.isDead) {
+            const now = Date.now();
+            player.isFalling = true;
+            player.fallStartTime = now;
+            
+            // Store velocity at moment of falling (for drift effect)
+            player.fallVelocityX = Math.cos(player.angle) * player.speed;
+            player.fallVelocityY = Math.sin(player.angle) * player.speed;
+            
+            // Stop player movement immediately
+            player.speed = 0;
+            player.canControl = false;
+            
+            // Emit falling event with velocity data
+            io.to(this.id).emit('playerFalling', {
+                playerId: player.id,
+                position: { x: player.x, y: player.y },
+                velocityX: player.fallVelocityX,
+                velocityY: player.fallVelocityY
+            });
         }
     }
     

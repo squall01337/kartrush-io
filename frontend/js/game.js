@@ -1014,7 +1014,34 @@ class GameEngine {
 
     renderPlayer(ctx, player) {
         ctx.save();
-        ctx.translate(player.x, player.y);
+        
+        // Global constant (same as server)
+        const FALL_DURATION = 1500; // 1.5 seconds
+        
+        // Check if player is falling first
+        let isFalling = false;
+        let fallProgress = 0;
+        let driftX = 0;
+        let driftY = 0;
+        
+        if (player.isFalling) {
+            const elapsed = Date.now() - player.fallStartTime;
+            fallProgress = Math.min(elapsed / FALL_DURATION, 1);
+            
+            // Skip rendering if fully fallen
+            if (fallProgress >= 1) {
+                ctx.restore();
+                return;
+            }
+            
+            isFalling = true;
+            
+            // Calculate drift
+            driftX = (player.fallVelocityX || 0) * (elapsed / 1000) * 2;
+            driftY = (player.fallVelocityY || 0) * (elapsed / 1000) * 2;
+        }
+        
+        ctx.translate(player.x + driftX, player.y + driftY);
         
         // Draw speed reduction effect if active
         if (player.speedReductionFactor && player.speedReductionFactor < 1 && 
@@ -1061,24 +1088,40 @@ class GameEngine {
             ctx.restore();
         }
         
-        // Calculate jump effect
-        const jumpHeight = player.counterSteerJump || 0;
-        const jumpScale = 1 + jumpHeight * 0.4; // Kart gets 40% bigger when jumping
-        const shadowOffset = jumpHeight * 35; // Shadow separates much more from kart
-        
-        // Only draw shadow when jumping
-        if (jumpHeight > 0.1) {
+        // Draw expanding dark void effect if falling
+        if (isFalling) {
             ctx.save();
-            const shadowAlpha = 0.4 * (1 - jumpHeight * 0.5);
-            ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
-            ctx.translate(-shadowOffset * 0.7, shadowOffset); // Shadow moves down and left
-            ctx.rotate(player.angle);
-            ctx.scale(0.9 - jumpHeight * 0.2, 0.5 - jumpHeight * 0.2); // Shadow gets smaller when jumping
+            const voidRadius = 20 + (fallProgress * 80); // Expands from 20 to 100
+            const voidGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, voidRadius);
+            voidGradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
+            voidGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
+            voidGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            ctx.fillStyle = voidGradient;
             ctx.beginPath();
-            ctx.ellipse(0, 0, 32, 32, 0, 0, Math.PI * 2);
+            ctx.arc(0, 0, voidRadius, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
         }
+        
+        if (!isFalling) {
+            // Calculate jump effect (only when not falling)
+            const jumpHeight = player.counterSteerJump || 0;
+            const jumpScale = 1 + jumpHeight * 0.4; // Kart gets 40% bigger when jumping
+            const shadowOffset = jumpHeight * 35; // Shadow separates much more from kart
+            
+            // Only draw shadow when jumping
+            if (jumpHeight > 0.1) {
+                ctx.save();
+                const shadowAlpha = 0.4 * (1 - jumpHeight * 0.5);
+                ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+                ctx.translate(-shadowOffset * 0.7, shadowOffset); // Shadow moves down and left
+                ctx.rotate(player.angle);
+                ctx.scale(0.9 - jumpHeight * 0.2, 0.5 - jumpHeight * 0.2); // Shadow gets smaller when jumping
+                ctx.beginPath();
+                ctx.ellipse(0, 0, 32, 32, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
         
         // Add jump boost effect
         if (jumpHeight > 0.5) {
@@ -1090,10 +1133,22 @@ class GameEngine {
             ctx.arc(0, 0, 40 * jumpHeight, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
+            }
+            
+            ctx.rotate(player.angle);
+            ctx.scale(jumpScale, jumpScale); // Apply jump scale
         }
         
-        ctx.rotate(player.angle);
-        ctx.scale(jumpScale, jumpScale); // Apply jump scale
+        // Apply falling transformations
+        if (isFalling) {
+            // Shrinking effect
+            const scale = 1 - (fallProgress * 0.9); // Scale from 1.0 to 0.1
+            ctx.scale(scale, scale);
+            
+            // Rotation while falling
+            const fallRotation = fallProgress * Math.PI * 2;
+            ctx.rotate(fallRotation);
+        }
         
         const size = 28;
         

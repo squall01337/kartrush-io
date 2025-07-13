@@ -1247,6 +1247,24 @@ class GameClient {
             }
         });
 
+        this.socket.on('playerFalling', (data) => {
+            // Play falling sound for any player
+            soundManager.playFalling();
+            
+            // Store fall data for animation
+            if (this.gameEngine && this.gameEngine.gameState.players) {
+                const player = this.gameEngine.gameState.players.find(p => p.id === data.playerId);
+                if (player) {
+                    player.isFalling = true;
+                    player.fallStartTime = Date.now();
+                    player.fallStartX = player.x;
+                    player.fallStartY = player.y;
+                    player.fallVelocityX = data.velocityX; // Preserve momentum
+                    player.fallVelocityY = data.velocityY;
+                }
+            }
+        });
+
         this.socket.on('playerRespawned', (data) => {
             // Notification de respawn
             if (data.playerId === this.playerId) {

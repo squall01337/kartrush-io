@@ -32,7 +32,8 @@ class SoundManager {
             slickDropping: 0.6,
             slickCrossing: 0.5,
             lightningStrike: 0.9,
-            wrongDirection: 0.1
+            wrongDirection: 0.1,
+            falling: 0.7
 
         };
         
@@ -81,6 +82,7 @@ class SoundManager {
         this.sounds.lightningStrike = new Audio('assets/audio/lightningstrike.mp3');
         this.sounds.wrongDirection = new Audio('assets/audio/wrongdirection.mp3');
         this.sounds.wrongDirection.loop = true;
+        this.sounds.falling = new Audio('assets/audio/falling.mp3');
 
     }
     
@@ -325,6 +327,15 @@ class SoundManager {
             lightning.volume = this.getEffectiveVolume() * this.volumeMultipliers.lightningStrike;
             lightning.currentTime = 0;
             lightning.play().catch(e => console.log('Erreur lecture lightning_strike:', e));
+        }
+    }
+    
+    playFalling() {
+        const falling = this.sounds.falling;
+        if (falling) {
+            falling.volume = this.getEffectiveVolume() * this.volumeMultipliers.falling;
+            falling.currentTime = 0;
+            falling.play().catch(e => console.log('Erreur lecture falling:', e));
         }
     }
     

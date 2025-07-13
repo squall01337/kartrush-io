@@ -1,0 +1,66 @@
+{
+  "id": "sky",
+  "name": "Nimbus Rush",
+  "width": 1536,
+  "height": 1024,
+  "music": "assets/audio/nimbusrush.mp3",
+  "background": "assets/nimbusrush.png",
+  "raceSettings": {
+    "laps": 3,
+    "maxTime": 300000,
+    "maxTimeWarning": 240000
+  },
+  "spawnPoints": [
+    {
+      "x": 213.5,
+      "y": 453,
+      "angle": 0
+    },
+    {
+      "x": 213.5,
+      "y": 488,
+      "angle": 0
+    },
+    {
+      "x": 213.5,
+      "y": 523,
+      "angle": 0
+    },
+    {
+      "x": 258.5,
+      "y": 453,
+      "angle": 0
+    },
+    {
+      "x": 258.5,
+      "y": 488,
+      "angle": 0
+    },
+    {
+      "x": 258.5,
+      "y": 523,
+      "angle": 0
+    }
+  ],
+  "walls": [
+    {
+      "x": 623,
+      "y": -11,
+      "width": 100,
+      "height": 50,
+      "angle": 0
+    }
+  ],
+  "curves": [],
+  "continuousCurves": [],
+  "checkpoints": [],
+  "finishLine": null,
+  "boosters": [],
+  "items": [],
+  "voidZones": [
+    {
+      "points": [[167, 485], [166, 544], [142, 546], [68, 677], [1, 562], [28, 368], [96, 383], [142, 414], [150, 431], [169, 430]],
+      "closed": true
+    }
+  ]
+}

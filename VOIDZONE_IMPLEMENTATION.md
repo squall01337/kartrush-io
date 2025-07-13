@@ -2,6 +2,24 @@
 
 This guide explains how to add void zones (falling/hazard areas) to the game, following the existing patterns and architecture.
 
+## CURRENT STATUS (2025-07-13)
+
+- ✅ **Map Editor**: Void zone creation/editing fully working
+- ✅ **Server Logic**: Collision detection and falling state working correctly
+- ✅ **Death Mechanic**: Players die after 1.5 seconds of falling
+- ✅ **Sound**: Falling sound plays when entering void zone
+- ✅ **Map Support**: Void zones load from JSON map files correctly
+- ❌ **Visual Animation**: Falling animation (shrinking, rotating, drift) NOT WORKING - players fall but without visual effects
+
+### Known Issues
+- The falling animation code is implemented but not displaying:
+  - No shrinking effect (should scale from 100% to 10%)
+  - No rotation during fall
+  - No expanding dark void circle
+  - Drift based on velocity may be working but hard to see without other effects
+
+The core mechanic works - entering a void zone triggers falling state and death after 1.5 seconds - but the visual feedback needs debugging.
+
 ## Overview
 
 Void zones are areas on the track where karts fall off and die after a falling animation. Think of them as cliff edges or pits in racing games. All void zones work the same way - instant death after 1.5 seconds of falling.

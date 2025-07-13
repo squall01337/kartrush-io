@@ -200,3 +200,24 @@ When starting a new session, ask these questions to quickly understand the proje
 - **Clean Visual**: No additional indicators, just the rocket sprite and effects
 - **Same Damage/Explosion**: All existing rocket mechanics remain unchanged
 - **Fallback Behavior**: Works normally on maps without racing lines
+
+### Void Zone Mechanic (New)
+- **Map Editor Support**: New "🕳️ Zone de vide" button to draw void zones (like lava pits or cliffs)
+- **Invisible Hazards**: Void zones are not visually rendered in-game, only in map editor
+- **Falling Animation**: 
+  - Kart shrinks from 100% to 10% size over 1.5 seconds
+  - Rotates 2 full turns while falling
+  - Expanding dark void circle effect beneath the kart
+  - Falling sound effect plays for all players
+- **Momentum-Based Physics**: 
+  - Players maintain their velocity when falling (diagonal trajectory)
+  - Speed-scaled drift: Normal speed = 3x drift, Purple boost = 10x drift
+  - Faster karts fly much farther off the track
+  - Realistic physics where momentum is preserved
+- **Death Mechanics**:
+  - Instant death after 1.5 seconds of falling (no HP damage)
+  - 2-second respawn delay after death (total 3.5s penalty)
+  - Player loses item when falling
+- **Server Sync**: Falling state properly synchronized between server and all clients
+- **Map Integration**: Void zones stored in map JSON with closed polygon format
+- **Collision Detection**: Efficient point-in-polygon detection for void zone boundaries

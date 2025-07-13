@@ -1024,7 +1024,7 @@ class GameEngine {
         let driftX = 0;
         let driftY = 0;
         
-        if (player.isFalling) {
+        if (player.isFalling && player.fallStartTime) {
             const elapsed = Date.now() - player.fallStartTime;
             fallProgress = Math.min(elapsed / FALL_DURATION, 1);
             
@@ -1036,9 +1036,14 @@ class GameEngine {
             
             isFalling = true;
             
-            // Calculate drift
-            driftX = (player.fallVelocityX || 0) * (elapsed / 1000) * 2;
-            driftY = (player.fallVelocityY || 0) * (elapsed / 1000) * 2;
+            // Calculate drift - scale with speed so faster karts fly much farther
+            const velocityX = player.fallVelocityX || 0;
+            const velocityY = player.fallVelocityY || 0;
+            const velocity = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+            const MAX_SPEED = 4; // Same as server GAME_CONFIG.MAX_SPEED
+            const driftMultiplier = 3 + (velocity / MAX_SPEED) * 7; // 3-10x based on speed
+            driftX = velocityX * (elapsed / 1000) * driftMultiplier;
+            driftY = velocityY * (elapsed / 1000) * driftMultiplier;
         }
         
         ctx.translate(player.x + driftX, player.y + driftY);
@@ -1089,9 +1094,9 @@ class GameEngine {
         }
         
         // Draw expanding dark void effect if falling
-        if (isFalling) {
+        if (isFalling && fallProgress > 0) {
             ctx.save();
-            const voidRadius = 20 + (fallProgress * 80); // Expands from 20 to 100
+            const voidRadius = Math.max(1, 20 + (fallProgress * 80)); // Expands from 20 to 100, minimum 1
             const voidGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, voidRadius);
             voidGradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
             voidGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
@@ -1102,6 +1107,9 @@ class GameEngine {
             ctx.fill();
             ctx.restore();
         }
+        
+        // Always apply player angle first
+        ctx.rotate(player.angle);
         
         if (!isFalling) {
             // Calculate jump effect (only when not falling)
@@ -1123,19 +1131,18 @@ class GameEngine {
                 ctx.restore();
             }
         
-        // Add jump boost effect
-        if (jumpHeight > 0.5) {
-            ctx.save();
-            ctx.globalAlpha = jumpHeight - 0.5;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.arc(0, 0, 40 * jumpHeight, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
+            // Add jump boost effect
+            if (jumpHeight > 0.5) {
+                ctx.save();
+                ctx.globalAlpha = jumpHeight - 0.5;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, 40 * jumpHeight, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
             }
             
-            ctx.rotate(player.angle);
             ctx.scale(jumpScale, jumpScale); // Apply jump scale
         }
         

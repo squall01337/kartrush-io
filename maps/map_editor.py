@@ -46,7 +46,7 @@ class MapEditor:
             "maxTimeWarning": 240000
         }
 
-        self.mode = "wall"  # wall, curve, finish, checkpoint, edit, modify_curve, spawnpoint, spawnpoint_horizontal, booster, item, continuous_curve, racing_line, void_zone
+        self.mode = "wall"  # wall, curve, finish, checkpoint, edit, modify_curve, spawnpoint, spawnpoint_horizontal, booster, item, continuous_curve, racing_line, void_zone, road
         self.current_curve = []
         self.current_continuous_curve = []  # Pour les courbes continues
         self.current_void_zone = []  # Pour les zones de vide en cours
@@ -65,6 +65,17 @@ class MapEditor:
         self.finish_line = None  # Maintenant une ligne
         self.racing_line = None  # Ligne de course pour le calcul des positions
         self.actions_stack = []
+        
+        # Road drawing (Blender-style)
+        self.road_mesh = []  # List of connected road vertices
+        self.road_edges = []  # List of edges (pairs of vertex indices)
+        self.road_faces = []  # List of road segments (quads defined by 4 vertex indices)
+        self.selected_vertices = []  # Currently selected vertices
+        self.road_edit_mode = None  # 'extrude', 'scale', 'rotate', 'grab'
+        self.road_width = 80  # Default road width
+        self.is_drawing_road = False
+        self.extrude_preview = None  # Preview data for extrusion
+        self.mouse_pos = (0, 0)  # Track mouse position
 
         self.selected_object = None
         
@@ -163,6 +174,8 @@ class MapEditor:
                  bg="#e74c3c", fg="white", width=20).pack(pady=2)
         tk.Button(objects_frame, text="☠️ Zone de vide", command=lambda: self.set_mode("void_zone"), 
                  bg="#ff6b35", fg="white", width=20).pack(pady=2)
+        tk.Button(objects_frame, text="🛣️ Route (Blender)", command=lambda: self.set_mode("road"), 
+                 bg="#8e44ad", fg="white", width=20).pack(pady=2)
         
         # Section Édition
         edit_frame = tk.LabelFrame(parent_frame, text="ÉDITION", bg="gray20", fg="white",
@@ -181,14 +194,23 @@ class MapEditor:
     def bind_events(self):
         self.canvas.bind("<Button-1>", self.on_click)
         self.canvas.bind("<B1-Motion>", self.on_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.canvas.bind("<Motion>", self.on_motion)
         self.canvas.bind("<Button-3>", self.on_right_click)
         
         # Raccourcis clavier pour le mode édition
         self.root.bind("<g>", lambda e: self.start_edit_operation('grab') if self.mode == "edit" else None)
         self.root.bind("<r>", lambda e: self.start_edit_operation('rotate') if self.mode == "edit" else None)
-        self.root.bind("<Escape>", lambda e: self.cancel_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_void_zone() if self.is_drawing_void_zone else (self.stop_racing_line() if self.is_drawing_racing_line else None))))
+        self.root.bind("<Escape>", lambda e: self.cancel_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_void_zone() if self.is_drawing_void_zone else (self.stop_racing_line() if self.is_drawing_racing_line else self.cancel_road_operation()))))
         self.root.bind("<Return>", lambda e: self.confirm_edit_operation() if self.edit_mode else (self.stop_continuous_curve() if self.is_drawing_continuous else (self.stop_racing_line() if self.is_drawing_racing_line else None)))
+        
+        # Road mode specific bindings (Blender-style)
+        self.root.bind("<e>", lambda e: self.start_road_extrude() if self.mode == "road" and self.selected_vertices else None)
+        self.root.bind("<g>", lambda e: (self.start_edit_operation('grab') if self.mode == "edit" else self.start_road_grab() if self.mode == "road" and self.selected_vertices else None))
+        self.root.bind("<s>", lambda e: self.start_road_scale() if self.mode == "road" and self.selected_vertices else None)
+        self.root.bind("<r>", lambda e: (self.start_edit_operation('rotate') if self.mode == "edit" else self.start_road_rotate() if self.mode == "road" and self.selected_vertices else None))
+        self.root.bind("<c>", lambda e: self.start_road_curve() if self.mode == "road" and len(self.selected_vertices) >= 2 else None)
+        self.root.bind("<Control-z>", lambda e: self.undo_last_action())
         self.root.bind("<Delete>", lambda e: self.delete_selected())
         self.root.bind("<Control-z>", lambda e: self.undo())
 
@@ -229,6 +251,16 @@ class MapEditor:
                 info += f"\nPoints: {len(self.current_void_zone)}\nCliquez pour ajouter des points\nCliquez sur le premier point pour fermer"
             else:
                 info += f"\nCliquez pour commencer une zone de vide"
+        elif self.mode == "road":
+            if self.road_mesh:
+                info += f"\nVertices sélectionnés: {len(self.selected_vertices)}"
+                info += f"\nShift+Clic: Sélection multiple"
+                info += f"\nE: Extruder | C: Virage | G: Déplacer"
+                info += f"\nS: Échelle | R: Rotation"
+                if self.road_edit_mode:
+                    info += f"\nMode: {self.road_edit_mode} - Clic pour confirmer, ESC pour annuler"
+            else:
+                info += "\nCliquez et glissez pour créer le premier segment de route"
         info += f"\n\nMap: {self.map_name}\nTours: {self.race_settings['laps']}"
         self.info_label.config(text=info)
 
@@ -451,6 +483,10 @@ class MapEditor:
             self.curves = []
             self.continuous_curves = []
             self.void_zones = []
+            self.road_mesh = []
+            self.road_edges = []
+            self.road_faces = []
+            self.selected_vertices = []
             self.checkpoints = []
             self.spawnpoints = []
             self.boosters = []
@@ -559,6 +595,102 @@ class MapEditor:
             self.canvas.create_line(self.line_start[0], self.line_start[1], 
                                    event.x, event.y, 
                                    fill=color, width=3, dash=(5, 5), tags="temp_line")
+        
+        # Road mode operations
+        if self.mode == "road" and self.road_mesh:
+            if self.road_edit_mode == "extrude":
+                # Calculate extrude preview
+                if len(self.selected_vertices) >= 2:
+                    # Get the two selected vertices
+                    v1 = self.road_mesh[self.selected_vertices[0]]
+                    v2 = self.road_mesh[self.selected_vertices[1]]
+                    
+                    # Calculate edge center and direction
+                    edge_center_x = (v1["x"] + v2["x"]) / 2
+                    edge_center_y = (v1["y"] + v2["y"]) / 2
+                    
+                    # Calculate perpendicular to the edge (road direction)
+                    edge_dx = v2["x"] - v1["x"]
+                    edge_dy = v2["y"] - v1["y"]
+                    edge_length = math.sqrt(edge_dx*edge_dx + edge_dy*edge_dy)
+                    
+                    if edge_length > 0:
+                        # Perpendicular direction (90 degrees to the edge)
+                        perp_x = -edge_dy / edge_length
+                        perp_y = edge_dx / edge_length
+                        
+                        # Project mouse position onto perpendicular direction
+                        mouse_dx = event.x - edge_center_x
+                        mouse_dy = event.y - edge_center_y
+                        
+                        # Distance along perpendicular
+                        dist = mouse_dx * perp_x + mouse_dy * perp_y
+                        
+                        # New positions maintaining road width
+                        self.extrude_preview = {
+                            "v1": {"x": v1["x"] + perp_x * dist, "y": v1["y"] + perp_y * dist},
+                            "v2": {"x": v2["x"] + perp_x * dist, "y": v2["y"] + perp_y * dist}
+                        }
+                    else:
+                        # Fallback to simple offset
+                        dx = event.x - edge_center_x
+                        dy = event.y - edge_center_y
+                        self.extrude_preview = {
+                            "v1": {"x": v1["x"] + dx, "y": v1["y"] + dy},
+                            "v2": {"x": v2["x"] + dx, "y": v2["y"] + dy}
+                        }
+                    
+                    self.redraw()
+                    
+            elif self.road_edit_mode == "grab":
+                # Move selected vertices
+                if hasattr(self, 'edit_start_pos') and hasattr(self, 'original_positions'):
+                    dx = event.x - self.edit_start_pos[0]
+                    dy = event.y - self.edit_start_pos[1]
+                    
+                    for i, v_id in enumerate(self.selected_vertices):
+                        self.road_mesh[v_id]["x"] = self.original_positions[i]["x"] + dx
+                        self.road_mesh[v_id]["y"] = self.original_positions[i]["y"] + dy
+                    
+                    self.redraw()
+                    
+            elif self.road_edit_mode == "scale":
+                # Scale selected vertices from center
+                if hasattr(self, 'edit_start_pos') and hasattr(self, 'scale_center'):
+                    dy = event.y - self.edit_start_pos[1]
+                    scale_factor = 1.0 + dy / 100.0
+                    scale_factor = max(0.1, min(5.0, scale_factor))
+                    
+                    for i, v_id in enumerate(self.selected_vertices):
+                        orig = self.original_positions[i]
+                        self.road_mesh[v_id]["x"] = self.scale_center[0] + (orig["x"] - self.scale_center[0]) * scale_factor
+                        self.road_mesh[v_id]["y"] = self.scale_center[1] + (orig["y"] - self.scale_center[1]) * scale_factor
+                    
+                    self.redraw()
+                    
+            elif self.road_edit_mode == "rotate":
+                # Rotate selected vertices
+                if hasattr(self, 'rotation_center') and hasattr(self, 'original_positions'):
+                    cx, cy = self.rotation_center
+                    
+                    # Calculate rotation angle
+                    start_angle = math.atan2(self.edit_start_pos[1] - cy, self.edit_start_pos[0] - cx)
+                    current_angle = math.atan2(event.y - cy, event.x - cx)
+                    angle_diff = current_angle - start_angle
+                    
+                    # Apply rotation
+                    cos_a = math.cos(angle_diff)
+                    sin_a = math.sin(angle_diff)
+                    
+                    for i, v_id in enumerate(self.selected_vertices):
+                        orig = self.original_positions[i]
+                        dx = orig["x"] - cx
+                        dy = orig["y"] - cy
+                        
+                        self.road_mesh[v_id]["x"] = cx + dx * cos_a - dy * sin_a
+                        self.road_mesh[v_id]["y"] = cy + dx * sin_a + dy * cos_a
+                    
+                    self.redraw()
         
         # Changer le curseur selon la position
         if self.mode == "edit" and self.selected_object and not self.edit_mode:
@@ -990,6 +1122,20 @@ class MapEditor:
                 self.log(f"Item ajouté (ligne 32px)")
                 self.redraw()
                 
+            elif self.mode == "road":
+                if not self.road_mesh:
+                    # Start creating the first road segment
+                    self.is_drawing_road = True
+                    self.drag_start = (event.x, event.y)
+                elif self.road_edit_mode:
+                    # Confirm current operation
+                    self.confirm_road_operation()
+                else:
+                    # Select vertices near click point
+                    # Check if shift is held
+                    shift_held = bool(event.state & 0x0001)  # Shift key state
+                    self.select_road_vertices(event.x, event.y, shift_held)
+                
             elif self.mode == "edit":
                 # Vérifier si on clique sur une poignée de redimensionnement
                 if self.selected_object and self.selected_object.get("type") in ["wall", "spawnpoint"]:
@@ -1080,7 +1226,59 @@ class MapEditor:
             curve["points"][point_index] = (event.x, event.y)
             
             self.redraw()
+        elif self.mode == "road" and self.is_drawing_road:
+            # Update mouse position for preview
+            self.mouse_pos = (event.x, event.y)
+            self.redraw()
 
+    def on_release(self, event):
+        if self.mode == "road" and self.is_drawing_road:
+            # Create the first road segment as a mesh
+            self.is_drawing_road = False
+            
+            if hasattr(self, 'drag_start'):
+                x1, y1 = self.drag_start
+                x2, y2 = event.x, event.y
+                
+                # Calculate perpendicular for road width
+                dx = x2 - x1
+                dy = y2 - y1
+                length = math.sqrt(dx*dx + dy*dy)
+                
+                if length > 10:  # Minimum length
+                    # Normalize and get perpendicular
+                    dx /= length
+                    dy /= length
+                    perp_x = -dy * self.road_width / 2
+                    perp_y = dx * self.road_width / 2
+                    
+                    # Create 4 vertices for the first segment
+                    v0 = len(self.road_mesh)
+                    self.road_mesh.extend([
+                        {"x": x1 + perp_x, "y": y1 + perp_y, "id": v0},
+                        {"x": x1 - perp_x, "y": y1 - perp_y, "id": v0 + 1},
+                        {"x": x2 - perp_x, "y": y2 - perp_y, "id": v0 + 2},
+                        {"x": x2 + perp_x, "y": y2 + perp_y, "id": v0 + 3}
+                    ])
+                    
+                    # Create edges
+                    self.road_edges.extend([
+                        (v0, v0 + 1),  # Start edge
+                        (v0 + 1, v0 + 2),  # Bottom edge
+                        (v0 + 2, v0 + 3),  # End edge
+                        (v0 + 3, v0),  # Top edge
+                    ])
+                    
+                    # Create road segment (rectangle with 4 vertices)
+                    self.road_faces.append((v0, v0 + 1, v0 + 2, v0 + 3))
+                    
+                    # Select the end edge vertices for next extrusion
+                    self.selected_vertices = [v0 + 2, v0 + 3]
+                    
+                    self.log(f"Premier segment de route créé")
+                    self.update_info()
+                    self.redraw()
+    
     def on_right_click(self, event):
         if self.edit_mode:
             self.cancel_edit_operation()
@@ -1661,6 +1859,13 @@ class MapEditor:
                            self.selected_object[0] == void_zone)
                 self.draw_void_zone(void_zone, selected)
                 
+            # Draw road mesh
+            self.draw_road_mesh()
+            
+            # Draw road preview if creating first segment
+            if self.is_drawing_road and hasattr(self, 'drag_start'):
+                self.draw_road_preview()
+                
             # Dessiner la courbe continue en cours
             if self.is_drawing_continuous and len(self.current_continuous_curve) > 1:
                 # Dessiner les lignes temporaires
@@ -1843,6 +2048,10 @@ class MapEditor:
                 self.void_zones.remove(data)
             elif action == "remove_void_zone":
                 self.void_zones.append(data)
+            elif action == "add_road":
+                self.roads.remove(data)
+            elif action == "remove_road":
+                self.roads.append(data)
             elif action == "add_checkpoint":
                 self.checkpoints.remove(data)
             elif action == "remove_checkpoint":
@@ -1927,6 +2136,18 @@ class MapEditor:
                         "closed": True
                     }
                     self.void_zones.append(vz)
+                
+                # Charger les routes
+                for road_data in data.get("roads", []):
+                    road = {
+                        "x1": road_data.get("x1", 0),
+                        "y1": road_data.get("y1", 0),
+                        "x2": road_data.get("x2", 0),
+                        "y2": road_data.get("y2", 0),
+                        "width": road_data.get("width", 80),
+                        "type": "road"
+                    }
+                    self.roads.append(road)
                 
                 # Charger les checkpoints
                 for cp in data.get("checkpoints", []):
@@ -2079,7 +2300,9 @@ class MapEditor:
                 "items": [{"x1": i["x1"], "y1": i["y1"], "x2": i["x2"], "y2": i["y2"]} 
                          for i in self.items],
                 "voidZones": [{"points": vz["points"], "closed": True} 
-                            for vz in self.void_zones]
+                            for vz in self.void_zones],
+                "roads": [{"x1": r["x1"], "y1": r["y1"], "x2": r["x2"], "y2": r["y2"], "width": r["width"]} 
+                         for r in self.roads]
             }
             
             # Ajouter la ligne de course si elle existe
@@ -2211,6 +2434,298 @@ class MapEditor:
             self.log(f"Erreur lors de l'export : {str(e)}")
             messagebox.showerror("Erreur", f"Erreur lors de l'export : {str(e)}")
             traceback.print_exc()
+
+    def draw_road_mesh(self):
+        """Draw the road segments and vertices"""
+        # Draw road segments (rectangles)
+        for segment in self.road_faces:
+            if len(segment) == 4:
+                points = []
+                for v_id in segment:
+                    v = self.road_mesh[v_id]
+                    points.extend([v["x"], v["y"]])
+                
+                self.canvas.create_polygon(points, fill="#666666", outline="#333333", width=1)
+        
+        # Draw extrude preview
+        if self.road_edit_mode == "extrude" and self.extrude_preview and len(self.selected_vertices) >= 2:
+            v1 = self.road_mesh[self.selected_vertices[0]]
+            v2 = self.road_mesh[self.selected_vertices[1]]
+            p1 = self.extrude_preview["v1"]
+            p2 = self.extrude_preview["v2"]
+            
+            # Draw preview face
+            points = [v1["x"], v1["y"], v2["x"], v2["y"], p2["x"], p2["y"], p1["x"], p1["y"]]
+            self.canvas.create_polygon(points, fill="#888888", outline="#ffff00", width=2, dash=(5, 5))
+        
+        # Draw vertices
+        for i, vertex in enumerate(self.road_mesh):
+            x, y = vertex["x"], vertex["y"]
+            if i in self.selected_vertices:
+                # Selected vertex
+                self.canvas.create_oval(x-6, y-6, x+6, y+6, fill="#ff0000", outline="white", width=2)
+            else:
+                # Normal vertex - slightly larger for easier selection
+                self.canvas.create_oval(x-4, y-4, x+4, y+4, fill="#666666", outline="white", width=1)
+    
+    def draw_road_preview(self):
+        """Draw preview while creating first segment"""
+        if hasattr(self, 'drag_start') and self.mouse_pos:
+            x1, y1 = self.drag_start
+            x2, y2 = self.mouse_pos
+            
+            dx = x2 - x1
+            dy = y2 - y1
+            length = math.sqrt(dx*dx + dy*dy)
+            
+            if length > 5:  # Only show if dragged far enough
+                dx /= length
+                dy /= length
+                perp_x = -dy * self.road_width / 2
+                perp_y = dx * self.road_width / 2
+                
+                points = [
+                    x1 + perp_x, y1 + perp_y,
+                    x1 - perp_x, y1 - perp_y,
+                    x2 - perp_x, y2 - perp_y,
+                    x2 + perp_x, y2 + perp_y
+                ]
+                
+                # Semi-transparent preview
+                self.canvas.create_polygon(points, fill="#888888", outline="#ffff00", width=2, dash=(5, 5), stipple="gray50")
+    
+    def start_road_extrude(self):
+        """Start extruding from the selected edge"""
+        if len(self.selected_vertices) >= 2 and not self.road_edit_mode:
+            self.road_edit_mode = "extrude"
+            self.extrude_preview = None
+            self.log("Mode extrusion - Déplacez la souris et cliquez pour confirmer")
+            self.update_info()
+    
+    def start_road_grab(self):
+        """Start moving selected vertices"""
+        if self.selected_vertices and not self.road_edit_mode:
+            self.road_edit_mode = "grab"
+            self.edit_start_pos = self.mouse_pos
+            self.original_positions = [self.road_mesh[v_id].copy() for v_id in self.selected_vertices]
+            self.log("Mode déplacement - Déplacez la souris et cliquez pour confirmer")
+            self.update_info()
+    
+    def start_road_scale(self):
+        """Start scaling selected vertices"""
+        if self.selected_vertices and not self.road_edit_mode:
+            self.road_edit_mode = "scale"
+            self.edit_start_pos = self.mouse_pos
+            self.original_positions = [self.road_mesh[v_id].copy() for v_id in self.selected_vertices]
+            
+            # Calculate center of selected vertices
+            cx = sum(v["x"] for v in self.original_positions) / len(self.original_positions)
+            cy = sum(v["y"] for v in self.original_positions) / len(self.original_positions)
+            self.scale_center = (cx, cy)
+            
+            self.log("Mode échelle - Déplacez la souris verticalement")
+            self.update_info()
+    
+    def start_road_rotate(self):
+        """Start rotating selected vertices"""
+        if len(self.selected_vertices) >= 2 and not self.road_edit_mode:
+            self.road_edit_mode = "rotate"
+            self.edit_start_pos = self.mouse_pos
+            self.original_positions = [self.road_mesh[v_id].copy() for v_id in self.selected_vertices]
+            
+            # Calculate center of selected vertices
+            cx = sum(v["x"] for v in self.original_positions) / len(self.original_positions)
+            cy = sum(v["y"] for v in self.original_positions) / len(self.original_positions)
+            self.rotation_center = (cx, cy)
+            
+            self.log("Mode rotation - Déplacez la souris pour tourner")
+            self.update_info()
+    
+    def start_road_curve(self):
+        """Create a curved corner from selected edge"""
+        if len(self.selected_vertices) >= 2 and not self.road_edit_mode:
+            # Instead of a special mode, directly create curved segments
+            self.create_curved_corner()
+    
+    def create_curved_corner(self, segments=3):
+        """Create multiple segments to form a smooth curve"""
+        if len(self.selected_vertices) < 2:
+            return
+        
+        # Get the current edge
+        v1_id = self.selected_vertices[0]
+        v2_id = self.selected_vertices[1]
+        v1 = self.road_mesh[v1_id]
+        v2 = self.road_mesh[v2_id]
+        
+        # Find the previous segment to determine curve direction
+        # Look for vertices that connect to our selected edge
+        prev_vertices = []
+        for face in self.road_faces:
+            if v1_id in face and v2_id in face:
+                # Find the other two vertices of this face
+                for v in face:
+                    if v != v1_id and v != v2_id:
+                        prev_vertices.append(v)
+        
+        if len(prev_vertices) >= 2:
+            # Calculate the direction from previous segment
+            pv1 = self.road_mesh[prev_vertices[0]]
+            pv2 = self.road_mesh[prev_vertices[1]]
+            
+            # Previous segment center to current edge center
+            prev_center_x = (pv1["x"] + pv2["x"]) / 2
+            prev_center_y = (pv1["y"] + pv2["y"]) / 2
+            curr_center_x = (v1["x"] + v2["x"]) / 2
+            curr_center_y = (v1["y"] + v2["y"]) / 2
+            
+            # Direction of travel
+            travel_dx = curr_center_x - prev_center_x
+            travel_dy = curr_center_y - prev_center_y
+            travel_dist = math.sqrt(travel_dx*travel_dx + travel_dy*travel_dy)
+            
+            if travel_dist > 0:
+                travel_dx /= travel_dist
+                travel_dy /= travel_dist
+                
+                # Create curved segments
+                angle_step = math.pi / (2 * segments)  # 90 degree turn divided by segments
+                base_dist = self.road_width  # Distance for each segment
+                
+                last_v1 = v1_id
+                last_v2 = v2_id
+                
+                for i in range(segments):
+                    # Calculate angle for this segment
+                    angle = angle_step * (i + 1)
+                    
+                    # Rotate travel direction
+                    cos_a = math.cos(angle)
+                    sin_a = math.sin(angle)
+                    new_dx = travel_dx * cos_a - travel_dy * sin_a
+                    new_dy = travel_dx * sin_a + travel_dy * cos_a
+                    
+                    # Create new vertices
+                    new_v1_id = len(self.road_mesh)
+                    new_v2_id = new_v1_id + 1
+                    
+                    # Position new vertices
+                    segment_dist = base_dist * 0.7  # Slightly shorter segments for smoother curve
+                    new_center_x = curr_center_x + new_dx * segment_dist * (i + 1)
+                    new_center_y = curr_center_y + new_dy * segment_dist * (i + 1)
+                    
+                    # Calculate perpendicular for road width
+                    perp_x = -new_dy * self.road_width / 2
+                    perp_y = new_dx * self.road_width / 2
+                    
+                    self.road_mesh.append({
+                        "x": new_center_x + perp_x,
+                        "y": new_center_y + perp_y,
+                        "id": new_v1_id
+                    })
+                    self.road_mesh.append({
+                        "x": new_center_x - perp_x,
+                        "y": new_center_y - perp_y,
+                        "id": new_v2_id
+                    })
+                    
+                    # Create edges
+                    self.road_edges.extend([
+                        (last_v1, new_v1_id),
+                        (last_v2, new_v2_id),
+                        (new_v1_id, new_v2_id)
+                    ])
+                    
+                    # Create face
+                    self.road_faces.append((last_v1, last_v2, new_v2_id, new_v1_id))
+                    
+                    # Update for next iteration
+                    last_v1 = new_v1_id
+                    last_v2 = new_v2_id
+                
+                # Select the last edge for further building
+                self.selected_vertices = [last_v1, last_v2]
+                
+                self.log(f"Virage créé avec {segments} segments")
+                self.update_info()
+                self.redraw()
+    
+    def confirm_road_operation(self):
+        """Confirm the current road operation"""
+        if self.road_edit_mode == "extrude" and self.extrude_preview:
+            # Create new vertices from extrusion
+            if len(self.selected_vertices) >= 2:
+                v1_old = self.selected_vertices[0]
+                v2_old = self.selected_vertices[1]
+                
+                # Add new vertices
+                v1_new = len(self.road_mesh)
+                v2_new = v1_new + 1
+                
+                self.road_mesh.append({
+                    "x": self.extrude_preview["v1"]["x"],
+                    "y": self.extrude_preview["v1"]["y"],
+                    "id": v1_new
+                })
+                self.road_mesh.append({
+                    "x": self.extrude_preview["v2"]["x"],
+                    "y": self.extrude_preview["v2"]["y"],
+                    "id": v2_new
+                })
+                
+                # Create new edges
+                self.road_edges.extend([
+                    (v1_old, v1_new),  # Side edge 1
+                    (v2_old, v2_new),  # Side edge 2
+                    (v1_new, v2_new),  # New end edge
+                ])
+                
+                # Create new road segment
+                self.road_faces.append((v1_old, v2_old, v2_new, v1_new))
+                
+                # Select the new edge for next extrusion
+                self.selected_vertices = [v1_new, v2_new]
+                
+                self.log("Segment extrudé")
+        
+        self.road_edit_mode = None
+        self.extrude_preview = None
+        self.update_info()
+        self.redraw()
+    
+    def cancel_road_operation(self):
+        """Cancel current road operation"""
+        if self.road_edit_mode in ["grab", "scale", "rotate"] and hasattr(self, 'original_positions'):
+            # Restore original positions
+            for i, v_id in enumerate(self.selected_vertices):
+                self.road_mesh[v_id] = self.original_positions[i]
+        
+        self.road_edit_mode = None
+        self.extrude_preview = None
+        self.update_info()
+        self.redraw()
+    
+    def select_road_vertices(self, x, y, shift_held=False):
+        """Select vertices near click point"""
+        threshold = 10
+        
+        if not shift_held:
+            # Clear selection if shift not held
+            self.selected_vertices = []
+        
+        # Find vertices near click point
+        for i, vertex in enumerate(self.road_mesh):
+            dist = math.sqrt((vertex["x"] - x)**2 + (vertex["y"] - y)**2)
+            if dist < threshold:
+                if i in self.selected_vertices and shift_held:
+                    # Toggle off if already selected with shift
+                    self.selected_vertices.remove(i)
+                elif i not in self.selected_vertices:
+                    # Add to selection
+                    self.selected_vertices.append(i)
+        
+        self.update_info()
+        self.redraw()
 
 if __name__ == "__main__":
     try:

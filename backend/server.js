@@ -713,10 +713,10 @@ class Player {
     }
     
     // Méthode pour mourir
-    die() {
+    die(respawnDelay = 3000) {
         this.isDead = true;
         this.speed = 0;
-        this.respawnTime = Date.now() + 3000; // Respawn dans 3 secondes
+        this.respawnTime = Date.now() + respawnDelay; // Respawn après le délai spécifié
         this.item = null; // Perdre l'objet en mourant
         this.isStunned = false;
         this.isSuperBoosting = false;
@@ -899,16 +899,19 @@ class Player {
             const elapsed = now - this.fallStartTime;
             
             // Continue drifting based on initial velocity
-            this.x += this.fallVelocityX * deltaTime * 2; // Increased from 0.5 to 2 to match client
-            this.y += this.fallVelocityY * deltaTime * 2;
+            // Scale drift with speed - faster karts fly much farther
+            const velocity = Math.sqrt(this.fallVelocityX * this.fallVelocityX + this.fallVelocityY * this.fallVelocityY);
+            const driftMultiplier = 3 + (velocity / GAME_CONFIG.MAX_SPEED) * 7; // 3-10x based on speed
+            this.x += this.fallVelocityX * deltaTime * driftMultiplier;
+            this.y += this.fallVelocityY * deltaTime * driftMultiplier;
             
             if (elapsed >= FALL_DURATION) {
                 // Instant death - no damage calculation
                 this.hp = 0;
-                this.isDead = true;
                 this.isFalling = false;
                 this.canControl = true;
-                // Normal death/respawn logic will handle the rest
+                // Shorter respawn time for falling deaths to compensate for falling animation
+                this.die(2000);
             }
             
             return poisonDamageResult; // Skip normal update while falling
@@ -3059,6 +3062,11 @@ class Room {
                 driftChargeLevel: p.driftChargeLevel,
                 boostLevel: p.boostLevel,
                 counterSteerJump: p.counterSteerJump,
+                // Falling state
+                isFalling: p.isFalling,
+                fallStartTime: p.fallStartTime,
+                fallVelocityX: p.fallVelocityX,
+                fallVelocityY: p.fallVelocityY,
                 // Racing line tracking
                 trackProgress: p.trackProgress,
                 currentSegment: p.currentSegment,

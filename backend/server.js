@@ -704,9 +704,31 @@ class Player {
     checkVoidZoneCollision(voidZones) {
         if (!voidZones || this.isDead) return false;
         
+        const kartRadius = 14; // Approximate kart radius
+        const checkPoints = [
+            {x: this.x, y: this.y}, // Center
+            {x: this.x + kartRadius * 0.7, y: this.y}, // Right
+            {x: this.x - kartRadius * 0.7, y: this.y}, // Left
+            {x: this.x, y: this.y + kartRadius * 0.7}, // Bottom
+            {x: this.x, y: this.y - kartRadius * 0.7}, // Top
+            {x: this.x + kartRadius * 0.5, y: this.y + kartRadius * 0.5}, // Bottom-right
+            {x: this.x - kartRadius * 0.5, y: this.y + kartRadius * 0.5}, // Bottom-left
+            {x: this.x + kartRadius * 0.5, y: this.y - kartRadius * 0.5}, // Top-right
+            {x: this.x - kartRadius * 0.5, y: this.y - kartRadius * 0.5}  // Top-left
+        ];
+        
         for (const zone of voidZones) {
-            if (zone.closed && this.isPointInPolygon(this.x, this.y, zone.points)) {
-                return zone;
+            if (zone.closed) {
+                let pointsInside = 0;
+                for (const point of checkPoints) {
+                    if (this.isPointInPolygon(point.x, point.y, zone.points)) {
+                        pointsInside++;
+                    }
+                }
+                // Require at least 75% of check points (7 out of 9) to be inside
+                if (pointsInside >= 7) {
+                    return zone;
+                }
             }
         }
         return null;

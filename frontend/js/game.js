@@ -414,6 +414,7 @@ class GameEngine {
     
     this.particleSystem.render(ctx);
     
+    this.renderVoidEffects(ctx);
     this.renderProjectiles(ctx);
     this.renderPlayers(ctx);
     this.renderPlayerInfo(ctx);
@@ -474,6 +475,47 @@ class GameEngine {
             }
             
             ctx.restore();
+        });
+    }
+    
+    // Render void effects for falling players
+    renderVoidEffects(ctx) {
+        if (!this.gameState.players) return;
+        
+        const FALL_DURATION = 1500; // Same as in renderPlayer
+        
+        this.gameState.players.forEach(player => {
+            if (player.isFalling && player.fallStartTime) {
+                const elapsed = Date.now() - player.fallStartTime;
+                const fallProgress = Math.min(elapsed / FALL_DURATION, 1);
+                
+                if (fallProgress < 1) {
+                    // Calculate drift position
+                    const velocityX = player.fallVelocityX || 0;
+                    const velocityY = player.fallVelocityY || 0;
+                    const velocity = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
+                    const MAX_SPEED = 4;
+                    const momentumScale = 0.5 + (velocity / MAX_SPEED) * 0.5;
+                    const driftX = velocityX * (elapsed / 1000) * momentumScale;
+                    const driftY = velocityY * (elapsed / 1000) * momentumScale;
+                    
+                    ctx.save();
+                    ctx.translate(player.x + driftX, player.y + driftY);
+                    
+                    // Draw expanding void shadow
+                    const voidRadius = Math.max(25, 25 + (fallProgress * 90)); // Expands from 25 to 115
+                    const voidGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, voidRadius);
+                    voidGradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
+                    voidGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
+                    voidGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                    ctx.fillStyle = voidGradient;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, voidRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.restore();
+                }
+            }
         });
     }
     
@@ -1036,14 +1078,16 @@ class GameEngine {
             
             isFalling = true;
             
-            // Calculate drift - scale with speed so faster karts fly much farther
+            // Calculate momentum - keep it simple and consistent
             const velocityX = player.fallVelocityX || 0;
             const velocityY = player.fallVelocityY || 0;
             const velocity = Math.sqrt(velocityX * velocityX + velocityY * velocityY);
             const MAX_SPEED = 4; // Same as server GAME_CONFIG.MAX_SPEED
-            const driftMultiplier = 3 + (velocity / MAX_SPEED) * 7; // 3-10x based on speed
-            driftX = velocityX * (elapsed / 1000) * driftMultiplier;
-            driftY = velocityY * (elapsed / 1000) * driftMultiplier;
+            
+            // Simple linear momentum based on speed
+            const momentumScale = 0.5 + (velocity / MAX_SPEED) * 0.5; // 0.5-1x based on speed
+            driftX = velocityX * (elapsed / 1000) * momentumScale;
+            driftY = velocityY * (elapsed / 1000) * momentumScale;
         }
         
         ctx.translate(player.x + driftX, player.y + driftY);
@@ -1093,21 +1137,6 @@ class GameEngine {
             ctx.restore();
         }
         
-        // Draw expanding dark void effect if falling
-        if (isFalling && fallProgress > 0) {
-            ctx.save();
-            const voidRadius = Math.max(1, 20 + (fallProgress * 80)); // Expands from 20 to 100, minimum 1
-            const voidGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, voidRadius);
-            voidGradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
-            voidGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.4)');
-            voidGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
-            ctx.fillStyle = voidGradient;
-            ctx.beginPath();
-            ctx.arc(0, 0, voidRadius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-        }
-        
         // Always apply player angle first
         ctx.rotate(player.angle);
         
@@ -1148,16 +1177,17 @@ class GameEngine {
         
         // Apply falling transformations
         if (isFalling) {
-            // Shrinking effect
-            const scale = 1 - (fallProgress * 0.9); // Scale from 1.0 to 0.1
+            // Shrinking effect - start at 0.55 (45% smaller than normal)
+            const scale = 0.55 - (fallProgress * 0.45); // Scale from 0.55 to 0.1
             ctx.scale(scale, scale);
             
-            // Rotation while falling
-            const fallRotation = fallProgress * Math.PI * 2;
+            // Rotation while falling - start immediately for testing
+            const fallRotation = fallProgress * Math.PI * 4; // 2 full rotations over 1.5 seconds
             ctx.rotate(fallRotation);
         }
         
         const size = 28;
+        
         
         // Effet d'invulnérabilité
         if (player.isInvulnerable) {

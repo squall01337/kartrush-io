@@ -26,14 +26,6 @@ class MapEditor:
         # Canvas - NOUVELLE RÉSOLUTION
         self.canvas = tk.Canvas(left_frame, width=1536, height=1024, bg="black")
         self.canvas.pack()
-        
-        # Zoom and pan variables
-        self.zoom_level = 1.0
-        self.pan_x = 0
-        self.pan_y = 0
-        self.is_panning = False
-        self.pan_start_x = 0
-        self.pan_start_y = 0
 
         # Frame droite pour les contrôles et infos
         right_frame = tk.Frame(main_container, bg="gray20", width=300)
@@ -41,7 +33,6 @@ class MapEditor:
         right_frame.pack_propagate(False)  # Empêcher le redimensionnement automatique
 
         self.background_image = None
-        self.background_pil_image = None  # Store PIL image for dynamic scaling
         self.background_path = None
         self.background_key = "assets/background.png"  # Clé par défaut mise à jour
         self.music_key = "assets/audio/theme.mp3"  # Musique par défaut
@@ -79,7 +70,6 @@ class MapEditor:
         self.road_mesh = []  # List of connected road vertices
         self.road_edges = []  # List of edges (pairs of vertex indices)
         self.road_faces = []  # List of road segments (quads defined by 4 vertex indices)
-        self.roads = []  # Initialize roads list for compatibility
         self.selected_vertices = []  # Currently selected vertices
         self.road_edit_mode = None  # 'extrude', 'scale', 'rotate', 'grab'
         self.road_width = 80  # Default road width
@@ -208,14 +198,6 @@ class MapEditor:
         self.canvas.bind("<Motion>", self.on_motion)
         self.canvas.bind("<Button-3>", self.on_right_click)
         
-        # Zoom and pan bindings
-        self.canvas.bind("<MouseWheel>", self.on_mouse_wheel)  # Windows/MacOS
-        self.canvas.bind("<Button-4>", self.on_mouse_wheel)    # Linux scroll up
-        self.canvas.bind("<Button-5>", self.on_mouse_wheel)    # Linux scroll down
-        self.canvas.bind("<Button-2>", self.on_middle_button_press)  # Middle mouse button
-        self.canvas.bind("<B2-Motion>", self.on_middle_button_drag)
-        self.canvas.bind("<ButtonRelease-2>", self.on_middle_button_release)
-        
         # Raccourcis clavier pour le mode édition
         self.root.bind("<g>", lambda e: self.start_edit_operation('grab') if self.mode == "edit" else None)
         self.root.bind("<r>", lambda e: self.start_edit_operation('rotate') if self.mode == "edit" else None)
@@ -228,130 +210,12 @@ class MapEditor:
         self.root.bind("<s>", lambda e: self.start_road_scale() if self.mode == "road" and self.selected_vertices else None)
         self.root.bind("<r>", lambda e: (self.start_edit_operation('rotate') if self.mode == "edit" else self.start_road_rotate() if self.mode == "road" and self.selected_vertices else None))
         self.root.bind("<c>", lambda e: self.start_road_curve() if self.mode == "road" and len(self.selected_vertices) >= 2 else None)
-        self.root.bind("<w>", lambda e: self.subdivide_road_segment() if self.mode == "road" and self.selected_vertices else None)
         self.root.bind("<Control-z>", lambda e: self.undo_last_action())
         self.root.bind("<Delete>", lambda e: self.delete_selected())
         self.root.bind("<Control-z>", lambda e: self.undo())
-        
-        # Zoom shortcuts
-        self.root.bind("<Control-0>", lambda e: self.reset_zoom())
-        self.root.bind("<Control-equal>", lambda e: self.zoom_in())
-        self.root.bind("<Control-minus>", lambda e: self.zoom_out())
-    
-    def screen_to_world(self, x, y):
-        """Convert screen coordinates to world coordinates"""
-        world_x = (x - self.pan_x) / self.zoom_level
-        world_y = (y - self.pan_y) / self.zoom_level
-        return world_x, world_y
-    
-    def world_to_screen(self, x, y):
-        """Convert world coordinates to screen coordinates"""
-        screen_x = x * self.zoom_level + self.pan_x
-        screen_y = y * self.zoom_level + self.pan_y
-        return screen_x, screen_y
-    
-    def on_mouse_wheel(self, event):
-        """Handle mouse wheel for zooming"""
-        # Get mouse position for zoom center
-        mouse_x = event.x
-        mouse_y = event.y
-        
-        # Determine zoom direction
-        if event.num == 5 or event.delta < 0:  # Scroll down - zoom out
-            zoom_factor = 0.9
-        else:  # Scroll up - zoom in
-            zoom_factor = 1.1
-        
-        # Limit zoom level
-        new_zoom = self.zoom_level * zoom_factor
-        if 0.1 <= new_zoom <= 5.0:
-            # Get world coordinates before zoom
-            world_x, world_y = self.screen_to_world(mouse_x, mouse_y)
-            
-            # Update zoom level
-            self.zoom_level = new_zoom
-            
-            # Adjust pan to keep mouse position stable
-            self.pan_x = mouse_x - world_x * self.zoom_level
-            self.pan_y = mouse_y - world_y * self.zoom_level
-            
-            self.update_info()
-            self.redraw()
-    
-    def on_middle_button_press(self, event):
-        """Start panning with middle mouse button"""
-        self.is_panning = True
-        self.pan_start_x = event.x - self.pan_x
-        self.pan_start_y = event.y - self.pan_y
-    
-    def on_middle_button_drag(self, event):
-        """Handle panning drag"""
-        if self.is_panning:
-            self.pan_x = event.x - self.pan_start_x
-            self.pan_y = event.y - self.pan_start_y
-            self.redraw()
-    
-    def on_middle_button_release(self, event):
-        """Stop panning"""
-        self.is_panning = False
-    
-    def reset_zoom(self):
-        """Reset zoom to 100%"""
-        self.zoom_level = 1.0
-        self.pan_x = 0
-        self.pan_y = 0
-        self.update_info()
-        self.redraw()
-    
-    def zoom_in(self):
-        """Zoom in by 10%"""
-        if self.zoom_level < 5.0:
-            # Zoom towards center of canvas
-            center_x = self.canvas.winfo_width() / 2
-            center_y = self.canvas.winfo_height() / 2
-            world_x, world_y = self.screen_to_world(center_x, center_y)
-            
-            self.zoom_level *= 1.1
-            
-            # Adjust pan to keep center stable
-            self.pan_x = center_x - world_x * self.zoom_level
-            self.pan_y = center_y - world_y * self.zoom_level
-            
-            self.update_info()
-            self.redraw()
-    
-    def zoom_out(self):
-        """Zoom out by 10%"""
-        if self.zoom_level > 0.1:
-            # Zoom towards center of canvas
-            center_x = self.canvas.winfo_width() / 2
-            center_y = self.canvas.winfo_height() / 2
-            world_x, world_y = self.screen_to_world(center_x, center_y)
-            
-            self.zoom_level *= 0.9
-            
-            # Adjust pan to keep center stable
-            self.pan_x = center_x - world_x * self.zoom_level
-            self.pan_y = center_y - world_y * self.zoom_level
-            
-            self.update_info()
-            self.redraw()
-    
-    def update_background_image(self):
-        """Update background image with current zoom level"""
-        if self.background_pil_image:
-            # Scale the image according to zoom level
-            new_width = int(1536 * self.zoom_level)
-            new_height = int(1024 * self.zoom_level)
-            
-            # Only update if zoom has changed significantly
-            if not hasattr(self, '_last_bg_zoom') or abs(self._last_bg_zoom - self.zoom_level) > 0.05:
-                scaled_image = self.background_pil_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                self.background_image = ImageTk.PhotoImage(scaled_image)
-                self._last_bg_zoom = self.zoom_level
 
     def update_info(self):
-        info = f"Mode: {self.mode}\nRésolution: 1536x1024\nZoom: {self.zoom_level:.1f}x"
+        info = f"Mode: {self.mode}\nRésolution: 1536x1024"
         if self.mode == "edit":
             if self.edit_mode:
                 info += f"\nOpération: {self.edit_mode}\n(Clic gauche/Enter pour valider, Echap pour annuler)"
@@ -392,7 +256,7 @@ class MapEditor:
                 info += f"\nVertices sélectionnés: {len(self.selected_vertices)}"
                 info += f"\nShift+Clic: Sélection multiple"
                 info += f"\nE: Extruder | C: Virage | G: Déplacer"
-                info += f"\nS: Échelle | R: Rotation | W: Subdiviser"
+                info += f"\nS: Échelle | R: Rotation"
                 if self.road_edit_mode:
                     info += f"\nMode: {self.road_edit_mode} - Clic pour confirmer, ESC pour annuler"
             else:
@@ -510,11 +374,11 @@ class MapEditor:
         path = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
         if path:
             self.background_path = path
-            # Store original image for dynamic scaling
-            self.background_pil_image = Image.open(path).resize((1536, 1024))
-            self.update_background_image()
+            # Charger et redimensionner l'image à 1536x1024
+            img = Image.open(path).resize((1536, 1024))
+            self.background_image = ImageTk.PhotoImage(img)
             self.redraw()
-            self.log(f"Image chargée")
+            self.log(f"Image chargée et redimensionnée à 1536x1024")
 
     def stop_continuous_curve(self):
         """Arrête le dessin de la courbe continue"""
@@ -622,7 +486,6 @@ class MapEditor:
             self.road_mesh = []
             self.road_edges = []
             self.road_faces = []
-            self.roads = []
             self.selected_vertices = []
             self.checkpoints = []
             self.spawnpoints = []
@@ -677,17 +540,15 @@ class MapEditor:
         return handles
     
     def get_handle_at_pos(self, x, y, rect):
-        """Vérifie si la position est sur une poignée (x, y en coordonnées écran)"""
+        """Vérifie si la position est sur une poignée"""
         handles = self.get_resize_handles(rect)
         for hx, hy, handle_type in handles:
-            # Convert handle world coordinates to screen coordinates
-            screen_hx, screen_hy = self.world_to_screen(hx, hy)
-            if math.dist((x, y), (screen_hx, screen_hy)) < 8:
+            if math.dist((x, y), (hx, hy)) < 8:
                 return handle_type
         return None
 
     def is_point_in_rotated_rect(self, px, py, rect):
-        """Vérifie si un point est dans un rectangle tourné (px, py en coordonnées monde)"""
+        """Vérifie si un point est dans un rectangle tourné"""
         # Transformer le point dans le système de coordonnées du rectangle
         cx = rect["x"] + rect["width"] / 2
         cy = rect["y"] + rect["height"] / 2
@@ -709,34 +570,29 @@ class MapEditor:
         return -half_w <= rx <= half_w and -half_h <= ry <= half_h
     
     def is_point_near_line(self, px, py, line, threshold=10):
-        """Vérifie si un point est près d'une ligne (px, py en coordonnées monde)"""
+        """Vérifie si un point est près d'une ligne"""
         x1, y1 = line["x1"], line["y1"]
         x2, y2 = line["x2"], line["y2"]
         
         # Calculer la distance du point à la ligne
         line_length = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
         if line_length == 0:
-            return math.dist((px, py), (x1, y1)) < threshold / self.zoom_level
+            return math.dist((px, py), (x1, y1)) < threshold
         
         t = max(0, min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / line_length**2))
         projection_x = x1 + t * (x2 - x1)
         projection_y = y1 + t * (y2 - y1)
         
-        return math.dist((px, py), (projection_x, projection_y)) < threshold / self.zoom_level
+        return math.dist((px, py), (projection_x, projection_y)) < threshold
 
     def on_motion(self, event):
-        # Convert to world coordinates for most operations
-        world_x, world_y = self.screen_to_world(event.x, event.y)
-        self.mouse_pos = (world_x, world_y)
-        self.mouse_screen_pos = (event.x, event.y)
+        self.mouse_pos = (event.x, event.y)
         
         # Prévisualiser la ligne en cours de dessin (seulement pour checkpoints et ligne d'arrivée)
         if self.drawing_line and self.line_start and self.mode in ["checkpoint", "finish"]:
             self.canvas.delete("temp_line")
             color = "yellow"
-            # Convert world coordinates to screen coordinates
-            start_x, start_y = self.world_to_screen(self.line_start[0], self.line_start[1])
-            self.canvas.create_line(start_x, start_y, 
+            self.canvas.create_line(self.line_start[0], self.line_start[1], 
                                    event.x, event.y, 
                                    fill=color, width=3, dash=(5, 5), tags="temp_line")
         
@@ -789,11 +645,8 @@ class MapEditor:
             elif self.road_edit_mode == "grab":
                 # Move selected vertices
                 if hasattr(self, 'edit_start_pos') and hasattr(self, 'original_positions'):
-                    # Calculate delta in world coordinates
-                    world_x, world_y = self.screen_to_world(event.x, event.y)
-                    start_world_x, start_world_y = self.edit_start_pos
-                    dx = world_x - start_world_x
-                    dy = world_y - start_world_y
+                    dx = event.x - self.edit_start_pos[0]
+                    dy = event.y - self.edit_start_pos[1]
                     
                     for i, v_id in enumerate(self.selected_vertices):
                         self.road_mesh[v_id]["x"] = self.original_positions[i]["x"] + dx
@@ -804,9 +657,7 @@ class MapEditor:
             elif self.road_edit_mode == "scale":
                 # Scale selected vertices from center
                 if hasattr(self, 'edit_start_pos') and hasattr(self, 'scale_center'):
-                    # Use screen coordinates for scale to maintain consistent feel
-                    dy = event.y - self.mouse_screen_pos[1] if hasattr(self, '_last_screen_y') else 0
-                    self._last_screen_y = event.y
+                    dy = event.y - self.edit_start_pos[1]
                     scale_factor = 1.0 + dy / 100.0
                     scale_factor = max(0.1, min(5.0, scale_factor))
                     
@@ -822,10 +673,9 @@ class MapEditor:
                 if hasattr(self, 'rotation_center') and hasattr(self, 'original_positions'):
                     cx, cy = self.rotation_center
                     
-                    # Calculate rotation angle using world coordinates
-                    world_x, world_y = self.screen_to_world(event.x, event.y)
+                    # Calculate rotation angle
                     start_angle = math.atan2(self.edit_start_pos[1] - cy, self.edit_start_pos[0] - cx)
-                    current_angle = math.atan2(world_y - cy, world_x - cx)
+                    current_angle = math.atan2(event.y - cy, event.x - cx)
                     angle_diff = current_angle - start_angle
                     
                     # Apply rotation
@@ -876,9 +726,8 @@ class MapEditor:
         
         if self.edit_mode and self.selected_object:
             if self.edit_mode == 'grab':
-                # Convert screen delta to world delta
-                dx = (event.x - self.edit_start_pos[0]) / self.zoom_level
-                dy = (event.y - self.edit_start_pos[1]) / self.zoom_level
+                dx = event.x - self.edit_start_pos[0]
+                dy = event.y - self.edit_start_pos[1]
                 
                 # Pour les lignes
                 if self.selected_object.get("type") in ["checkpoint", "finish", "booster", "item"]:
@@ -900,10 +749,8 @@ class MapEditor:
                 cy = self.edit_original_state["y"] + self.edit_original_state["height"] / 2
                 
                 # Transformer la position de la souris dans le repère non tourné
-                # Convert mouse position to world coordinates first
-                mouse_world_x, mouse_world_y = self.screen_to_world(event.x, event.y)
-                dx = mouse_world_x - cx
-                dy = mouse_world_y - cy
+                dx = event.x - cx
+                dy = event.y - cy
                 local_x = dx * math.cos(-angle) - dy * math.sin(-angle)
                 local_y = dx * math.sin(-angle) + dy * math.cos(-angle)
                 
@@ -938,15 +785,11 @@ class MapEditor:
                                              self.selected_object["x2"] - self.selected_object["x1"])
                     
                     # Angle de la souris par rapport au centre
-                    # Convert mouse position to world coordinates first
-                    mouse_world_x, mouse_world_y = self.screen_to_world(event.x, event.y)
-                    mouse_angle = math.atan2(mouse_world_y - cy, mouse_world_x - cx)
+                    mouse_angle = math.atan2(event.y - cy, event.x - cx)
                     
                     # Différence d'angle
-                    # Convert start position to world coordinates too
-                    start_world_x, start_world_y = self.screen_to_world(self.edit_start_pos[0], self.edit_start_pos[1])
-                    angle_diff = mouse_angle - math.atan2(start_world_y - cy, 
-                                                          start_world_x - cx)
+                    angle_diff = mouse_angle - math.atan2(self.edit_start_pos[1] - cy, 
+                                                          self.edit_start_pos[0] - cx)
                     
                     # Longueur de la ligne
                     length = math.sqrt((self.edit_original_state["x2"] - self.edit_original_state["x1"])**2 + 
@@ -967,11 +810,8 @@ class MapEditor:
                     center = (self.selected_object["x"] + self.selected_object["width"]/2,
                              self.selected_object["y"] + self.selected_object["height"]/2)
                     
-                    # Convert to world coordinates
-                    start_world_x, start_world_y = self.screen_to_world(self.edit_start_pos[0], self.edit_start_pos[1])
-                    mouse_world_x, mouse_world_y = self.screen_to_world(event.x, event.y)
-                    angle1 = math.atan2(start_world_y - center[1], start_world_x - center[0])
-                    angle2 = math.atan2(mouse_world_y - center[1], mouse_world_x - center[0])
+                    angle1 = math.atan2(self.edit_start_pos[1] - center[1], self.edit_start_pos[0] - center[0])
+                    angle2 = math.atan2(event.y - center[1], event.x - center[0])
                     
                     delta_angle = math.degrees(angle2 - angle1)
                     
@@ -1006,11 +846,8 @@ class MapEditor:
                     center = (self.selected_object["x"] + self.selected_object["width"]/2,
                              self.selected_object["y"] + self.selected_object["height"]/2)
                     
-                    # Convert to world coordinates
-                    start_world_x, start_world_y = self.screen_to_world(self.edit_start_pos[0], self.edit_start_pos[1])
-                    mouse_world_x, mouse_world_y = self.screen_to_world(event.x, event.y)
-                    angle1 = math.atan2(start_world_y - center[1], start_world_x - center[0])
-                    angle2 = math.atan2(mouse_world_y - center[1], mouse_world_x - center[0])
+                    angle1 = math.atan2(self.edit_start_pos[1] - center[1], self.edit_start_pos[0] - center[0])
+                    angle2 = math.atan2(event.y - center[1], event.x - center[0])
                     
                     delta_angle = math.degrees(angle2 - angle1)
                     self.selected_object["angle"] = (self.edit_original_state.get("angle", 0) + delta_angle) % 360
@@ -1019,25 +856,20 @@ class MapEditor:
 
     def on_click(self, event):
         try:
-            # Convert screen coordinates to world coordinates
-            world_x, world_y = self.screen_to_world(event.x, event.y)
-            
             if self.edit_mode:
                 self.confirm_edit_operation()
                 return
                 
             if self.mode == "wall":
-                rect = {"x": world_x - 50, "y": world_y - 25, "width": 100, "height": 50, "angle": 0, "type": "wall"}
+                rect = {"x": event.x - 50, "y": event.y - 25, "width": 100, "height": 50, "angle": 0, "type": "wall"}
                 self.rectangles.append(rect)
                 self.actions_stack.append(("add_wall", rect))
                 self.log(f"Mur ajouté à la position ({event.x}, {event.y})")
                 self.redraw()
                 
             elif self.mode == "curve":
-                self.current_curve.append((world_x, world_y))
-                # Draw temp marker at screen position
-                screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="yellow", tags="temp")
+                self.current_curve.append((event.x, event.y))
+                self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="yellow", tags="temp")
                 if len(self.current_curve) == 3:
                     curve = {"points": list(self.current_curve), "type": "curve"}
                     self.curves.append(curve)
@@ -1052,17 +884,14 @@ class MapEditor:
                 if not self.is_drawing_racing_line:
                     # Commencer une nouvelle ligne de course
                     self.is_drawing_racing_line = True
-                    self.current_racing_line = [(world_x, world_y)]
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="red", tags="temp_racing_line")
+                    self.current_racing_line = [(event.x, event.y)]
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="red", tags="temp_racing_line")
                     self.log(f"Ligne de course commencée - Cliquez pour ajouter des points")
                 else:
                     # Vérifier si on clique sur le premier point pour fermer la ligne
                     if len(self.current_racing_line) >= 3:
                         first_point = self.current_racing_line[0]
-                        # Check distance in world coordinates
-                        if math.dist((world_x, world_y), first_point) < 15 / self.zoom_level:
+                        if math.dist((event.x, event.y), first_point) < 15:
                             # Marquer comme fermée sans ajouter de point
                             self.force_close_racing_line = True
                             self.log(f"Ligne de course fermée - circuit complet!")
@@ -1070,10 +899,8 @@ class MapEditor:
                             return
                     
                     # Sinon, ajouter un point normal
-                    self.current_racing_line.append((world_x, world_y))
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="red", tags="temp_racing_line")
+                    self.current_racing_line.append((event.x, event.y))
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="red", tags="temp_racing_line")
                     self.redraw()
                 
                 self.update_info()
@@ -1082,18 +909,14 @@ class MapEditor:
                 if not self.is_drawing_continuous:
                     # Commencer une nouvelle courbe continue
                     self.is_drawing_continuous = True
-                    self.current_continuous_curve = [(world_x, world_y)]
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="yellow", tags="temp_continuous")
+                    self.current_continuous_curve = [(event.x, event.y)]
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="yellow", tags="temp_continuous")
                     self.log(f"Courbe continue commencée")
                 else:
                     # Vérifier si on clique sur le premier point pour fermer la courbe
                     if len(self.current_continuous_curve) >= 3:
                         first_point = self.current_continuous_curve[0]
-                        # Convert first point to screen coordinates for comparison
-                        first_screen_x, first_screen_y = self.world_to_screen(first_point[0], first_point[1])
-                        if math.dist((event.x, event.y), (first_screen_x, first_screen_y)) < 15:
+                        if math.dist((event.x, event.y), first_point) < 15:
                             # Fermer la courbe en ajoutant le premier point à la fin
                             self.current_continuous_curve.append(first_point)
                             self.log(f"Courbe fermée - circuit complet!")
@@ -1101,10 +924,8 @@ class MapEditor:
                             return
                     
                     # Sinon, ajouter un point normal
-                    self.current_continuous_curve.append((world_x, world_y))
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="yellow", tags="temp_continuous")
+                    self.current_continuous_curve.append((event.x, event.y))
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="yellow", tags="temp_continuous")
                     self.redraw()
                 
                 self.update_info()
@@ -1113,27 +934,22 @@ class MapEditor:
                 if not self.is_drawing_void_zone:
                     # Commencer une nouvelle zone de vide
                     self.is_drawing_void_zone = True
-                    self.current_void_zone = [(world_x, world_y)]
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="orange", tags="temp_void_zone")
+                    self.current_void_zone = [(event.x, event.y)]
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="orange", tags="temp_void_zone")
                     self.log(f"Zone de vide commencée")
                 else:
                     # Vérifier si on clique sur le premier point pour fermer la zone
                     if len(self.current_void_zone) >= 3:
                         first_point = self.current_void_zone[0]
-                        # Check distance in world coordinates
-                        if math.dist((world_x, world_y), first_point) < 15 / self.zoom_level:
+                        if math.dist((event.x, event.y), first_point) < 15:
                             # Fermer la zone
                             self.log(f"Zone de vide fermée!")
                             self.stop_void_zone()
                             return
                     
                     # Sinon, ajouter un point normal
-                    self.current_void_zone.append((world_x, world_y))
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="orange", tags="temp_void_zone")
+                    self.current_void_zone.append((event.x, event.y))
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="orange", tags="temp_void_zone")
                     self.redraw()
                 
                 self.update_info()
@@ -1142,18 +958,16 @@ class MapEditor:
                 if not self.drawing_line:
                     # Premier clic - début de la ligne
                     self.drawing_line = True
-                    self.line_start = (world_x, world_y)
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="lime", tags="temp_line")
+                    self.line_start = (event.x, event.y)
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="lime", tags="temp_line")
                 else:
                     # Deuxième clic - fin de la ligne
                     if self.line_start:
                         cp = {
                             "x1": self.line_start[0],
                             "y1": self.line_start[1],
-                            "x2": world_x,
-                            "y2": world_y,
+                            "x2": event.x,
+                            "y2": event.y,
                             "type": "checkpoint"
                         }
                         self.checkpoints.append(cp)
@@ -1169,10 +983,8 @@ class MapEditor:
                 if not self.drawing_line:
                     # Premier clic - début de la ligne
                     self.drawing_line = True
-                    self.line_start = (world_x, world_y)
-                    # Draw at screen position
-                    screen_x, screen_y = self.world_to_screen(world_x, world_y)
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, fill="white", tags="temp_line")
+                    self.line_start = (event.x, event.y)
+                    self.canvas.create_oval(event.x-5, event.y-5, event.x+5, event.y+5, fill="white", tags="temp_line")
                 else:
                     # Deuxième clic - fin de la ligne
                     if self.line_start:
@@ -1181,8 +993,8 @@ class MapEditor:
                         fl = {
                             "x1": self.line_start[0],
                             "y1": self.line_start[1],
-                            "x2": world_x,
-                            "y2": world_y,
+                            "x2": event.x,
+                            "y2": event.y,
                             "type": "finish"
                         }
                         self.finish_line = fl
@@ -1201,11 +1013,11 @@ class MapEditor:
                 spacing_y = 45  # Espacement vertical entre les lignes (augmenté légèrement)
                 
                 # Position du centre de la grille
-                center_x = world_x
-                center_y = world_y
+                center_x = event.x
+                center_y = event.y
                 
                 # Générer un ID de groupe unique basé sur le timestamp
-                group_id = f"group_{len(self.actions_stack)}_{int(world_x)}_{int(world_y)}"
+                group_id = f"group_{len(self.actions_stack)}_{int(event.x)}_{int(event.y)}"
                 
                 spawn_group = []
                 # Créer 2 lignes - la première ligne (plus proche de la ligne d'arrivée) doit être 1,2,3
@@ -1241,11 +1053,11 @@ class MapEditor:
                 spacing_y = 35  # Espacement vertical entre les lignes (augmenté légèrement)
                 
                 # Position du centre de la grille
-                center_x = world_x
-                center_y = world_y
+                center_x = event.x
+                center_y = event.y
                 
                 # Générer un ID de groupe unique
-                group_id = f"group_{len(self.actions_stack)}_{int(world_x)}_{int(world_y)}"
+                group_id = f"group_{len(self.actions_stack)}_{int(event.x)}_{int(event.y)}"
                 
                 spawn_group = []
                 # Créer 3 lignes de 2 colonnes
@@ -1285,10 +1097,10 @@ class MapEditor:
             elif self.mode == "booster":
                 # Créer directement une ligne horizontale de 32px
                 booster = {
-                    "x1": world_x - 16,
-                    "y1": world_y,
-                    "x2": world_x + 16,
-                    "y2": world_y,
+                    "x1": event.x - 16,
+                    "y1": event.y,
+                    "x2": event.x + 16,
+                    "y2": event.y,
                     "type": "booster"
                 }
                 self.boosters.append(booster)
@@ -1299,10 +1111,10 @@ class MapEditor:
             elif self.mode == "item":
                 # Créer directement une ligne horizontale de 32px
                 item = {
-                    "x1": world_x - 16,
-                    "y1": world_y,
-                    "x2": world_x + 16,
-                    "y2": world_y,
+                    "x1": event.x - 16,
+                    "y1": event.y,
+                    "x2": event.x + 16,
+                    "y2": event.y,
                     "type": "item"
                 }
                 self.items.append(item)
@@ -1314,7 +1126,7 @@ class MapEditor:
                 if not self.road_mesh:
                     # Start creating the first road segment
                     self.is_drawing_road = True
-                    self.drag_start = (world_x, world_y)
+                    self.drag_start = (event.x, event.y)
                 elif self.road_edit_mode:
                     # Confirm current operation
                     self.confirm_road_operation()
@@ -1322,7 +1134,7 @@ class MapEditor:
                     # Select vertices near click point
                     # Check if shift is held
                     shift_held = bool(event.state & 0x0001)  # Shift key state
-                    self.select_road_vertices(world_x, world_y, shift_held)
+                    self.select_road_vertices(event.x, event.y, shift_held)
                 
             elif self.mode == "edit":
                 # Vérifier si on clique sur une poignée de redimensionnement
@@ -1365,32 +1177,11 @@ class MapEditor:
                     if obj.get("type") == "continuous_curve":
                         # Pour les courbes continues, vérifier si on clique près d'un point
                         for point in obj["points"]:
-                            if math.dist((world_x, world_y), point) < 20 / self.zoom_level:
+                            if math.dist((event.x, event.y), point) < 20:
                                 self.selected_object = obj
                                 self.log(f"Courbe continue sélectionnée")
                                 break
-                    elif obj.get("type") == "void_zone":
-                        # Pour les zones de vide, vérifier si on clique dans le polygone
-                        # Check if point is inside the polygon
-                        inside = False
-                        points = obj["points"]
-                        n = len(points)
-                        p1x, p1y = points[0]
-                        for i in range(1, n + 1):
-                            p2x, p2y = points[i % n]
-                            if world_y > min(p1y, p2y):
-                                if world_y <= max(p1y, p2y):
-                                    if world_x <= max(p1x, p2x):
-                                        if p1y != p2y:
-                                            xinters = (world_y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                                        if p1x == p2x or world_x <= xinters:
-                                            inside = not inside
-                            p1x, p1y = p2x, p2y
-                        if inside:
-                            self.selected_object = obj
-                            self.log(f"Zone de vide sélectionnée")
-                            break
-                    elif self.is_point_in_rotated_rect(world_x, world_y, obj):
+                    elif self.is_point_in_rotated_rect(event.x, event.y, obj):
                         self.selected_object = obj
                         self.log(f"Objet sélectionné : {obj.get('type', 'unknown')}")
                         break
@@ -1401,7 +1192,7 @@ class MapEditor:
                 # Pour les courbes normales
                 for curve in self.curves:
                     for i, point in enumerate(curve["points"]):
-                        if math.dist((world_x, world_y), point) < 15 / self.zoom_level:
+                        if math.dist((event.x, event.y), point) < 15:
                             self.selected_object = (curve, i)
                             self.log(f"Point de courbe sélectionné")
                             return
@@ -1409,7 +1200,7 @@ class MapEditor:
                 # Pour les courbes continues
                 for curve in self.continuous_curves:
                     for i, point in enumerate(curve["points"]):
-                        if math.dist((world_x, world_y), point) < 15 / self.zoom_level:
+                        if math.dist((event.x, event.y), point) < 15:
                             self.selected_object = (curve, i)
                             self.log(f"Point de courbe continue sélectionné")
                             return
@@ -1417,17 +1208,9 @@ class MapEditor:
                 # Pour les zones de vide
                 for zone in self.void_zones:
                     for i, point in enumerate(zone["points"]):
-                        if math.dist((world_x, world_y), point) < 15 / self.zoom_level:
+                        if math.dist((event.x, event.y), point) < 15:
                             self.selected_object = (zone, i)
                             self.log(f"Point de zone de vide sélectionné")
-                            return
-                
-                # Pour la ligne de course
-                if self.racing_line:
-                    for i, point in enumerate(self.racing_line["points"]):
-                        if math.dist((world_x, world_y), point) < 15 / self.zoom_level:
-                            self.selected_object = (self.racing_line, i)
-                            self.log(f"Point de ligne de course sélectionné")
                             return
                             
         except Exception as e:
@@ -1438,12 +1221,9 @@ class MapEditor:
         if self.mode == "modify_curve" and self.selected_object:
             curve, point_index = self.selected_object
             
-            # Convert screen coordinates to world coordinates
-            world_x, world_y = self.screen_to_world(event.x, event.y)
-            
             # Modification normale - pas besoin de gérer spécialement les courbes fermées
             # car on ne duplique plus le dernier point
-            curve["points"][point_index] = (world_x, world_y)
+            curve["points"][point_index] = (event.x, event.y)
             
             self.redraw()
         elif self.mode == "road" and self.is_drawing_road:
@@ -1458,8 +1238,7 @@ class MapEditor:
             
             if hasattr(self, 'drag_start'):
                 x1, y1 = self.drag_start
-                # Convert screen coordinates to world coordinates
-                x2, y2 = self.screen_to_world(event.x, event.y)
+                x2, y2 = event.x, event.y
                 
                 # Calculate perpendicular for road width
                 dx = x2 - x1
@@ -1612,9 +1391,7 @@ class MapEditor:
         for dx, dy in corners:
             rx = cx + dx * math.cos(angle) - dy * math.sin(angle)
             ry = cy + dx * math.sin(angle) + dy * math.cos(angle)
-            # Convert world coordinates to screen coordinates
-            screen_x, screen_y = self.world_to_screen(rx, ry)
-            rotated.append((screen_x, screen_y))
+            rotated.append((rx, ry))
         
         # Définir la couleur selon le type
         colors = {
@@ -1640,15 +1417,9 @@ class MapEditor:
             # Dessiner une flèche pour indiquer la direction
             self.canvas.create_polygon(rotated, fill="", outline=color, width=2)
             # Ajouter une flèche directionnelle
-            # Calculate arrow in world coordinates
-            arrow_start_x = cx - 10 * math.cos(angle)
-            arrow_start_y = cy - 10 * math.sin(angle)
-            arrow_end_x = cx + 10 * math.cos(angle)
-            arrow_end_y = cy + 10 * math.sin(angle)
-            # Convert to screen coordinates
-            arrow_start_screen = self.world_to_screen(arrow_start_x, arrow_start_y)
-            arrow_end_screen = self.world_to_screen(arrow_end_x, arrow_end_y)
-            self.canvas.create_line(*arrow_start_screen, *arrow_end_screen, fill=color, width=3, arrow=tk.LAST)
+            arrow_start = (cx - 10 * math.cos(angle), cy - 10 * math.sin(angle))
+            arrow_end = (cx + 10 * math.cos(angle), cy + 10 * math.sin(angle))
+            self.canvas.create_line(*arrow_start, *arrow_end, fill=color, width=3, arrow=tk.LAST)
         else:
             self.canvas.create_polygon(rotated, fill="", outline=color, width=2)
         
@@ -1656,20 +1427,12 @@ class MapEditor:
     
     def draw_line_with_arrow(self, line, color, selected=False):
         """Dessine une ligne avec une flèche directionnelle au milieu"""
-        # Convert world coordinates to screen coordinates
-        x1_screen, y1_screen = self.world_to_screen(line["x1"], line["y1"])
-        x2_screen, y2_screen = self.world_to_screen(line["x2"], line["y2"])
-        
-        # Work with world coordinates for calculations
         x1, y1 = line["x1"], line["y1"]
         x2, y2 = line["x2"], line["y2"]
         
-        # Centre de la ligne in world coordinates
+        # Centre de la ligne
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
-        
-        # Convert center to screen coordinates
-        cx_screen, cy_screen = self.world_to_screen(cx, cy)
         
         # Vecteur de la ligne
         dx = x2 - x1
@@ -1693,39 +1456,34 @@ class MapEditor:
         # Dessiner la ligne principale
         if selected:
             # Ligne de sélection
-            self.canvas.create_line(x1_screen, y1_screen, x2_screen, y2_screen, fill="cyan", width=width+4, dash=(5, 5))
+            self.canvas.create_line(x1, y1, x2, y2, fill="cyan", width=width+4, dash=(5, 5))
         
         # Ligne principale
-        self.canvas.create_line(x1_screen, y1_screen, x2_screen, y2_screen, fill=color, width=width)
+        self.canvas.create_line(x1, y1, x2, y2, fill=color, width=width)
         
         # Points aux extrémités
         if selected or self.mode == "edit":
             size = 6 if selected else 4
-            self.canvas.create_oval(x1_screen-size, y1_screen-size, x1_screen+size, y1_screen+size, fill=color, outline="white")
-            self.canvas.create_oval(x2_screen-size, y2_screen-size, x2_screen+size, y2_screen+size, fill=color, outline="white")
+            self.canvas.create_oval(x1-size, y1-size, x1+size, y1+size, fill=color, outline="white")
+            self.canvas.create_oval(x2-size, y2-size, x2+size, y2+size, fill=color, outline="white")
         
         # Dessiner la flèche directionnelle au centre
-        arrow_length = 25 * self.zoom_level  # Scale arrow with zoom
-        arrow_width = 15 * self.zoom_level
+        arrow_length = 25
+        arrow_width = 15
         
         # Point de base de la flèche (légèrement en arrière du centre)
         base_x = cx - nx * 5
         base_y = cy - ny * 5
         
         # Point de la flèche
-        arrow_tip_x = cx + nx * arrow_length / self.zoom_level
-        arrow_tip_y = cy + ny * arrow_length / self.zoom_level
+        arrow_tip_x = cx + nx * arrow_length
+        arrow_tip_y = cy + ny * arrow_length
         
         # Points latéraux de la flèche
-        side1_x = base_x + dx * arrow_width / self.zoom_level / 2
-        side1_y = base_y + dy * arrow_width / self.zoom_level / 2
-        side2_x = base_x - dx * arrow_width / self.zoom_level / 2
-        side2_y = base_y - dy * arrow_width / self.zoom_level / 2
-        
-        # Convert arrow points to screen coordinates
-        arrow_tip_x_screen, arrow_tip_y_screen = self.world_to_screen(arrow_tip_x, arrow_tip_y)
-        side1_x_screen, side1_y_screen = self.world_to_screen(side1_x, side1_y)
-        side2_x_screen, side2_y_screen = self.world_to_screen(side2_x, side2_y)
+        side1_x = base_x + dx * arrow_width/2
+        side1_y = base_y + dy * arrow_width/2
+        side2_x = base_x - dx * arrow_width/2
+        side2_y = base_y - dy * arrow_width/2
         
         # Dessiner la flèche
         arrow_color = "white" if line.get("type") == "finish" else "#00FF00"
@@ -1735,22 +1493,21 @@ class MapEditor:
             arrow_color = "#00ffff"
             
         self.canvas.create_polygon(
-            arrow_tip_x_screen, arrow_tip_y_screen,
-            side1_x_screen, side1_y_screen,
-            side2_x_screen, side2_y_screen,
+            arrow_tip_x, arrow_tip_y,
+            side1_x, side1_y,
+            side2_x, side2_y,
             fill=arrow_color,
             outline="black",
             width=2
         )
         
         # Dessiner un cercle au centre pour plus de clarté
-        self.canvas.create_oval(cx_screen-3, cy_screen-3, cx_screen+3, cy_screen+3, fill=arrow_color, outline="black")
+        self.canvas.create_oval(cx-3, cy-3, cx+3, cy+3, fill=arrow_color, outline="black")
 
     def draw_line(self, line, selected=False):
         """Dessine une ligne (checkpoint, ligne d'arrivée, booster ou item) avec flèche directionnelle"""
-        # Convert world coordinates to screen coordinates
-        x1, y1 = self.world_to_screen(line["x1"], line["y1"])
-        x2, y2 = self.world_to_screen(line["x2"], line["y2"])
+        x1, y1 = line["x1"], line["y1"]
+        x2, y2 = line["x2"], line["y2"]
         
         # Définir la couleur selon le type
         colors = {
@@ -1838,9 +1595,7 @@ class MapEditor:
             # Ligne principale
             color = "cyan" if selected else "red"
             width = 4 if selected else 2
-            x1, y1 = self.world_to_screen(p1[0], p1[1])
-            x2, y2 = self.world_to_screen(p2[0], p2[1])
-            self.canvas.create_line(x1, y1, x2, y2, fill=color, width=width)
+            self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=width)
             
             # Flèches directionnelles tous les 5 segments
             if i % 5 == 0:
@@ -1868,12 +1623,7 @@ class MapEditor:
                     right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
                     right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
                     
-                    # Convert to screen coordinates
-                    s_arrow_x, s_arrow_y = self.world_to_screen(arrow_x, arrow_y)
-                    s_left_x, s_left_y = self.world_to_screen(left_x, left_y)
-                    s_right_x, s_right_y = self.world_to_screen(right_x, right_y)
-                    
-                    self.canvas.create_polygon(s_arrow_x, s_arrow_y, s_left_x, s_left_y, s_right_x, s_right_y,
+                    self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
                                              fill="yellow", outline="darkred", width=1)
         
         # Si la ligne est fermée, dessiner le segment de fermeture
@@ -1884,9 +1634,7 @@ class MapEditor:
             # Ligne de fermeture
             color = "cyan" if selected else "red"
             width = 4 if selected else 2
-            x1, y1 = self.world_to_screen(p1[0], p1[1])
-            x2, y2 = self.world_to_screen(p2[0], p2[1])
-            self.canvas.create_line(x1, y1, x2, y2, fill=color, width=width)
+            self.canvas.create_line(p1[0], p1[1], p2[0], p2[1], fill=color, width=width)
             
             # Flèche sur le segment de fermeture si c'est un multiple de 5
             if (len(points) - 1) % 5 == 0:
@@ -1912,12 +1660,7 @@ class MapEditor:
                     right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
                     right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
                     
-                    # Convert to screen coordinates
-                    s_arrow_x, s_arrow_y = self.world_to_screen(arrow_x, arrow_y)
-                    s_left_x, s_left_y = self.world_to_screen(left_x, left_y)
-                    s_right_x, s_right_y = self.world_to_screen(right_x, right_y)
-                    
-                    self.canvas.create_polygon(s_arrow_x, s_arrow_y, s_left_x, s_left_y, s_right_x, s_right_y,
+                    self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
                                              fill="yellow", outline="darkred", width=1)
         
         # Afficher les points en mode édition
@@ -1931,9 +1674,8 @@ class MapEditor:
                 if i == 0:
                     fill_color = "lime"
                 
-                px, py = self.world_to_screen(point[0], point[1])
-                self.canvas.create_oval(px-size, py-size, 
-                                      px+size, py+size, 
+                self.canvas.create_oval(point[0]-size, point[1]-size, 
+                                      point[0]+size, point[1]+size, 
                                       fill=fill_color, outline="white", width=2)
     
     def draw_continuous_curve(self, curve, selected=False):
@@ -1992,10 +1734,8 @@ class MapEditor:
         for i in range(len(path_points) - 1):
             color = "cyan" if selected else "orange"
             width = 5 if selected else 3
-            # Convert world coordinates to screen coordinates
-            x1, y1 = self.world_to_screen(path_points[i][0], path_points[i][1])
-            x2, y2 = self.world_to_screen(path_points[i+1][0], path_points[i+1][1])
-            self.canvas.create_line(x1, y1, x2, y2,
+            self.canvas.create_line(path_points[i][0], path_points[i][1],
+                                  path_points[i+1][0], path_points[i+1][1],
                                   fill=color, width=width, capstyle=tk.ROUND, joinstyle=tk.ROUND)
         
         # Afficher les points de contrôle si en mode modify_curve
@@ -2011,10 +1751,8 @@ class MapEditor:
                 if curve.get("closed", False) and i == 0:
                     fill_color = "lime" if not is_selected else "red"
                 
-                # Convert world coordinates to screen coordinates
-                screen_x, screen_y = self.world_to_screen(point[0], point[1])
-                self.canvas.create_oval(screen_x-size, screen_y-size, 
-                                      screen_x+size, screen_y+size, 
+                self.canvas.create_oval(point[0]-size, point[1]-size, 
+                                      point[0]+size, point[1]+size, 
                                       fill=fill_color, outline="white", width=2)
 
     def draw_curve(self, curve, selected=False):
@@ -2027,12 +1765,9 @@ class MapEditor:
         # Dessiner la courbe de Bézier
         coords = []
         for t in [i/20 for i in range(21)]:
-            # Calculate bezier point in world coordinates
             x = (1-t)**2*p0[0] + 2*(1-t)*t*p1[0] + t**2*p2[0]
             y = (1-t)**2*p0[1] + 2*(1-t)*t*p1[1] + t**2*p2[1]
-            # Convert to screen coordinates
-            screen_x, screen_y = self.world_to_screen(x, y)
-            coords.append((screen_x, screen_y))
+            coords.append((x, y))
             
         for i in range(len(coords)-1):
             self.canvas.create_line(*coords[i], *coords[i+1], fill="orange", width=3)
@@ -2042,10 +1777,8 @@ class MapEditor:
             for i, point in enumerate(points):
                 color = "yellow" if i == 1 else "orange"
                 size = 8 if selected and self.selected_object and self.selected_object[1] == i else 5
-                # Convert world coordinates to screen coordinates
-                screen_x, screen_y = self.world_to_screen(point[0], point[1])
-                self.canvas.create_oval(screen_x-size, screen_y-size, 
-                                      screen_x+size, screen_y+size, 
+                self.canvas.create_oval(point[0]-size, point[1]-size, 
+                                      point[0]+size, point[1]+size, 
                                       fill=color, outline="white")
     
     def draw_void_zone(self, zone, selected=False):
@@ -2058,9 +1791,7 @@ class MapEditor:
         # Convertir les points en liste plate pour create_polygon
         flat_points = []
         for point in points:
-            # Convert world coordinates to screen coordinates
-            screen_x, screen_y = self.world_to_screen(point[0], point[1])
-            flat_points.extend([screen_x, screen_y])
+            flat_points.extend([point[0], point[1]])
         
         # Dessiner le polygone avec remplissage semi-transparent
         fill_color = "#ff6b35" if not selected else "#ff8855"
@@ -2077,10 +1808,7 @@ class MapEditor:
         for i in range(len(points)):
             p1 = points[i]
             p2 = points[(i + 1) % len(points)]
-            # Convert world to screen coordinates for border
-            x1, y1 = self.world_to_screen(p1[0], p1[1])
-            x2, y2 = self.world_to_screen(p2[0], p2[1])
-            self.canvas.create_line(x1, y1, x2, y2,
+            self.canvas.create_line(p1[0], p1[1], p2[0], p2[1],
                                   fill=outline_color, width=3)
         
         # Afficher les points de contrôle si en mode modify_curve
@@ -2091,21 +1819,17 @@ class MapEditor:
                 size = 8 if is_selected else 6
                 fill_color = "red" if is_selected else "orange"
                 
-                px, py = self.world_to_screen(point[0], point[1])
-                self.canvas.create_oval(px-size, py-size, 
-                                      px+size, py+size, 
+                self.canvas.create_oval(point[0]-size, point[1]-size, 
+                                      point[0]+size, point[1]+size, 
                                       fill=fill_color, outline="white", width=2)
 
     def redraw(self):
         try:
             self.canvas.delete("all")
             
-            # Update and display background image
-            if self.background_pil_image:
-                self.update_background_image()
-                # Apply zoom and pan to background image
-                img_x, img_y = self.world_to_screen(0, 0)
-                self.canvas.create_image(img_x, img_y, image=self.background_image, anchor="nw")
+            # Afficher l'image de fond
+            if self.background_image:
+                self.canvas.create_image(0, 0, image=self.background_image, anchor="nw")
             
             # Dessiner tous les éléments
             for rect in self.rectangles:
@@ -2146,68 +1870,58 @@ class MapEditor:
             if self.is_drawing_continuous and len(self.current_continuous_curve) > 1:
                 # Dessiner les lignes temporaires
                 for i in range(len(self.current_continuous_curve) - 1):
-                    # Convert world coordinates to screen coordinates
-                    x1, y1 = self.world_to_screen(self.current_continuous_curve[i][0], self.current_continuous_curve[i][1])
-                    x2, y2 = self.world_to_screen(self.current_continuous_curve[i+1][0], self.current_continuous_curve[i+1][1])
-                    self.canvas.create_line(x1, y1, x2, y2,
+                    self.canvas.create_line(self.current_continuous_curve[i][0], 
+                                          self.current_continuous_curve[i][1],
+                                          self.current_continuous_curve[i+1][0], 
+                                          self.current_continuous_curve[i+1][1],
                                           fill="yellow", width=2, dash=(5, 5))
                 
                 # Si on a au moins 3 points, montrer où on peut fermer la courbe
                 if len(self.current_continuous_curve) >= 3:
                     first_point = self.current_continuous_curve[0]
-                    # Convert world coordinates to screen coordinates
-                    first_x, first_y = self.world_to_screen(first_point[0], first_point[1])
                     # Dessiner un cercle plus grand autour du premier point pour indiquer qu'on peut fermer
-                    self.canvas.create_oval(first_x-12, first_y-12, 
-                                          first_x+12, first_y+12, 
+                    self.canvas.create_oval(first_point[0]-12, first_point[1]-12, 
+                                          first_point[0]+12, first_point[1]+12, 
                                           fill="", outline="lime", width=3, dash=(3, 3))
                     # Ligne en pointillés du dernier point au premier
                     last_point = self.current_continuous_curve[-1]
-                    last_x, last_y = self.world_to_screen(last_point[0], last_point[1])
-                    self.canvas.create_line(last_x, last_y,
-                                          first_x, first_y,
+                    self.canvas.create_line(last_point[0], last_point[1],
+                                          first_point[0], first_point[1],
                                           fill="lime", width=1, dash=(5, 5))
                 
                 # Dessiner les points
                 for i, point in enumerate(self.current_continuous_curve):
                     color = "lime" if i == 0 and len(self.current_continuous_curve) >= 3 else "yellow"
-                    # Convert world coordinates to screen coordinates
-                    screen_x, screen_y = self.world_to_screen(point[0], point[1])
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, 
+                    self.canvas.create_oval(point[0]-5, point[1]-5, point[0]+5, point[1]+5, 
                                           fill=color, outline="white", tags="temp_continuous")
                 
             # Dessiner la zone de vide en cours
             if self.is_drawing_void_zone and len(self.current_void_zone) > 1:
                 # Dessiner les lignes temporaires
                 for i in range(len(self.current_void_zone) - 1):
-                    # Convert world coordinates to screen coordinates
-                    x1, y1 = self.world_to_screen(self.current_void_zone[i][0], self.current_void_zone[i][1])
-                    x2, y2 = self.world_to_screen(self.current_void_zone[i+1][0], self.current_void_zone[i+1][1])
-                    self.canvas.create_line(x1, y1, x2, y2,
+                    self.canvas.create_line(self.current_void_zone[i][0], 
+                                          self.current_void_zone[i][1],
+                                          self.current_void_zone[i+1][0], 
+                                          self.current_void_zone[i+1][1],
                                           fill="orange", width=2, dash=(5, 5))
                 
                 # Si on a au moins 3 points, montrer où on peut fermer la zone
                 if len(self.current_void_zone) >= 3:
                     first_point = self.current_void_zone[0]
-                    # Convert world coordinates to screen coordinates
-                    first_x, first_y = self.world_to_screen(first_point[0], first_point[1])
                     # Dessiner un cercle plus grand autour du premier point pour indiquer qu'on peut fermer
-                    self.canvas.create_oval(first_x-12, first_y-12, 
-                                          first_x+12, first_y+12, 
+                    self.canvas.create_oval(first_point[0]-12, first_point[1]-12, 
+                                          first_point[0]+12, first_point[1]+12, 
                                           fill="", outline="red", width=3, dash=(3, 3))
                     # Ligne en pointillés du dernier point au premier
                     last_point = self.current_void_zone[-1]
-                    last_x, last_y = self.world_to_screen(last_point[0], last_point[1])
-                    self.canvas.create_line(last_x, last_y,
-                                          first_x, first_y,
+                    self.canvas.create_line(last_point[0], last_point[1],
+                                          first_point[0], first_point[1],
                                           fill="red", width=1, dash=(5, 5))
                 
                 # Dessiner les points
                 for i, point in enumerate(self.current_void_zone):
                     color = "red" if i == 0 and len(self.current_void_zone) >= 3 else "orange"
-                    # Convert world coordinates to screen coordinates
-                    screen_x, screen_y = self.world_to_screen(point[0], point[1])
-                    self.canvas.create_oval(screen_x-5, screen_y-5, screen_x+5, screen_y+5, 
+                    self.canvas.create_oval(point[0]-5, point[1]-5, point[0]+5, point[1]+5, 
                                           fill=color, outline="white", tags="temp_void_zone")
                 
             for spawnpoint in self.spawnpoints:
@@ -2231,10 +1945,7 @@ class MapEditor:
                 for i in range(len(self.current_racing_line) - 1):
                     p1 = self.current_racing_line[i]
                     p2 = self.current_racing_line[i + 1]
-                    # Convert world to screen coordinates
-                    x1, y1 = self.world_to_screen(p1[0], p1[1])
-                    x2, y2 = self.world_to_screen(p2[0], p2[1])
-                    self.canvas.create_line(x1, y1, x2, y2,
+                    self.canvas.create_line(p1[0], p1[1], p2[0], p2[1],
                                           fill="red", width=2, dash=(5, 5), tags="temp_racing_line")
                     
                     # Dessiner des flèches directionnelles
@@ -2257,12 +1968,7 @@ class MapEditor:
                             right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
                             right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
                             
-                            # Convert world to screen coordinates for arrow
-                            s_arrow_x, s_arrow_y = self.world_to_screen(arrow_x, arrow_y)
-                            s_left_x, s_left_y = self.world_to_screen(left_x, left_y)
-                            s_right_x, s_right_y = self.world_to_screen(right_x, right_y)
-                            
-                            self.canvas.create_polygon(s_arrow_x, s_arrow_y, s_left_x, s_left_y, s_right_x, s_right_y,
+                            self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
                                                      fill="yellow", outline="red", width=1, tags="temp_racing_line")
                 
                 # Si on a au moins 3 points, montrer où on peut fermer la ligne
@@ -2274,16 +1980,15 @@ class MapEditor:
                     is_near_closing = math.dist(last_point, first_point) < 50
                     
                     # Dessiner un cercle plus grand autour du premier point pour indiquer qu'on peut fermer
-                    fx, fy = self.world_to_screen(first_point[0], first_point[1])
-                    self.canvas.create_oval(fx-12, fy-12, 
-                                          fx+12, fy+12, 
+                    self.canvas.create_oval(first_point[0]-12, first_point[1]-12, 
+                                          first_point[0]+12, first_point[1]+12, 
                                           fill="", outline="lime", width=3, dash=(3, 3), tags="temp_racing_line")
                     
                     # Si on est proche, dessiner la ligne de fermeture
                     if is_near_closing:
                         # Ligne solide pour montrer que ça va se fermer
-                        lx, ly = self.world_to_screen(last_point[0], last_point[1])
-                        self.canvas.create_line(lx, ly, fx, fy,
+                        self.canvas.create_line(last_point[0], last_point[1],
+                                              first_point[0], first_point[1],
                                               fill="red", width=2, tags="temp_racing_line")
                         
                         # Flèche sur le segment de fermeture
@@ -2305,24 +2010,18 @@ class MapEditor:
                             right_x = mx - dx * arrow_length/3 + dy * arrow_length * arrow_angle
                             right_y = my - dy * arrow_length/3 - dx * arrow_length * arrow_angle
                             
-                            # Convert world to screen coordinates for closing arrow
-                            s_arrow_x, s_arrow_y = self.world_to_screen(arrow_x, arrow_y)
-                            s_left_x, s_left_y = self.world_to_screen(left_x, left_y)
-                            s_right_x, s_right_y = self.world_to_screen(right_x, right_y)
-                            
-                            self.canvas.create_polygon(s_arrow_x, s_arrow_y, s_left_x, s_left_y, s_right_x, s_right_y,
+                            self.canvas.create_polygon(arrow_x, arrow_y, left_x, left_y, right_x, right_y,
                                                      fill="yellow", outline="red", width=1, tags="temp_racing_line")
                     else:
                         # Ligne en pointillés si on est loin
-                        lx, ly = self.world_to_screen(last_point[0], last_point[1])
-                        self.canvas.create_line(lx, ly, fx, fy,
+                        self.canvas.create_line(last_point[0], last_point[1],
+                                              first_point[0], first_point[1],
                                               fill="lime", width=1, dash=(5, 5), tags="temp_racing_line")
                 
                 # Dessiner les points
                 for i, point in enumerate(self.current_racing_line):
                     color = "lime" if i == 0 and len(self.current_racing_line) >= 3 else "red"
-                    px, py = self.world_to_screen(point[0], point[1])
-                    self.canvas.create_oval(px-5, py-5, px+5, py+5, 
+                    self.canvas.create_oval(point[0]-5, point[1]-5, point[0]+5, point[1]+5, 
                                           fill=color, outline="white", tags="temp_racing_line")
                 
         except Exception as e:
@@ -2602,7 +2301,8 @@ class MapEditor:
                          for i in self.items],
                 "voidZones": [{"points": vz["points"], "closed": True} 
                             for vz in self.void_zones],
-                "roads": self.export_road_segments()
+                "roads": [{"x1": r["x1"], "y1": r["y1"], "x2": r["x2"], "y2": r["y2"], "width": r["width"]} 
+                         for r in self.roads]
             }
             
             # Ajouter la ligne de course si elle existe
@@ -2743,36 +2443,9 @@ class MapEditor:
                 points = []
                 for v_id in segment:
                     v = self.road_mesh[v_id]
-                    # Convert world coordinates to screen coordinates
-                    screen_x, screen_y = self.world_to_screen(v["x"], v["y"])
-                    points.extend([screen_x, screen_y])
+                    points.extend([v["x"], v["y"]])
                 
-                # Create semi-transparent road segment using stipple pattern
-                self.canvas.create_polygon(points, fill="#666666", outline="#333333", width=1, stipple="gray50")
-        
-        # Draw selected edge if exactly 2 vertices are selected
-        if len(self.selected_vertices) == 2:
-            v1 = self.road_mesh[self.selected_vertices[0]]
-            v2 = self.road_mesh[self.selected_vertices[1]]
-            
-            # Check if these vertices form an edge
-            edge_found = False
-            for face in self.road_faces:
-                edges = [(face[0], face[1]), (face[1], face[2]), (face[2], face[3]), (face[3], face[0])]
-                for edge in edges:
-                    if (self.selected_vertices[0] == edge[0] and self.selected_vertices[1] == edge[1]) or \
-                       (self.selected_vertices[0] == edge[1] and self.selected_vertices[1] == edge[0]):
-                        edge_found = True
-                        break
-                if edge_found:
-                    break
-            
-            if edge_found:
-                # Draw the selected edge with a bright color
-                v1_x, v1_y = self.world_to_screen(v1["x"], v1["y"])
-                v2_x, v2_y = self.world_to_screen(v2["x"], v2["y"])
-                self.canvas.create_line(v1_x, v1_y, v2_x, v2_y, 
-                                      fill="#00ff00", width=3)
+                self.canvas.create_polygon(points, fill="#666666", outline="#333333", width=1)
         
         # Draw extrude preview
         if self.road_edit_mode == "extrude" and self.extrude_preview and len(self.selected_vertices) >= 2:
@@ -2781,20 +2454,13 @@ class MapEditor:
             p1 = self.extrude_preview["v1"]
             p2 = self.extrude_preview["v2"]
             
-            # Convert all points to screen coordinates
-            v1_x, v1_y = self.world_to_screen(v1["x"], v1["y"])
-            v2_x, v2_y = self.world_to_screen(v2["x"], v2["y"])
-            p1_x, p1_y = self.world_to_screen(p1["x"], p1["y"])
-            p2_x, p2_y = self.world_to_screen(p2["x"], p2["y"])
-            
             # Draw preview face
-            points = [v1_x, v1_y, v2_x, v2_y, p2_x, p2_y, p1_x, p1_y]
+            points = [v1["x"], v1["y"], v2["x"], v2["y"], p2["x"], p2["y"], p1["x"], p1["y"]]
             self.canvas.create_polygon(points, fill="#888888", outline="#ffff00", width=2, dash=(5, 5))
         
         # Draw vertices
         for i, vertex in enumerate(self.road_mesh):
-            # Convert world coordinates to screen coordinates
-            x, y = self.world_to_screen(vertex["x"], vertex["y"])
+            x, y = vertex["x"], vertex["y"]
             if i in self.selected_vertices:
                 # Selected vertex
                 self.canvas.create_oval(x-6, y-6, x+6, y+6, fill="#ff0000", outline="white", width=2)
@@ -2805,7 +2471,6 @@ class MapEditor:
     def draw_road_preview(self):
         """Draw preview while creating first segment"""
         if hasattr(self, 'drag_start') and self.mouse_pos:
-            # drag_start and mouse_pos are already in world coordinates
             x1, y1 = self.drag_start
             x2, y2 = self.mouse_pos
             
@@ -2819,21 +2484,15 @@ class MapEditor:
                 perp_x = -dy * self.road_width / 2
                 perp_y = dx * self.road_width / 2
                 
-                # Convert world points to screen points
-                screen_points = []
-                world_points = [
-                    (x1 + perp_x, y1 + perp_y),
-                    (x1 - perp_x, y1 - perp_y),
-                    (x2 - perp_x, y2 - perp_y),
-                    (x2 + perp_x, y2 + perp_y)
+                points = [
+                    x1 + perp_x, y1 + perp_y,
+                    x1 - perp_x, y1 - perp_y,
+                    x2 - perp_x, y2 - perp_y,
+                    x2 + perp_x, y2 + perp_y
                 ]
                 
-                for wx, wy in world_points:
-                    sx, sy = self.world_to_screen(wx, wy)
-                    screen_points.extend([sx, sy])
-                
                 # Semi-transparent preview
-                self.canvas.create_polygon(screen_points, fill="#888888", outline="#ffff00", width=2, dash=(5, 5), stipple="gray50")
+                self.canvas.create_polygon(points, fill="#888888", outline="#ffff00", width=2, dash=(5, 5), stipple="gray50")
     
     def start_road_extrude(self):
         """Start extruding from the selected edge"""
@@ -3067,230 +2726,6 @@ class MapEditor:
         
         self.update_info()
         self.redraw()
-    
-    def subdivide_road_segment(self):
-        """Subdivide the selected road segment (add a new edge in the middle)"""
-        if len(self.selected_vertices) < 2:
-            self.log("Sélectionnez au moins 2 vertices pour subdiviser")
-            return
-        
-        # Find which face contains the selected vertices
-        face_to_subdivide = None
-        selected_edge = None
-        
-        for face_idx, face in enumerate(self.road_faces):
-            if len(self.selected_vertices) == 2:
-                v1_idx, v2_idx = self.selected_vertices[0], self.selected_vertices[1]
-                
-                # Check if the selected vertices form an edge in this face
-                # Face vertices are ordered: 0-1-2-3, edges are: 0-1, 1-2, 2-3, 3-0
-                edges = [(face[0], face[1]), (face[1], face[2]), (face[2], face[3]), (face[3], face[0])]
-                
-                for edge in edges:
-                    if (v1_idx == edge[0] and v2_idx == edge[1]) or (v1_idx == edge[1] and v2_idx == edge[0]):
-                        face_to_subdivide = face_idx
-                        selected_edge = edge
-                        break
-                
-                if face_to_subdivide is not None:
-                    break
-        
-        if face_to_subdivide is None:
-            self.log("Sélectionnez 2 vertices adjacents formant une arête")
-            return
-        
-        face = self.road_faces[face_to_subdivide]
-        
-        # Determine if this is a horizontal or vertical subdivision
-        # In a quad face ordered 0-1-2-3:
-        # v0: top-start, v1: bottom-start, v2: bottom-end, v3: top-end
-        # - Edges 0-1 and 2-3 are perpendicular to road (start and end edges)
-        # - Edges 1-2 and 3-0 are parallel to road (side edges)
-        
-        if selected_edge == (face[0], face[1]) or selected_edge == (face[1], face[0]):
-            # Selected edge 0-1 (start edge), subdivide vertically (across the road)
-            self.subdivide_vertical(face_to_subdivide, face, 0, 1, 3, 2)
-        elif selected_edge == (face[2], face[3]) or selected_edge == (face[3], face[2]):
-            # Selected edge 2-3 (end edge), subdivide vertically (across the road)
-            self.subdivide_vertical(face_to_subdivide, face, 2, 3, 1, 0)
-        elif selected_edge == (face[1], face[2]) or selected_edge == (face[2], face[1]):
-            # Selected edge 1-2 (bottom side), subdivide horizontally (along the road)
-            self.subdivide_horizontal(face_to_subdivide, face, 1, 2, 0, 3)
-        elif selected_edge == (face[3], face[0]) or selected_edge == (face[0], face[3]):
-            # Selected edge 3-0 (top side), subdivide horizontally (along the road)
-            self.subdivide_horizontal(face_to_subdivide, face, 3, 0, 2, 1)
-            
-    def subdivide_horizontal(self, face_idx, face, e1, e2, o1, o2):
-        """Subdivide horizontally (along the road direction)"""
-        # Get vertices
-        v_e1 = self.road_mesh[face[e1]]
-        v_e2 = self.road_mesh[face[e2]]
-        v_o1 = self.road_mesh[face[o1]]
-        v_o2 = self.road_mesh[face[o2]]
-        
-        # Calculate midpoints of the selected edge and opposite edge
-        mid_e_x = (v_e1["x"] + v_e2["x"]) / 2
-        mid_e_y = (v_e1["y"] + v_e2["y"]) / 2
-        mid_o_x = (v_o1["x"] + v_o2["x"]) / 2
-        mid_o_y = (v_o1["y"] + v_o2["y"]) / 2
-        
-        # Create new vertices
-        new_v_e_idx = len(self.road_mesh)  # Midpoint on selected edge
-        new_v_o_idx = new_v_e_idx + 1      # Midpoint on opposite edge
-        
-        self.road_mesh.append({"x": mid_e_x, "y": mid_e_y})
-        self.road_mesh.append({"x": mid_o_x, "y": mid_o_y})
-        
-        # Remove the old face
-        self.road_faces.pop(face_idx)
-        
-        # We need to maintain the vertex ordering convention:
-        # 0: top-start, 1: bottom-start, 2: bottom-end, 3: top-end
-        
-        # Determine which case we're in based on which edge was selected
-        if e1 == 1 and e2 == 2:  # Bottom edge selected (1-2)
-            # First face: top-start, bottom-start, new-bottom, new-top
-            self.road_faces.insert(face_idx, (face[0], face[1], new_v_e_idx, new_v_o_idx))
-            # Second face: new-top, new-bottom, bottom-end, top-end
-            self.road_faces.insert(face_idx + 1, (new_v_o_idx, new_v_e_idx, face[2], face[3]))
-        elif e1 == 3 and e2 == 0:  # Top edge selected (3-0)
-            # First face: new-bottom, new-top, top-end, bottom-end
-            self.road_faces.insert(face_idx, (new_v_o_idx, new_v_e_idx, face[3], face[2]))
-            # Second face: top-start, bottom-start, new-bottom, new-top
-            self.road_faces.insert(face_idx + 1, (face[0], face[1], new_v_o_idx, new_v_e_idx))
-        else:
-            # Fallback to original logic if unexpected edge
-            self.road_faces.insert(face_idx, (face[e1], new_v_e_idx, new_v_o_idx, face[o1]))
-            self.road_faces.insert(face_idx + 1, (new_v_e_idx, face[e2], face[o2], new_v_o_idx))
-        
-        # Update edges
-        self.road_edges.append((new_v_e_idx, new_v_o_idx))
-        
-        # Select the new vertices
-        self.selected_vertices = [new_v_e_idx, new_v_o_idx]
-        
-        self.log("Segment subdivisé horizontalement")
-        self.update_info()
-        self.redraw()
-        
-    def subdivide_vertical(self, face_idx, face, e1, e2, o1, o2):
-        """Subdivide vertically (across the road)"""
-        # Get vertices
-        v_e1 = self.road_mesh[face[e1]]
-        v_e2 = self.road_mesh[face[e2]]
-        v_o1 = self.road_mesh[face[o1]]
-        v_o2 = self.road_mesh[face[o2]]
-        
-        # Calculate midpoints - one on each side edge
-        # For start edge (0-1), we need midpoints on edges 3-0 and 1-2
-        # For end edge (2-3), we need midpoints on edges 1-2 and 3-0
-        
-        if e1 == 0 and e2 == 1:  # Start edge selected (0-1)
-            # Midpoint between top-start and top-end (edge 3-0)
-            mid_top_x = (self.road_mesh[face[0]]["x"] + self.road_mesh[face[3]]["x"]) / 2
-            mid_top_y = (self.road_mesh[face[0]]["y"] + self.road_mesh[face[3]]["y"]) / 2
-            # Midpoint between bottom-start and bottom-end (edge 1-2)
-            mid_bottom_x = (self.road_mesh[face[1]]["x"] + self.road_mesh[face[2]]["x"]) / 2
-            mid_bottom_y = (self.road_mesh[face[1]]["y"] + self.road_mesh[face[2]]["y"]) / 2
-            
-            new_v_top_idx = len(self.road_mesh)
-            new_v_bottom_idx = new_v_top_idx + 1
-            
-            self.road_mesh.append({"x": mid_top_x, "y": mid_top_y})
-            self.road_mesh.append({"x": mid_bottom_x, "y": mid_bottom_y})
-            
-            # Remove old face
-            self.road_faces.pop(face_idx)
-            
-            # First face: original start to new middle
-            self.road_faces.insert(face_idx, (face[0], face[1], new_v_bottom_idx, new_v_top_idx))
-            # Second face: new middle to original end
-            self.road_faces.insert(face_idx + 1, (new_v_top_idx, new_v_bottom_idx, face[2], face[3]))
-            
-            # Select the new edge
-            self.selected_vertices = [new_v_top_idx, new_v_bottom_idx]
-            
-        elif e1 == 2 and e2 == 3:  # End edge selected (2-3)
-            # Similar logic but for the end edge
-            mid_top_x = (self.road_mesh[face[0]]["x"] + self.road_mesh[face[3]]["x"]) / 2
-            mid_top_y = (self.road_mesh[face[0]]["y"] + self.road_mesh[face[3]]["y"]) / 2
-            mid_bottom_x = (self.road_mesh[face[1]]["x"] + self.road_mesh[face[2]]["x"]) / 2
-            mid_bottom_y = (self.road_mesh[face[1]]["y"] + self.road_mesh[face[2]]["y"]) / 2
-            
-            new_v_top_idx = len(self.road_mesh)
-            new_v_bottom_idx = new_v_top_idx + 1
-            
-            self.road_mesh.append({"x": mid_top_x, "y": mid_top_y})
-            self.road_mesh.append({"x": mid_bottom_x, "y": mid_bottom_y})
-            
-            # Remove old face
-            self.road_faces.pop(face_idx)
-            
-            # First face: original start to new middle
-            self.road_faces.insert(face_idx, (face[0], face[1], new_v_bottom_idx, new_v_top_idx))
-            # Second face: new middle to original end  
-            self.road_faces.insert(face_idx + 1, (new_v_top_idx, new_v_bottom_idx, face[2], face[3]))
-            
-            # Select the new edge
-            self.selected_vertices = [new_v_top_idx, new_v_bottom_idx]
-        else:
-            # Fallback for unexpected cases
-            mid_1_x = (v_o1["x"] + v_e1["x"]) / 2
-            mid_1_y = (v_o1["y"] + v_e1["y"]) / 2
-            mid_2_x = (v_e2["x"] + v_o2["x"]) / 2
-            mid_2_y = (v_e2["y"] + v_o2["y"]) / 2
-            
-            new_v1_idx = len(self.road_mesh)
-            new_v2_idx = new_v1_idx + 1
-            
-            self.road_mesh.append({"x": mid_1_x, "y": mid_1_y})
-            self.road_mesh.append({"x": mid_2_x, "y": mid_2_y})
-            
-            self.road_faces.pop(face_idx)
-            self.road_faces.insert(face_idx, (face[o1], new_v1_idx, new_v2_idx, face[o2]))
-            self.road_faces.insert(face_idx + 1, (new_v1_idx, face[e1], face[e2], new_v2_idx))
-            
-            self.selected_vertices = [new_v1_idx, new_v2_idx]
-        
-        # Update edges
-        self.road_edges.append((self.selected_vertices[0], self.selected_vertices[1]))
-        
-        self.log("Segment subdivisé verticalement")
-        self.update_info()
-        self.redraw()
-    
-    def export_road_segments(self):
-        """Convert road mesh to exportable format"""
-        segments = []
-        
-        # Convert each face (quad) to a road segment
-        for face in self.road_faces:
-            if len(face) == 4:
-                # Get the 4 vertices of the quad
-                v0 = self.road_mesh[face[0]]
-                v1 = self.road_mesh[face[1]]
-                v2 = self.road_mesh[face[2]]
-                v3 = self.road_mesh[face[3]]
-                
-                # Calculate center points of the two edges
-                # Assuming v0-v1 and v2-v3 are the parallel edges
-                x1 = (v0["x"] + v1["x"]) / 2
-                y1 = (v0["y"] + v1["y"]) / 2
-                x2 = (v2["x"] + v3["x"]) / 2
-                y2 = (v2["y"] + v3["y"]) / 2
-                
-                # Calculate width (distance between parallel edges)
-                width = math.sqrt((v0["x"] - v1["x"])**2 + (v0["y"] - v1["y"])**2)
-                
-                segments.append({
-                    "x1": x1,
-                    "y1": y1,
-                    "x2": x2,
-                    "y2": y2,
-                    "width": width
-                })
-        
-        return segments
 
 if __name__ == "__main__":
     try:

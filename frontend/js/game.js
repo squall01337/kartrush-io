@@ -2307,11 +2307,10 @@ startItemSlotAnimation(finalItem) {
         const time = Date.now() * 0.001;
         const speedFactor = Math.min(player.speed / 10, 1); // Normalize speed
         
-        // Two exhaust positions (rear left and rear right)
+        // Single central exhaust position
         // x negative = behind the kart (kart faces right at angle 0)
         const exhaustPositions = [
-            { x: -kartSize * 0.5, y: -kartSize * 0.2 },  // Left exhaust (further back and more to the left)
-            { x: -kartSize * 0.5, y: kartSize * 0.2 }    // Right exhaust (further back and more to the right)
+            { x: -kartSize * 0.4, y: 0 }  // Central exhaust closer to the back
         ];
         
         exhaustPositions.forEach((pos, index) => {
@@ -2321,13 +2320,13 @@ startItemSlotAnimation(finalItem) {
             // Draw multiple flame segments for each exhaust
             const segmentCount = 5;
             for (let i = 0; i < segmentCount; i++) {
-                const segmentTime = time * 8 + i * 0.5 + index * Math.PI;
+                const segmentTime = time * 8 + i * 0.5;
                 const age = i / segmentCount;
                 
                 // Flame properties with variation
-                const baseSize = 12 * speedFactor;  // Increased from 8
-                const flameHeight = (20 + Math.sin(segmentTime) * 5) * speedFactor * (1 - age * 0.3);  // Increased from 15
-                const flameWidth = baseSize * (1 - age * 0.5);  // Less width reduction
+                const baseSize = 35 * speedFactor;  // Even bigger central flame
+                const flameHeight = (50 + Math.sin(segmentTime) * 12) * speedFactor * (1 - age * 0.2);  // Bigger central flame
+                const flameWidth = baseSize * (1 - age * 0.3);  // Less width reduction for bigger effect
                 const curve = Math.sin(segmentTime * 2) * 3 * (1 - age);
                 
                 // Flame position along trail (extending backward)
@@ -2343,22 +2342,29 @@ startItemSlotAnimation(finalItem) {
                 );
                 
                 // Flame colors from hot to cool
-                const opacity = (1 - age * 0.6) * speedFactor * 1.2;  // More opaque
+                // Keep base opacity high, only reduce it slightly with age
+                const baseOpacity = Math.max(0.7, speedFactor); // Minimum 70% opacity
+                const opacity = baseOpacity * (1 - age * 0.3);  // Only slight reduction with age
                 if (i === 0) {
-                    // Hottest part (white-blue core)
+                    // Hottest part (white-blue-purple core)
                     gradient.addColorStop(0, `rgba(200, 220, 255, ${opacity})`);
-                    gradient.addColorStop(0.3, `rgba(100, 150, 255, ${opacity * 0.8})`);
-                    gradient.addColorStop(0.6, `rgba(50, 100, 255, ${opacity * 0.5})`);
+                    gradient.addColorStop(0.2, `rgba(150, 150, 255, ${opacity * 0.9})`);
+                    gradient.addColorStop(0.4, `rgba(180, 100, 255, ${opacity * 0.7})`);
+                    gradient.addColorStop(0.6, `rgba(150, 50, 200, ${opacity * 0.5})`);
                     gradient.addColorStop(1, 'transparent');
-                } else if (i < 3) {
-                    // Blue flame
-                    gradient.addColorStop(0, `rgba(100, 150, 255, ${opacity * 0.8})`);
-                    gradient.addColorStop(0.5, `rgba(50, 100, 200, ${opacity * 0.5})`);
+                } else if (i === 1) {
+                    // Transition from purple to blue to orange
+                    gradient.addColorStop(0, `rgba(180, 120, 255, ${opacity * 0.8})`);
+                    gradient.addColorStop(0.3, `rgba(150, 150, 255, ${opacity * 0.7})`);
+                    gradient.addColorStop(0.5, `rgba(255, 150, 150, ${opacity * 0.6})`);
+                    gradient.addColorStop(0.7, `rgba(255, 150, 50, ${opacity * 0.4})`);
                     gradient.addColorStop(1, 'transparent');
                 } else {
-                    // Cooler orange-red tips
-                    gradient.addColorStop(0, `rgba(255, 150, 50, ${opacity * 0.6})`);
-                    gradient.addColorStop(0.5, `rgba(255, 100, 0, ${opacity * 0.3})`);
+                    // Purple-red-orange flame
+                    gradient.addColorStop(0, `rgba(220, 100, 150, ${opacity * 0.7})`);
+                    gradient.addColorStop(0.3, `rgba(255, 100, 100, ${opacity * 0.6})`);
+                    gradient.addColorStop(0.6, `rgba(255, 100, 0, ${opacity * 0.5})`);
+                    gradient.addColorStop(0.8, `rgba(200, 50, 0, ${opacity * 0.3})`);
                     gradient.addColorStop(1, 'transparent');
                 }
                 

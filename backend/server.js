@@ -812,6 +812,7 @@ class Player {
         this.driftChargeLevel = 0; // 0 = none, 1 = blue, 2 = orange, 3 = purple
         this.wasCounterSteering = false; // Track counter-steer state
         this.counterSteerJump = 0; // Jump force when starting counter-steer
+        this.lastCounterSteerTime = 0; // Cooldown for counter-steer
         
         // Racing line tracking (new)
         this.trackProgress = 0;       // Total distance traveled along racing line
@@ -997,9 +998,16 @@ class Player {
         const isCounterSteering = (this.driftDirection === -1 && this.inputs.right) || 
                                  (this.driftDirection === 1 && this.inputs.left);
         
-        // Detect start of counter-steer for jump effect
+        // Detect start of counter-steer for jump effect with cooldown
+        const now = Date.now();
+        const counterSteerCooldown = 500; // 500ms cooldown to prevent spamming
+        
         if (isCounterSteering && !this.wasCounterSteering) {
-            this.counterSteerJump = 1.035; // Middle value between 1.0 and 1.5
+            // Only allow counter-steer jump if cooldown has passed
+            if (now - this.lastCounterSteerTime >= counterSteerCooldown) {
+                this.counterSteerJump = 1.035; // Middle value between 1.0 and 1.5
+                this.lastCounterSteerTime = now;
+            }
         }
         this.wasCounterSteering = isCounterSteering;
         

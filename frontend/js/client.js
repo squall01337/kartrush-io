@@ -2483,7 +2483,7 @@ class GameClient {
             if (this.gameEngine && this.gameEngine.isRunning) {
                 this.sendInput();
             }
-        }, 1000 / 30); // 30 FPS pour les inputs
+        }, 1000 / 60); // 60 FPS pour les inputs
 
         document.addEventListener('keydown', (e) => {
             // Ne pas intercepter les touches si on est dans un champ de saisie

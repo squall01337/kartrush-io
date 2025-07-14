@@ -1021,9 +1021,13 @@ class Player {
             // Not counter-steering, allow normal rotation
             if (this.inputs.left) {
                 this.driftRotation -= rotationSpeed * deltaTime;
-            }
-            if (this.inputs.right) {
+            } else if (this.inputs.right) {
                 this.driftRotation += rotationSpeed * deltaTime;
+            } else {
+                // No input - continue drifting in the initial direction (Mario Kart style)
+                // Use a slower rotation speed for the automatic drift
+                const autoDriftSpeed = rotationSpeed * 0.35; // 35% of normal rotation speed - gentle curve
+                this.driftRotation += this.driftDirection * autoDriftSpeed * deltaTime;
             }
         }
         // If counter-steering, rotation is blocked (maintains current angle)

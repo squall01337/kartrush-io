@@ -1314,6 +1314,46 @@ class GameClient {
             }
         });
         
+        this.socket.on('iceBeamFired', (data) => {
+            // Play ice beam sound
+            soundManager.playIceBeamFire();
+            
+            // Store beam creation time for animation
+            if (this.gameEngine && this.gameEngine.gameState.iceBeams) {
+                const beam = this.gameEngine.gameState.iceBeams.find(b => b.id === data.id);
+                if (beam) {
+                    beam.createdAt = Date.now();
+                    beam.lifetime = 800; // 0.8 seconds
+                }
+            }
+        });
+        
+        this.socket.on('iceBeamUpdate', (data) => {
+            // Update beam length in real-time
+            if (this.gameEngine && this.gameEngine.gameState.iceBeams) {
+                const beam = this.gameEngine.gameState.iceBeams.find(b => b.id === data.id);
+                if (beam) {
+                    beam.length = data.length;
+                    beam.endX = data.endX;
+                    beam.endY = data.endY;
+                }
+            }
+        });
+        
+        this.socket.on('iceBeamRemoved', (data) => {
+            // Handled by game state update
+        });
+        
+        this.socket.on('playerFrozen', (data) => {
+            // Play freeze sound
+            soundManager.playIceBeamHit();
+            
+            // Show ice effect for frozen player
+            if (data.playerId === this.playerId) {
+                this.showScreenFlash('#00FFFF', 300); // Cyan flash
+            }
+        });
+        
         this.socket.on('superBoostActivated', (data) => {
             if (data.playerId === this.playerId) {
                 soundManager.playSuperBoost();

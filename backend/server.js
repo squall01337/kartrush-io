@@ -249,7 +249,7 @@ class Projectile {
                 this.x -= Math.cos(owner.angle) * 30;
                 this.y -= Math.sin(owner.angle) * 30;
                 this.lifetime = 2000; // 2 secondes
-                this.radius = 50;
+                this.radius = 57.5;  // Increased by 15% (was 50)
                 this.damage = 50;
                 break;
                 
@@ -527,6 +527,157 @@ class PoisonSlick {
     }
 }
 
+class IceBeam {
+    constructor(owner) {
+        this.id = uuidv4();
+        this.owner = owner;
+        // Start the beam in front of the kart
+        this.startX = owner.x + Math.cos(owner.angle) * 5;
+        this.startY = owner.y + Math.sin(owner.angle) * 5;
+        this.angle = owner.angle;
+        this.length = 0;
+        this.maxLength = 5000; // Maximum beam length (effectively infinite)
+        this.growthSpeed = 25; // Pixels per frame (faster growth)
+        this.active = true;
+        this.lifetime = 800; // 0.8 seconds
+        this.createdAt = Date.now();
+        this.hitPlayers = new Set(); // Track who we've already hit
+        this.endX = this.startX;
+        this.endY = this.startY;
+        this.hitWall = false; // Track if we've hit a wall
+    }
+    
+    update(deltaTime, players, walls) {
+        const elapsed = Date.now() - this.createdAt;
+        
+        // Check if beam has expired
+        if (elapsed >= this.lifetime) {
+            this.active = false;
+            return;
+        }
+        
+        // Grow the beam only if we haven't hit a wall
+        if (this.length < this.maxLength && !this.hitWall) {
+            const growthAmount = this.growthSpeed * deltaTime * 60;
+            const newLength = Math.min(this.length + growthAmount, this.maxLength);
+            
+            // Calculate new beam end point
+            const newEndX = this.startX + Math.cos(this.angle) * newLength;
+            const newEndY = this.startY + Math.sin(this.angle) * newLength;
+            
+            // Check for wall collision along the beam path
+            const wallHit = this.checkWallCollision(this.startX, this.startY, newEndX, newEndY, walls);
+            if (wallHit) {
+                // Stop at wall and mark as hit
+                this.length = wallHit.distance;
+                this.endX = wallHit.x;
+                this.endY = wallHit.y;
+                this.hitWall = true;
+            } else {
+                // No wall hit, continue growing
+                this.length = newLength;
+                this.endX = newEndX;
+                this.endY = newEndY;
+            }
+        }
+        
+        // Check for player collisions along the beam
+        for (const [playerId, player] of players) {
+            if (playerId === this.owner.id) continue; // Skip owner
+            if (player.isDead) continue; // Skip dead players
+            if (this.hitPlayers.has(playerId)) continue; // Already hit
+            
+            // Check if player intersects with beam line
+            if (this.checkPlayerCollision(player)) {
+                this.hitPlayers.add(playerId);
+                
+                // Apply frozen effect
+                player.isFrozen = true;
+                player.frozenUntil = Date.now() + 3000; // 3 seconds
+                player.frozenVelocity = {
+                    x: Math.cos(player.angle) * player.speed,
+                    y: Math.sin(player.angle) * player.speed
+                };
+            }
+        }
+    }
+    
+    checkWallCollision(x1, y1, x2, y2, walls) {
+        if (!walls || walls.length === 0) return null;
+        
+        let closestHit = null;
+        let minDistance = Infinity;
+        
+        for (const wall of walls) {
+            const hit = this.lineSegmentIntersection(x1, y1, x2, y2, wall.x1, wall.y1, wall.x2, wall.y2);
+            if (hit) {
+                const distance = Math.sqrt((hit.x - x1) ** 2 + (hit.y - y1) ** 2);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestHit = { x: hit.x, y: hit.y, distance: distance };
+                }
+            }
+        }
+        
+        return closestHit;
+    }
+    
+    checkPlayerCollision(player) {
+        // Calculate distance from player center to beam line
+        const dist = this.pointToLineDistance(player.x, player.y, this.startX, this.startY, this.endX, this.endY);
+        return dist < 40; // Increased hit radius from 30 to 40
+    }
+    
+    pointToLineDistance(px, py, x1, y1, x2, y2) {
+        const A = px - x1;
+        const B = py - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+        
+        const dot = A * C + B * D;
+        const lenSq = C * C + D * D;
+        let param = -1;
+        
+        if (lenSq !== 0) {
+            param = dot / lenSq;
+        }
+        
+        let xx, yy;
+        
+        if (param < 0) {
+            xx = x1;
+            yy = y1;
+        } else if (param > 1) {
+            xx = x2;
+            yy = y2;
+        } else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+        }
+        
+        const dx = px - xx;
+        const dy = py - yy;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    lineSegmentIntersection(x1, y1, x2, y2, x3, y3, x4, y4) {
+        const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+        if (Math.abs(denom) < 0.0001) return null;
+        
+        const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+        const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+        
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+            return {
+                x: x1 + t * (x2 - x1),
+                y: y1 + t * (y2 - y1)
+            };
+        }
+        
+        return null;
+    }
+}
+
 // Helper functions for racing line calculations
 function getClosestPointOnSegment(px, py, x1, y1, x2, y2) {
     const dx = x2 - x1;
@@ -640,6 +791,12 @@ class Player {
         // Lightning speed reduction
         this.speedReductionFactor = 1.0;
         this.speedReductionEndTime = 0;
+        
+        // Ice beam frozen state
+        this.isFrozen = false;
+        this.frozenUntil = 0;
+        this.frozenVelocity = { x: 0, y: 0 };
+        this.frozenEventSent = false;
         
         // Super booster
         this.isSuperBoosting = false;
@@ -774,6 +931,10 @@ class Player {
         this.poisonEndTime = 0;
         this.speedReductionFactor = 1.0;
         this.speedReductionEndTime = 0;
+        this.isFrozen = false;
+        this.frozenUntil = 0;
+        this.frozenVelocity = { x: 0, y: 0 };
+        this.frozenEventSent = false;
         
         // Reset drift state
         this.isDrifting = false;
@@ -946,6 +1107,20 @@ class Player {
             } else {
                 this.speed *= 0.9; // Ralentir progressivement
                 return; // Ne pas traiter les inputs
+            }
+        }
+        
+        // Gérer l'état frozen (ice beam)
+        if (this.isFrozen) {
+            if (Date.now() > this.frozenUntil) {
+                this.isFrozen = false;
+                this.frozenEventSent = false;
+                this.frozenVelocity = { x: 0, y: 0 };
+            } else {
+                // Continue sliding in the frozen direction
+                this.x += this.frozenVelocity.x * deltaTime;
+                this.y += this.frozenVelocity.y * deltaTime;
+                return poisonDamageResult; // Ne pas traiter les inputs, mais retourner les dégâts poison si présents
             }
         }
         
@@ -1191,6 +1366,7 @@ class Room {
         this.itemBoxes = [];
         this.projectiles = new Map();
         this.poisonSlicks = new Map();
+        this.iceBeams = new Map();
         this.lastItemSpawn = 0;
         
         // Available colors for players
@@ -1300,6 +1476,7 @@ class Room {
         this.itemBoxes = [];
         this.projectiles.clear();
         this.poisonSlicks.clear();
+        this.iceBeams.clear();
         this.lastItemSpawn = 0;
         
         // NE PAS réinitialiser la selectedMap ici, elle doit persister
@@ -1657,6 +1834,37 @@ class Room {
             }
         }
         
+        // Mettre à jour les ice beams
+        for (const [id, beam] of this.iceBeams) {
+            beam.update(deltaTime, this.players, trackData.continuousCurves);
+            
+            if (!beam.active) {
+                this.iceBeams.delete(id);
+                io.to(this.id).emit('iceBeamRemoved', { id: id });
+            } else {
+                // Emit updates for beam growth
+                io.to(this.id).emit('iceBeamUpdate', {
+                    id: beam.id,
+                    length: beam.length,
+                    endX: beam.endX,
+                    endY: beam.endY
+                });
+                
+                // Emit frozen events for newly frozen players
+                for (const playerId of beam.hitPlayers) {
+                    const player = this.players.get(playerId);
+                    if (player && player.isFrozen && !player.frozenEventSent) {
+                        player.frozenEventSent = true;
+                        io.to(this.id).emit('playerFrozen', {
+                            playerId: playerId,
+                            x: player.x,
+                            y: player.y
+                        });
+                    }
+                }
+            }
+        }
+        
         // Mettre à jour les poison slicks
         for (const [id, slick] of this.poisonSlicks) {
             slick.update(deltaTime);
@@ -1826,15 +2034,17 @@ class Room {
                 const rand = Math.random();
                 let itemType;
                 
-                // TESTING: Mostly rockets (80% rockets for testing)
+                // TESTING: Mostly ice beam (80% ice beam for testing)
                 if (rand < 0.80) {
-                    itemType = 'rocket';  // 80% chance
+                    itemType = 'icebeam';  // 80% chance for testing
                 } else if (rand < 0.84) {
                     itemType = 'healthpack';  // 4% chance
                 } else if (rand < 0.88) {
                     itemType = 'bomb';  // 4% chance
+                } else if (rand < 0.90) {
+                    itemType = 'rocket';  // 2% chance
                 } else if (rand < 0.92) {
-                    itemType = 'superboost';  // 4% chance
+                    itemType = 'superboost';  // 2% chance
                 } else if (rand < 0.96) {
                     itemType = 'lightning';  // 4% chance
                 } else {
@@ -1914,6 +2124,10 @@ class Room {
                 
             case 'lightning':
                 this.useLightning(player);
+                break;
+                
+            case 'icebeam':
+                this.useIceBeam(player);
                 break;
         }
         
@@ -2051,6 +2265,21 @@ class Room {
         io.to(this.id).emit('lightningUsed', {
             casterId: player.id,
             affectedPlayers: affectedPlayers
+        });
+    }
+    
+    useIceBeam(player) {
+        const beam = new IceBeam(player);
+        this.iceBeams = this.iceBeams || new Map();
+        this.iceBeams.set(beam.id, beam);
+        
+        // Emit ice beam creation event
+        io.to(this.id).emit('iceBeamFired', {
+            id: beam.id,
+            ownerId: player.id,
+            startX: beam.startX,
+            startY: beam.startY,
+            angle: beam.angle
         });
     }
     
@@ -3074,6 +3303,7 @@ class Room {
                 isStunned: p.isStunned,
                 isSuperBoosting: p.isSuperBoosting,
                 isPoisoned: p.isPoisoned,
+                isFrozen: p.isFrozen,
                 speedReductionFactor: p.speedReductionFactor,
                 speedReductionEndTime: p.speedReductionEndTime,
                 // Drift state
@@ -3122,6 +3352,16 @@ class Room {
                 y: s.y,
                 radius: s.radius,
                 ownerId: s.ownerId
+            })),
+            iceBeams: Array.from(this.iceBeams.values()).filter(b => b.active).map(b => ({
+                id: b.id,
+                startX: b.startX,
+                startY: b.startY,
+                endX: b.endX,
+                endY: b.endY,
+                angle: b.angle,
+                length: b.length,
+                ownerId: b.owner.id
             }))
         };
 

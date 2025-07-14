@@ -15,7 +15,8 @@ class GameEngine {
             remainingTime: null,
             itemBoxes: [],
             projectiles: [],
-            poisonSlicks: []
+            poisonSlicks: [],
+            iceBeams: []
         };
         
         this.track = null;
@@ -41,6 +42,10 @@ class GameEngine {
         this.boosterEffects = new Map(); // Pour les effets visuels
         this.boosterSprite = null; // Pour stocker le sprite du booster
         this.loadBoosterSprite();
+        
+        // Load ice sprite for frozen effect
+        this.iceSprite = null;
+        this.loadIceSprite();
         
         // NOUVEAU : Gestion des effets visuels
         this.damageEffects = new Map(); // Effets de dégâts
@@ -122,6 +127,18 @@ class GameEngine {
     loadBoosterSprite() {
         this.boosterSprite = new Image();
         this.boosterSprite.src = 'assets/booster_arrow.png';
+    }
+    
+    loadIceSprite() {
+        this.iceSprite = new Image();
+        this.iceSprite.onload = () => {
+            console.log('Ice sprite loaded successfully');
+        };
+        this.iceSprite.onerror = () => {
+            console.log('Ice sprite not found, using fallback rendering');
+            this.iceSprite = null;
+        };
+        this.iceSprite.src = 'assets/ice.png';
     }
     
     // Nouvelle méthode pour charger les sprites d'effets
@@ -332,7 +349,8 @@ class GameEngine {
             'bomb': { row: 2, col: 0 },        // 1ère de la 3ème ligne
             'superboost': { row: 0, col: 1 },  // 2ème de la 1ère ligne
             'poisonslick': { row: 2, col: 1 }, // 2ème de la 3ème ligne (bottom-mid)
-            'lightning': { row: 1, col: 2 }    // 3ème de la 2ème ligne (middle-right)
+            'lightning': { row: 1, col: 2 },   // 3ème de la 2ème ligne (middle-right)
+            'icebeam': { row: 1, col: 1 }      // 2ème de la 2ème ligne (mid-mid)
         };
         
         const pos = positions[itemType];
@@ -410,6 +428,7 @@ class GameEngine {
     this.renderBoosters(ctx);
     this.renderItemBoxes(ctx);
     this.renderPoisonSlicks(ctx);
+    this.renderIceBeams(ctx);
     this.renderFinishLine(ctx);
     
     this.particleSystem.render(ctx);
@@ -606,7 +625,7 @@ class GameEngine {
     const bombIcon = this.getItemIcon('bomb');
     if (bombIcon) {
         // Dessiner le sprite de la bombe
-        ctx.drawImage(bombIcon, -20, -20, 40, 40);
+        ctx.drawImage(bombIcon, -23, -23, 46, 46);  // Increased by 15% (was 40x40)
     } else {
         // Fallback : dessiner une bombe simple
         ctx.fillStyle = '#333';
@@ -777,6 +796,96 @@ class GameEngine {
         });
         
         ctx.restore();
+    }
+    
+    renderIceBeams(ctx) {
+        if (!this.gameState.iceBeams) return;
+        
+        this.gameState.iceBeams.forEach(beam => {
+            ctx.save();
+            
+            // Work directly with the sprite sheet instead of cached icon
+            if (!this.itemIconsSprite || !this.itemIconsSprite.complete) {
+                ctx.restore();
+                return;
+            }
+            
+            // The sprite is vertical with base at bottom and tip at top
+            // We need to split it into 3 parts: base, core, tip
+            const iconSize = 341.33; // Size of each icon in the sprite sheet
+            const sourceX = iconSize * 1; // Column 1 (mid)
+            const sourceY = iconSize * 1; // Row 1 (mid)
+            
+            // Define the three sections (adjust these based on actual sprite)
+            const baseHeight = iconSize * 0.3;  // Bottom 30%
+            const tipHeight = iconSize * 0.2;   // Top 20%
+            const coreHeight = iconSize * 0.5;  // Middle 50%
+            
+            // Calculate fade based on beam lifetime
+            const fadeStart = 0.6; // Start fading at 60% of lifetime
+            const elapsed = (Date.now() - beam.createdAt) / beam.lifetime;
+            const opacity = elapsed > fadeStart ? 1 - (elapsed - fadeStart) / (1 - fadeStart) : 1;
+            
+            ctx.globalAlpha = opacity;
+            
+            // Rotate context to beam angle - add 90 degrees because sprite is vertical
+            ctx.translate(beam.startX, beam.startY);
+            ctx.rotate(beam.angle + Math.PI / 2); // Add 90 degrees to align vertical sprite with horizontal beam
+            
+            // Scale for beam width
+            const beamWidth = 100;  // Increased from 80
+            
+            // Draw base (bottom of sprite) at the start of the beam (near kart)
+            // The beam now grows along negative Y after rotation
+            ctx.drawImage(
+                this.itemIconsSprite,                   // Use sprite sheet directly
+                sourceX,                                // Source X
+                sourceY + iconSize - baseHeight,        // Source Y (bottom part of icon)
+                iconSize,                               // Source width
+                baseHeight,                             // Source height
+                -beamWidth / 2,                         // Dest X (centered)
+                -baseHeight,                            // Dest Y (negative because beam grows down)
+                beamWidth,                              // Dest width
+                baseHeight                              // Dest height
+            );
+            
+            // Draw core (stretched middle section)
+            if (beam.length > baseHeight) {
+                const coreLength = Math.max(0, beam.length - baseHeight - tipHeight);
+                if (coreLength > 0) {
+                    ctx.drawImage(
+                        this.itemIconsSprite,                   // Use sprite sheet directly
+                        sourceX,                                // Source X
+                        sourceY + tipHeight,                    // Source Y (middle part)
+                        iconSize,                               // Source width
+                        coreHeight,                             // Source height
+                        -beamWidth / 2,                         // Dest X (centered)
+                        -(baseHeight + coreLength),             // Dest Y (negative, after base)
+                        beamWidth,                              // Dest width
+                        coreLength                              // Dest height (stretched)
+                    );
+                }
+            }
+            
+            // Draw tip (top of sprite) at the end of the beam
+            if (beam.length > baseHeight + tipHeight) {
+                ctx.drawImage(
+                    this.itemIconsSprite,                   // Use sprite sheet directly
+                    sourceX,                                // Source X
+                    sourceY,                                // Source Y (top part of icon)
+                    iconSize,                               // Source width
+                    tipHeight,                              // Source height
+                    -beamWidth / 2,                         // Dest X (centered)
+                    -beam.length,                           // Dest Y (at the end, negative)
+                    beamWidth,                              // Dest width
+                    tipHeight                               // Dest height
+                );
+            }
+            
+            // No additional glow effect - just use the sprite
+            
+            ctx.restore();
+        });
     }
 
     renderFinishLine(ctx) {
@@ -1586,6 +1695,33 @@ class GameEngine {
                 ctx.strokeRect(-size/2, -size/2, size, size);
             }
             
+            // Render frozen effect overlay if player is frozen
+            if (player.isFrozen) {
+                // Check if we have the ice sprite loaded
+                if (this.iceSprite) {
+                    ctx.globalAlpha = 0.65;  // Adjusted to 0.65 (between 0.5 and 0.8)
+                    const iceSize = size * 1.5; // Make ice overlay slightly larger
+                    ctx.drawImage(this.iceSprite, -iceSize/2, -iceSize/2, iceSize, iceSize);
+                    ctx.globalAlpha = 1;
+                } else {
+                    // Fallback: draw ice effect without sprite
+                    ctx.fillStyle = 'rgba(150, 200, 255, 0.6)';
+                    ctx.fillRect(-size/2 - 5, -size/2 - 5, size + 10, size + 10);
+                    
+                    // Add some ice crystal lines
+                    ctx.strokeStyle = 'rgba(200, 230, 255, 0.8)';
+                    ctx.lineWidth = 2;
+                    const crystalSize = size * 0.7;
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i * Math.PI) / 3;
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(Math.cos(angle) * crystalSize, Math.sin(angle) * crystalSize);
+                        ctx.stroke();
+                    }
+                }
+            }
+            
             // Reset shadow
             ctx.shadowBlur = 0;
         }
@@ -1868,7 +2004,7 @@ renderItemSlot() {
 
 // Améliorer aussi startItemSlotAnimation pour l'animation casino
 startItemSlotAnimation(finalItem) {
-    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick', 'lightning'];
+    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick', 'lightning', 'icebeam'];
     
     // Stocker l'animation en cours
     this.itemSlotAnimation = {
@@ -2140,7 +2276,8 @@ startItemSlotAnimation(finalItem) {
             'superboost': 'SUPER BOOST',
             'healthpack': 'HEALTH PACK',
             'poisonslick': 'POISON SLICK',
-            'lightning': 'LIGHTNING'
+            'lightning': 'LIGHTNING',
+            'icebeam': 'ICE BEAM'
         };
         
         const itemName = itemNames[this.itemNotification.type] || this.itemNotification.type.toUpperCase();

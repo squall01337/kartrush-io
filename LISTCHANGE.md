@@ -224,3 +224,30 @@ When starting a new session, ask these questions to quickly understand the proje
   - Multi-point detection system checks 9 points around kart perimeter
   - Requires ~75% of kart (7 out of 9 points) inside void zone to trigger
   - More forgiving edge detection prevents accidental falls
+
+### Ice Beam Item (New)
+- **Effect**: Fires a straight beam that freezes players on contact
+- **Mechanics**:
+  - One-shot beam fired in player's facing direction
+  - Starts 5 pixels in front of the kart
+  - Effectively infinite range (5000px) until hitting a wall
+  - Can freeze multiple players in the same trajectory
+  - Frozen players slide in their current direction for 3 seconds
+  - Frozen players cannot steer or control their kart
+  - Hit detection radius: 40 pixels
+- **Visual Effects**:
+  - 3-part sprite system: base (bottom), core (stretchable middle), tip (top)
+  - Beam width: 100 pixels
+  - Beam grows at 25 pixels/frame
+  - Gradual fade out effect as beam expires (0.8 second lifetime)
+  - Ice overlay on frozen players with 65% opacity (ice.png)
+  - Falls back to crystalline effect if ice.png missing
+- **Drop Rate**: Currently 80% for testing (needs balancing)
+- **Sprite Location**: Mid-mid position in items_icons.png grid (row 1, col 1)
+- **Audio**: 
+  - Firing: icebeam.mp3
+  - Player frozen: frozen.mp3
+
+### Bomb Size Update
+- **Visual Size**: Increased by 15% (now 46x46 pixels, was 40x40)
+- **Explosion Radius**: Increased by 15% (now 57.5 pixels, was 50)

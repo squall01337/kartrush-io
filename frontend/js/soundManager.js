@@ -33,7 +33,9 @@ class SoundManager {
             slickCrossing: 0.5,
             lightningStrike: 0.9,
             wrongDirection: 0.1,
-            falling: 0.7
+            falling: 0.7,
+            iceBeamFire: 0.8,
+            iceBeamHit: 0.7
 
         };
         
@@ -83,6 +85,10 @@ class SoundManager {
         this.sounds.wrongDirection = new Audio('assets/audio/wrongdirection.mp3');
         this.sounds.wrongDirection.loop = true;
         this.sounds.falling = new Audio('assets/audio/falling.mp3');
+        
+        // Ice beam sounds
+        this.sounds.iceBeamFire = new Audio('assets/audio/icebeam.mp3');
+        this.sounds.iceBeamHit = new Audio('assets/audio/frozen.mp3');
 
     }
     
@@ -327,6 +333,24 @@ class SoundManager {
             lightning.volume = this.getEffectiveVolume() * this.volumeMultipliers.lightningStrike;
             lightning.currentTime = 0;
             lightning.play().catch(e => console.log('Erreur lecture lightning_strike:', e));
+        }
+    }
+    
+    playIceBeamFire() {
+        const iceBeam = this.sounds.iceBeamFire;
+        if (iceBeam) {
+            iceBeam.volume = this.getEffectiveVolume() * this.volumeMultipliers.iceBeamFire;
+            iceBeam.currentTime = 0;
+            iceBeam.play().catch(e => console.log('Erreur lecture ice_beam_fire:', e));
+        }
+    }
+    
+    playIceBeamHit() {
+        const iceHit = this.sounds.iceBeamHit;
+        if (iceHit) {
+            iceHit.volume = this.getEffectiveVolume() * this.volumeMultipliers.iceBeamHit;
+            iceHit.currentTime = 0;
+            iceHit.play().catch(e => console.log('Erreur lecture ice_beam_hit:', e));
         }
     }
     

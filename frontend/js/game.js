@@ -1682,6 +1682,11 @@ class GameEngine {
                 ctx.restore();
             }
             
+            // Render exhaust flames when accelerating
+            if (player.speed > 0.5 && !player.isDead && !player.isFrozen) {
+                this.renderExhaustFlames(ctx, player, size);
+            }
+            
             const cachedSprite = this.spriteCache.get(player.color);
             
             if (cachedSprite) {
@@ -2295,6 +2300,95 @@ startItemSlotAnimation(finalItem) {
         ctx.fillText(itemName, centerX, centerY + 35 * this.scale);
         
         ctx.restore();
+    }
+    
+    renderExhaustFlames(ctx, player, kartSize) {
+        // Time-based animation
+        const time = Date.now() * 0.001;
+        const speedFactor = Math.min(player.speed / 10, 1); // Normalize speed
+        
+        // Two exhaust positions (rear left and rear right)
+        // x negative = behind the kart (kart faces right at angle 0)
+        const exhaustPositions = [
+            { x: -kartSize * 0.5, y: -kartSize * 0.2 },  // Left exhaust (further back and more to the left)
+            { x: -kartSize * 0.5, y: kartSize * 0.2 }    // Right exhaust (further back and more to the right)
+        ];
+        
+        exhaustPositions.forEach((pos, index) => {
+            ctx.save();
+            ctx.translate(pos.x, pos.y);
+            
+            // Draw multiple flame segments for each exhaust
+            const segmentCount = 5;
+            for (let i = 0; i < segmentCount; i++) {
+                const segmentTime = time * 8 + i * 0.5 + index * Math.PI;
+                const age = i / segmentCount;
+                
+                // Flame properties with variation
+                const baseSize = 12 * speedFactor;  // Increased from 8
+                const flameHeight = (20 + Math.sin(segmentTime) * 5) * speedFactor * (1 - age * 0.3);  // Increased from 15
+                const flameWidth = baseSize * (1 - age * 0.5);  // Less width reduction
+                const curve = Math.sin(segmentTime * 2) * 3 * (1 - age);
+                
+                // Flame position along trail (extending backward)
+                const flameX = -i * 6 * speedFactor;  // Negative X = behind the kart
+                const flameY = curve;  // Curve is now on Y axis for left/right wobble
+                
+                // Create gradient for flame (horizontal orientation)
+                const gradient = ctx.createRadialGradient(
+                    flameX - flameHeight * 0.3, flameY,
+                    0,
+                    flameX - flameHeight, flameY,
+                    flameWidth
+                );
+                
+                // Flame colors from hot to cool
+                const opacity = (1 - age * 0.6) * speedFactor * 1.2;  // More opaque
+                if (i === 0) {
+                    // Hottest part (white-blue core)
+                    gradient.addColorStop(0, `rgba(200, 220, 255, ${opacity})`);
+                    gradient.addColorStop(0.3, `rgba(100, 150, 255, ${opacity * 0.8})`);
+                    gradient.addColorStop(0.6, `rgba(50, 100, 255, ${opacity * 0.5})`);
+                    gradient.addColorStop(1, 'transparent');
+                } else if (i < 3) {
+                    // Blue flame
+                    gradient.addColorStop(0, `rgba(100, 150, 255, ${opacity * 0.8})`);
+                    gradient.addColorStop(0.5, `rgba(50, 100, 200, ${opacity * 0.5})`);
+                    gradient.addColorStop(1, 'transparent');
+                } else {
+                    // Cooler orange-red tips
+                    gradient.addColorStop(0, `rgba(255, 150, 50, ${opacity * 0.6})`);
+                    gradient.addColorStop(0.5, `rgba(255, 100, 0, ${opacity * 0.3})`);
+                    gradient.addColorStop(1, 'transparent');
+                }
+                
+                ctx.fillStyle = gradient;
+                
+                // Draw flame segment as horizontal curved teardrop shape
+                ctx.beginPath();
+                ctx.moveTo(flameX, flameY - flameWidth/2);
+                ctx.quadraticCurveTo(
+                    flameX - flameHeight * 0.3, flameY - flameWidth * 0.7,
+                    flameX - flameHeight, flameY
+                );
+                ctx.quadraticCurveTo(
+                    flameX - flameHeight * 0.3, flameY + flameWidth * 0.7,
+                    flameX, flameY + flameWidth/2
+                );
+                ctx.closePath();
+                ctx.fill();
+                
+                // Add glow effect for first segments
+                if (i < 2) {
+                    ctx.shadowColor = 'rgba(100, 150, 255, 0.5)';
+                    ctx.shadowBlur = 10 * speedFactor;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            }
+            
+            ctx.restore();
+        });
     }
     
     renderWrongWayAlert() {

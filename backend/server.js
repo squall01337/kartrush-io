@@ -779,6 +779,7 @@ class Player {
         this.respawnTime = 0;
         this.invulnerableTime = 0; // Invulnérabilité après respawn
         this.lastDamageTime = 0;
+        this.justUsedItem = false; // Flag to delay item pickup by one tick
         
         // Pour le respawn au checkpoint
         this.lastValidatedCheckpoint = 0;
@@ -973,6 +974,7 @@ class Player {
         this.frozenUntil = 0;
         this.frozenVelocity = { x: 0, y: 0 };
         this.frozenEventSent = false;
+        this.justUsedItem = false; // Clear the flag on respawn
         
         // Reset drift state
         this.isDrifting = false;
@@ -2118,6 +2120,12 @@ class Room {
     checkItemBoxCollisions(player) {
         if (player.item !== null || player.isDead) return; // Déjà un objet ou mort
         
+        // Skip one tick after using an item to ensure client sees the transition
+        if (player.justUsedItem) {
+            player.justUsedItem = false;
+            return;
+        }
+        
         const playerRadius = GAME_CONFIG.KART_SIZE;
         const boxRadius = 16;
         
@@ -2249,6 +2257,7 @@ class Room {
         
         const itemType = player.item;
         player.item = null; // Consommer l'objet
+        player.justUsedItem = true; // Set flag to skip next collision check
         
         switch (itemType) {
             case 'bomb':

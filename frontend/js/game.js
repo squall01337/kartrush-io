@@ -942,8 +942,8 @@ class GameEngine {
         ctx.resetTransform();
         
         // Ajuster les positions et largeurs pour mieux centrer le texte
-        const boxWidth = 220 * this.scale;
-        const boxHeight = 85 * this.scale;
+        const boxWidth = 242 * this.scale;  // Increased by 10%
+        const boxHeight = 94 * this.scale;  // Increased by 10%
         const padding = 10 * this.scale;
         const infoX = this.canvas.width - boxWidth - (20 * this.scale);
         const infoY = 20 * this.scale;
@@ -988,7 +988,7 @@ class GameEngine {
         
         // Texte aligné à gauche avec padding
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = `${16 * this.scale}px Arial`;
+        ctx.font = `${18 * this.scale}px Arial`;  // Increased by 10%
         ctx.textAlign = 'left';
         
         // Ajouter une légère ombre au texte pour la lisibilité
@@ -998,11 +998,11 @@ class GameEngine {
         const textX = infoX + padding;
         
         // Position
-        ctx.fillText(`🏆 Position: ${currentPlayer.position}/${this.gameState.players.length}`, textX, infoY + 22 * this.scale);
+        ctx.fillText(`🏆 Position: ${currentPlayer.position}/${this.gameState.players.length}`, textX, infoY + 24 * this.scale);
         
         // Laps
         const displayLap = currentPlayer.lap === 0 ? 0 : currentPlayer.lap;
-        ctx.fillText(`🏁 Lap: ${displayLap}/${currentPlayer.lapsToWin}`, textX, infoY + 44 * this.scale);
+        ctx.fillText(`🏁 Lap: ${displayLap}/${currentPlayer.lapsToWin}`, textX, infoY + 50 * this.scale);
         
         // Timer avec temps restant
         const minutes = Math.floor(this.gameState.gameTime / 60000);
@@ -1018,7 +1018,7 @@ class GameEngine {
             // Changer la couleur selon le temps restant
             if (remainingSeconds < 60) {
                 ctx.fillStyle = '#ff4444';
-                ctx.font = `bold ${16 * this.scale}px Arial`;
+                ctx.font = `bold ${18 * this.scale}px Arial`;  // Increased by 10%
                 ctx.shadowColor = 'rgba(255, 68, 68, 0.5)';
                 ctx.shadowBlur = 4 * this.scale;
             } else if (remainingSeconds < 120) {
@@ -1030,7 +1030,7 @@ class GameEngine {
             timeString += ` (${remainingMinutes}:${remainingSecondsOnly.toString().padStart(2, '0')})`;
         }
         
-        ctx.fillText(timeString, textX, infoY + 66 * this.scale);
+        ctx.fillText(timeString, textX, infoY + 76 * this.scale);
         
         ctx.restore();
     }
@@ -1044,8 +1044,8 @@ class GameEngine {
         ctx.save();
         
         // Position en bas à droite
-        const barWidth = 200 * this.scale;
-        const barHeight = 25 * this.scale;
+        const barWidth = 253 * this.scale;  // Increased by 26.5% total (15% + 10%)
+        const barHeight = 32 * this.scale;  // Increased by 26.5% total (15% + 10%)
         const padding = 20 * this.scale;
         const x = this.canvas.width - barWidth - padding;
         const y = this.canvas.height - barHeight - padding;
@@ -1117,7 +1117,7 @@ class GameEngine {
         
         // Texte HP
         ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${14 * this.scale}px Arial`;
+        ctx.font = `bold ${18 * this.scale}px Arial`;  // Increased by 26.5% total (matching HP bar)
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
@@ -1968,7 +1968,7 @@ renderItemSlot() {
     ctx.save();
     
     // Position en bas à gauche
-    const slotSize = 70 * this.scale;
+    const slotSize = 97 * this.scale;  // Increased by 38% total
     const padding = 20 * this.scale;
     const x = padding;
     const y = this.canvas.height - slotSize - padding;
@@ -1999,7 +1999,7 @@ renderItemSlot() {
         
         if (itemIcon) {
             // Centrer l'icône dans la case
-            const iconSize = 50 * this.scale;
+            const iconSize = 69 * this.scale;  // Increased by 38% total (20% + 15%)
             const iconX = x + (slotSize - iconSize) / 2;
             const iconY = y + (slotSize - iconSize) / 2;
             
@@ -2028,7 +2028,7 @@ renderItemSlot() {
         
         // Texte "SPACE" en dessous
         ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = `${12 * this.scale}px Arial`;
+        ctx.font = `${16 * this.scale}px Arial`;  // Increased by 38% total (matching item slot)
         ctx.textAlign = 'center';
         ctx.fillText('SPACE', x + slotSize / 2, y + slotSize + 15 * this.scale);
     }
@@ -2091,7 +2091,7 @@ startItemSlotAnimation(finalItem) {
         ctx.save();
         
         // Position en bas à gauche
-        const slotSize = 70 * this.scale;
+        const slotSize = 97 * this.scale;  // Increased by 38% total (20% + 15%)
         const padding = 20 * this.scale;
         const x = padding;
         const y = this.canvas.height - slotSize - padding;
@@ -2128,7 +2128,7 @@ startItemSlotAnimation(finalItem) {
         
         const itemIcon = this.getItemIcon(currentItem);
         if (itemIcon) {
-            const iconSize = 50 * this.scale;
+            const iconSize = 69 * this.scale;  // Increased by 38% total (20% + 15%)
             ctx.drawImage(itemIcon, -iconSize / 2, -iconSize / 2, iconSize, iconSize);
         } else {
             const itemIcons = {

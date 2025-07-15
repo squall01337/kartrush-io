@@ -350,7 +350,9 @@ class GameEngine {
             'superboost': { row: 0, col: 1 },  // 2ème de la 1ère ligne
             'poisonslick': { row: 2, col: 1 }, // 2ème de la 3ème ligne (bottom-mid)
             'lightning': { row: 1, col: 2 },   // 3ème de la 2ème ligne (middle-right)
-            'icebeam': { row: 1, col: 1 }      // 2ème de la 2ème ligne (mid-mid)
+            'icebeam': { row: 1, col: 1 },     // 2ème de la 2ème ligne (mid-mid)
+            'sideforce': { row: 2, col: 2 },   // 3ème de la 3ème ligne (bottom-right)
+            'rotorshield': { row: 0, col: 2 }  // 3ème de la 1ère ligne (top-right)
         };
         
         const pos = positions[itemType];
@@ -1727,6 +1729,11 @@ class GameEngine {
                 }
             }
             
+            // Render Rotor Shield if active
+            if (player.hasShield) {
+                this.renderRotorShield(ctx, player, size);
+            }
+            
             // Reset shadow
             ctx.shadowBlur = 0;
         }
@@ -1767,11 +1774,33 @@ class GameEngine {
                 this.renderExplosion(ctx, explosionData.x, explosionData.y, key);
             } else if (key.startsWith('lightning_')) {
                 // If we have a playerId, follow the player; otherwise use static position
-                if (explosionData.playerId && this.gameState.players[explosionData.playerId]) {
-                    const player = this.gameState.players[explosionData.playerId];
-                    this.renderLightningEffect(ctx, player.x, player.y, key);
+                if (explosionData.playerId) {
+                    const player = this.gameState.players.find(p => p.id === explosionData.playerId);
+                    if (player) {
+                        this.renderLightningEffect(ctx, player.x, player.y, key);
+                    } else {
+                        this.renderLightningEffect(ctx, explosionData.x, explosionData.y, key);
+                    }
                 } else {
                     this.renderLightningEffect(ctx, explosionData.x, explosionData.y, key);
+                }
+            } else if (key.startsWith('sideforce_')) {
+                this.renderSideForceEffect(ctx, explosionData, key);
+            } else if (key.startsWith('push_')) {
+                // Render push effect on affected player
+                if (explosionData.playerId) {
+                    const player = this.gameState.players.find(p => p.id === explosionData.playerId);
+                    if (player) {
+                        this.renderPushEffect(ctx, player, explosionData);
+                    }
+                }
+            } else if (key.startsWith('shieldblock_')) {
+                // Render shield block effect on player
+                if (explosionData.playerId) {
+                    const player = this.gameState.players.find(p => p.id === explosionData.playerId);
+                    if (player) {
+                        this.renderShieldBlockEffect(ctx, player, explosionData);
+                    }
                 }
             }
         }
@@ -2009,7 +2038,7 @@ renderItemSlot() {
 
 // Améliorer aussi startItemSlotAnimation pour l'animation casino
 startItemSlotAnimation(finalItem) {
-    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick', 'lightning', 'icebeam'];
+    const items = ['bomb', 'rocket', 'superboost', 'healthpack', 'poisonslick', 'lightning', 'icebeam', 'sideforce', 'rotorshield'];
     
     // Stocker l'animation en cours
     this.itemSlotAnimation = {
@@ -2282,7 +2311,9 @@ startItemSlotAnimation(finalItem) {
             'healthpack': 'HEALTH PACK',
             'poisonslick': 'POISON SLICK',
             'lightning': 'LIGHTNING',
-            'icebeam': 'ICE BEAM'
+            'icebeam': 'ICE BEAM',
+            'sideforce': 'SIDE FORCE',
+            'rotorshield': 'ROTOR SHIELD'
         };
         
         const itemName = itemNames[this.itemNotification.type] || this.itemNotification.type.toUpperCase();
@@ -2576,6 +2607,400 @@ startItemSlotAnimation(finalItem) {
                 });
             }
         }
+    }
+    
+    createSideForceEffect(x, y, angle) {
+        // Create the main side force wave effect
+        const key = `sideforce_${Date.now()}_${Math.random()}`;
+        
+        this.damageEffects.set(key, {
+            type: 'sideforce',
+            x: x,
+            y: y,
+            angle: angle,
+            startTime: Date.now(),
+            duration: 1200 // 1.2 seconds
+        });
+        
+        // Add stylish magnetic field particles
+        if (this.particleSystem && this.particleSystem.particles) {
+            // Create multiple waves for depth
+            for (let wave = 0; wave < 3; wave++) {
+                const waveDelay = wave * 100; // Stagger the waves
+                
+                setTimeout(() => {
+                    for (let side = -1; side <= 1; side += 2) { // -1 for left, 1 for right
+                        const sideAngle = angle + (side * Math.PI / 2);
+                        
+                        // Create energy burst at origin
+                        for (let i = 0; i < 8; i++) {
+                            const burstAngle = sideAngle + (Math.random() - 0.5) * Math.PI / 4;
+                            const speed = 150 + Math.random() * 100;
+                            
+                            this.particleSystem.particles.push({
+                                x: x,
+                                y: y,
+                                vx: Math.cos(burstAngle) * speed,
+                                vy: Math.sin(burstAngle) * speed,
+                                size: 6 - wave * 1.5,
+                                color: wave === 0 ? '#ffffff' : (wave === 1 ? '#cc66ff' : '#9400d3'),
+                                type: 'spark',
+                                life: 0.6,
+                                maxLife: 0.6
+                            });
+                        }
+                        
+                        // Create curved force lines
+                        for (let i = 0; i < 15; i++) {
+                            const arcProgress = i / 14;
+                            const arcAngle = sideAngle + (arcProgress - 0.5) * Math.PI / 2.5;
+                            const radius = 30 + arcProgress * 200;
+                            const speed = 80 + arcProgress * 40;
+                            
+                            this.particleSystem.particles.push({
+                                x: x + Math.cos(arcAngle) * radius,
+                                y: y + Math.sin(arcAngle) * radius,
+                                vx: Math.cos(arcAngle) * speed,
+                                vy: Math.sin(arcAngle) * speed,
+                                size: 5 - wave,
+                                color: wave === 0 ? '#cc66ff' : '#9400d3',
+                                type: 'magnetic',
+                                life: 0.8 - wave * 0.1,
+                                maxLife: 0.8 - wave * 0.1
+                            });
+                        }
+                    }
+                }, waveDelay);
+            }
+        }
+    }
+    
+    createPushEffect(playerId, pushDirection, pushAngle) {
+        // Create push effect for affected player
+        const key = `push_${playerId}_${Date.now()}`;
+        
+        this.damageEffects.set(key, {
+            type: 'push',
+            playerId: playerId,
+            pushDirection: pushDirection,
+            pushAngle: pushAngle,
+            startTime: Date.now(),
+            duration: 500 // 0.5 seconds
+        });
+    }
+    
+    renderSideForceEffect(ctx, effectData, effectKey) {
+        const progress = (Date.now() - effectData.startTime) / effectData.duration;
+        if (progress > 1) {
+            this.damageEffects.delete(effectKey);
+            return;
+        }
+        
+        ctx.save();
+        ctx.translate(effectData.x, effectData.y);
+        ctx.rotate(effectData.angle);
+        
+        // Create multiple expanding rings for depth
+        for (let ring = 0; ring < 3; ring++) {
+            const ringProgress = Math.max(0, progress - ring * 0.1);
+            if (ringProgress > 1) continue;
+            
+            const maxRadius = 250 + ring * 30;
+            const currentRadius = maxRadius * ringProgress;
+            const alpha = (1 - ringProgress) * (1 - ring * 0.2);
+            
+            // Gradient stroke for the waves
+            const gradient = ctx.createRadialGradient(0, 0, currentRadius * 0.8, 0, 0, currentRadius);
+            gradient.addColorStop(0, `rgba(204, 102, 255, ${alpha * 0.8})`); // Light purple
+            gradient.addColorStop(0.5, `rgba(148, 0, 211, ${alpha * 0.6})`); // Purple
+            gradient.addColorStop(1, `rgba(148, 0, 211, 0)`); // Fade out
+            
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = (8 - ring * 2) * this.scale * (1 - ringProgress * 0.5);
+            
+            // Left side wave with glow
+            ctx.shadowColor = '#cc66ff';
+            ctx.shadowBlur = 20 * (1 - ringProgress);
+            ctx.beginPath();
+            ctx.arc(0, 0, currentRadius, -Math.PI * 0.8, -Math.PI * 0.2, false);
+            ctx.stroke();
+            
+            // Right side wave with glow
+            ctx.beginPath();
+            ctx.arc(0, 0, currentRadius, Math.PI * 0.2, Math.PI * 0.8, false);
+            ctx.stroke();
+            
+            // Add energy lines
+            if (ring === 0 && ringProgress < 0.5) {
+                ctx.globalAlpha = alpha * 0.6;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2 * this.scale;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#cc66ff';
+                
+                // Draw energy lines radiating outward
+                for (let i = 0; i < 8; i++) {
+                    const lineAngle = (i / 8) * Math.PI - Math.PI / 2;
+                    const lineLength = currentRadius * 0.8;
+                    
+                    // Only draw lines on the sides
+                    if (Math.abs(lineAngle) < Math.PI * 0.3) continue;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(Math.cos(lineAngle) * currentRadius * 0.3, Math.sin(lineAngle) * currentRadius * 0.3);
+                    ctx.lineTo(Math.cos(lineAngle) * lineLength, Math.sin(lineAngle) * lineLength);
+                    ctx.stroke();
+                }
+            }
+        }
+        
+        // Central burst effect
+        if (progress < 0.3) {
+            const burstAlpha = 1 - (progress / 0.3);
+            const burstSize = 80 * (1 + progress);
+            
+            const burstGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, burstSize);
+            burstGradient.addColorStop(0, `rgba(255, 255, 255, ${burstAlpha * 0.8})`);
+            burstGradient.addColorStop(0.3, `rgba(204, 102, 255, ${burstAlpha * 0.6})`);
+            burstGradient.addColorStop(1, `rgba(148, 0, 211, 0)`);
+            
+            ctx.fillStyle = burstGradient;
+            ctx.fillRect(-burstSize, -burstSize, burstSize * 2, burstSize * 2);
+        }
+        
+        ctx.restore();
+    }
+    
+    renderPushEffect(ctx, player, effectData) {
+        if (!player) return;
+        
+        const progress = (Date.now() - effectData.startTime) / effectData.duration;
+        if (progress > 1) {
+            this.damageEffects.delete(`push_${player.id}_${effectData.startTime}`);
+            return;
+        }
+        
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        
+        // Create a shockwave ring around the player
+        const shockwaveRadius = 40 * (1 + progress * 2);
+        const shockwaveAlpha = (1 - progress) * 0.6;
+        
+        const shockGradient = ctx.createRadialGradient(0, 0, shockwaveRadius * 0.7, 0, 0, shockwaveRadius);
+        shockGradient.addColorStop(0, `rgba(204, 102, 255, 0)`);
+        shockGradient.addColorStop(0.7, `rgba(204, 102, 255, ${shockwaveAlpha})`);
+        shockGradient.addColorStop(1, `rgba(148, 0, 211, 0)`);
+        
+        ctx.strokeStyle = shockGradient;
+        ctx.lineWidth = 3 * this.scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, shockwaveRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Draw stylized motion blur/trail
+        const trailLength = 60 + progress * 40;
+        const trailAlpha = (1 - progress) * 0.7;
+        
+        ctx.globalAlpha = trailAlpha;
+        
+        // Create gradient for trail
+        const trailGradient = ctx.createLinearGradient(
+            Math.cos(effectData.pushAngle + Math.PI) * 20,
+            Math.sin(effectData.pushAngle + Math.PI) * 20,
+            Math.cos(effectData.pushAngle + Math.PI) * (20 + trailLength),
+            Math.sin(effectData.pushAngle + Math.PI) * (20 + trailLength)
+        );
+        trailGradient.addColorStop(0, `rgba(255, 255, 255, 0)`);
+        trailGradient.addColorStop(0.3, `rgba(204, 102, 255, ${trailAlpha * 0.8})`);
+        trailGradient.addColorStop(0.7, `rgba(148, 0, 211, ${trailAlpha * 0.5})`);
+        trailGradient.addColorStop(1, `rgba(148, 0, 211, 0)`);
+        
+        // Draw multiple trail segments for depth
+        for (let i = 0; i < 7; i++) {
+            const offset = (i - 3) * 8;
+            const segmentAlpha = 1 - Math.abs(i - 3) / 3;
+            
+            ctx.strokeStyle = trailGradient;
+            ctx.lineWidth = (5 - Math.abs(i - 3)) * this.scale * segmentAlpha;
+            ctx.globalAlpha = trailAlpha * segmentAlpha;
+            
+            ctx.beginPath();
+            ctx.moveTo(
+                Math.cos(effectData.pushAngle + Math.PI) * 15 + Math.sin(effectData.pushAngle) * offset,
+                Math.sin(effectData.pushAngle + Math.PI) * 15 - Math.cos(effectData.pushAngle) * offset
+            );
+            ctx.lineTo(
+                Math.cos(effectData.pushAngle + Math.PI) * (15 + trailLength) + Math.sin(effectData.pushAngle) * offset,
+                Math.sin(effectData.pushAngle + Math.PI) * (15 + trailLength) - Math.cos(effectData.pushAngle) * offset
+            );
+            ctx.stroke();
+        }
+        
+        // Add spark particles at the player position
+        if (progress < 0.3 && this.particleSystem && this.particleSystem.particles) {
+            for (let i = 0; i < 3; i++) {
+                this.particleSystem.particles.push({
+                    x: player.x + (Math.random() - 0.5) * 20,
+                    y: player.y + (Math.random() - 0.5) * 20,
+                    vx: Math.cos(effectData.pushAngle + Math.PI) * (50 + Math.random() * 50),
+                    vy: Math.sin(effectData.pushAngle + Math.PI) * (50 + Math.random() * 50),
+                    size: 3,
+                    color: '#cc66ff',
+                    type: 'spark',
+                    life: 0.4,
+                    maxLife: 0.4
+                });
+            }
+        }
+        
+        ctx.restore();
+    }
+    
+    renderRotorShield(ctx, player, size) {
+        // Save context for shield rendering
+        ctx.save();
+        
+        // Shield orbits around the kart
+        const time = Date.now() * 0.003; // Rotation speed
+        const orbitRadius = size * 0.8; // Distance from kart center
+        const shieldSize = size * 0.6; // Shield orb size (increased from 0.4)
+        
+        // Calculate shield position
+        const shieldX = Math.cos(time) * orbitRadius;
+        const shieldY = Math.sin(time) * orbitRadius;
+        
+        ctx.translate(shieldX, shieldY);
+        
+        // Get the shield icon
+        const shieldIcon = this.getItemIcon('rotorshield');
+        if (shieldIcon) {
+            // Draw the shield sprite smaller and with some transparency
+            ctx.globalAlpha = 0.9;
+            ctx.drawImage(shieldIcon, -shieldSize/2, -shieldSize/2, shieldSize, shieldSize);
+            ctx.globalAlpha = 1;
+        } else {
+            // Fallback: draw a circular shield
+            const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, shieldSize/2);
+            gradient.addColorStop(0, 'rgba(100, 200, 255, 0.8)');
+            gradient.addColorStop(0.5, 'rgba(50, 150, 255, 0.6)');
+            gradient.addColorStop(1, 'rgba(0, 100, 255, 0.3)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, shieldSize/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = 'rgba(150, 220, 255, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        // Add a glowing trail effect
+        ctx.globalAlpha = 0.3;
+        for (let i = 1; i <= 3; i++) {
+            const trailTime = time - i * 0.1;
+            const trailX = Math.cos(trailTime) * orbitRadius - shieldX;
+            const trailY = Math.sin(trailTime) * orbitRadius - shieldY;
+            
+            const trailGradient = ctx.createRadialGradient(trailX, trailY, 0, trailX, trailY, shieldSize/2);
+            trailGradient.addColorStop(0, 'rgba(100, 200, 255, 0.4)');
+            trailGradient.addColorStop(1, 'rgba(100, 200, 255, 0)');
+            
+            ctx.fillStyle = trailGradient;
+            ctx.beginPath();
+            ctx.arc(trailX, trailY, shieldSize/2 * (1 - i * 0.2), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+    
+    createShieldBlockEffect(playerId, blockedType) {
+        // Create a shield block visual effect
+        const key = `shieldblock_${playerId}_${Date.now()}`;
+        
+        this.damageEffects.set(key, {
+            type: 'shieldblock',
+            playerId: playerId,
+            blockedType: blockedType,
+            startTime: Date.now(),
+            duration: 1500  // Increased from 800ms to 1.5s for better readability
+        });
+        
+        // Add particles for shield break effect
+        if (this.particleSystem && this.particleSystem.particles) {
+            const player = this.gameState.players.find(p => p.id === playerId);
+            if (player) {
+                // Create shield shatter particles
+                for (let i = 0; i < 12; i++) {
+                    const angle = (Math.PI * 2) * (i / 12);
+                    const speed = 100 + Math.random() * 50;
+                    
+                    this.particleSystem.particles.push({
+                        x: player.x,
+                        y: player.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        size: 4,
+                        color: '#66ccff',
+                        type: 'spark',
+                        life: 0.6,
+                        maxLife: 0.6
+                    });
+                }
+            }
+        }
+    }
+    
+    renderShieldBlockEffect(ctx, player, effectData) {
+        if (!player) return;
+        
+        const progress = (Date.now() - effectData.startTime) / effectData.duration;
+        if (progress > 1) {
+            this.damageEffects.delete(`shieldblock_${player.id}_${effectData.startTime}`);
+            return;
+        }
+        
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        
+        // Create a shield burst effect
+        const burstRadius = 50 + progress * 30;
+        const alpha = 1 - progress;
+        
+        // Draw expanding ring
+        ctx.strokeStyle = `rgba(100, 200, 255, ${alpha * 0.8})`;
+        ctx.lineWidth = 4 * this.scale * (1 - progress * 0.5);
+        ctx.shadowColor = '#66ccff';
+        ctx.shadowBlur = 20 * (1 - progress);
+        
+        ctx.beginPath();
+        ctx.arc(0, 0, burstRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Draw inner ring
+        ctx.strokeStyle = `rgba(150, 220, 255, ${alpha * 0.6})`;
+        ctx.lineWidth = 2 * this.scale;
+        ctx.beginPath();
+        ctx.arc(0, 0, burstRadius * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Add blocked type indicator
+        if (progress < 0.5) {
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${16 * this.scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = '#0088ff';
+            ctx.shadowBlur = 10;
+            
+            const blockedText = effectData.blockedType.toUpperCase() + ' BLOCKED!';
+            ctx.fillText(blockedText, 0, -40 * this.scale);
+        }
+        
+        ctx.restore();
     }
     
     renderLightningEffect(ctx, x, y, effectKey) {

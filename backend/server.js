@@ -547,7 +547,7 @@ class IceBeam {
         this.hitWall = false; // Track if we've hit a wall
     }
     
-    update(deltaTime, players, walls) {
+    update(deltaTime, players, walls, gracePeriodEndTime = null) {
         const elapsed = Date.now() - this.createdAt;
         
         // Check if beam has expired
@@ -591,13 +591,24 @@ class IceBeam {
             if (this.checkPlayerCollision(player)) {
                 this.hitPlayers.add(playerId);
                 
-                // Apply frozen effect
-                player.isFrozen = true;
-                player.frozenUntil = Date.now() + 3000; // 3 seconds
-                player.frozenVelocity = {
-                    x: Math.cos(player.angle) * player.speed,
-                    y: Math.sin(player.angle) * player.speed
-                };
+                // Check if shield blocks freeze
+                if (player.hasShield) {
+                    player.hasShield = false;
+                    // Need to store that we blocked this for the game loop to emit the event
+                    this.shieldBlockedPlayers = this.shieldBlockedPlayers || new Set();
+                    this.shieldBlockedPlayers.add(playerId);
+                } else {
+                    // Check grace period before applying freeze
+                    if (!gracePeriodEndTime || Date.now() >= gracePeriodEndTime) {
+                        // Apply frozen effect
+                        player.isFrozen = true;
+                        player.frozenUntil = Date.now() + 3000; // 3 seconds
+                        player.frozenVelocity = {
+                            x: Math.cos(player.angle) * player.speed,
+                            y: Math.sin(player.angle) * player.speed
+                        };
+                    }
+                }
             }
         }
     }
@@ -725,6 +736,8 @@ class Player {
         this.y = 300;
         this.angle = 0;
         this.speed = 0;
+        this.vx = 0; // Velocity components for physics
+        this.vy = 0;
         this.lap = 0;
         this.position = 1;
         this.item = null;
@@ -788,9 +801,17 @@ class Player {
         this.fallVelocityY = 0;
         this.canControl = true;
         
+        // Side force effect
+        this.sideForcePushed = false;
+        this.sideForcePushTime = 0;
+        
         // Lightning speed reduction
         this.speedReductionFactor = 1.0;
         this.speedReductionEndTime = 0;
+        
+        // Rotor shield
+        this.hasShield = false;
+        this.shieldActivatedTime = 0;
         
         // Ice beam frozen state
         this.isFrozen = false;
@@ -826,8 +847,20 @@ class Player {
     }
 
     // Nouvelle méthode pour infliger des dégâts
-    takeDamage(amount) {
+    takeDamage(amount, damageType = 'unknown', gracePeriodEndTime = null) {
+        // Check grace period at start of race
+        if (gracePeriodEndTime && Date.now() < gracePeriodEndTime) {
+            return false; // No damage during grace period
+        }
+        
         if (this.invulnerableTime > Date.now() || this.isDead || this.isSuperBoosting) return false;
+        
+        // Check if shield should block this damage
+        if (this.hasShield && damageType !== 'player_collision' && damageType !== 'crash' && damageType !== 'scrape') {
+            // Shield blocks the damage
+            this.hasShield = false;
+            return 'shield_blocked';
+        }
         
         const now = Date.now();
         // Cooldown de dégâts pour éviter le spam (200ms)
@@ -900,6 +933,10 @@ class Player {
         this.item = null; // Perdre l'objet en mourant
         this.isStunned = false;
         this.isSuperBoosting = false;
+        this.hasShield = false; // Clear shield on death
+        this.isBoosting = false; // Clear regular boost
+        this.boostEndTime = 0;
+        this.boostLevel = 0;
     }
     
     // Méthode pour respawn
@@ -943,12 +980,24 @@ class Player {
         this.driftAngle = 0;
     }
     
-    stun(duration) {
+    stun(duration, fromItemEffect = true, gracePeriodEndTime = null) {
+        // Check grace period at start of race
+        if (gracePeriodEndTime && Date.now() < gracePeriodEndTime) {
+            return false; // No stun during grace period
+        }
+        
         if (this.isSuperBoosting || this.invulnerableTime > Date.now()) return;
+        
+        // Check if shield blocks stun from item effects
+        if (this.hasShield && fromItemEffect) {
+            this.hasShield = false;
+            return 'shield_blocked';
+        }
         
         this.isStunned = true;
         this.stunnedUntil = Date.now() + duration;
         this.speed = 0;
+        return 'stunned';
     }
     
     startDrift(direction) {
@@ -1078,7 +1127,7 @@ class Player {
         this.counterSteerJump = 0;
     }
 
-    update(deltaTime) {
+    update(deltaTime, gracePeriodEndTime = null) {
         // Si mort, ne pas update
         if (this.isDead) return;
         
@@ -1144,7 +1193,7 @@ class Player {
             } else {
                 // Appliquer des dégâts toutes les 500ms
                 if (now - this.lastPoisonDamage > 500) {
-                    const result = this.takeDamage(5); // 5 damage every 500ms
+                    const result = this.takeDamage(5, 'poison', gracePeriodEndTime); // 5 damage every 500ms
                     this.lastPoisonDamage = now;
                     poisonDamageResult = { damage: 5, result: result };
                 }
@@ -1278,6 +1327,21 @@ class Player {
             this.y += Math.sin(moveAngle) * effectiveSpeed;
         }
         
+        // Apply any external velocity (from side force, etc)
+        if (this.vx !== 0 || this.vy !== 0) {
+            this.x += this.vx * deltaTime;
+            this.y += this.vy * deltaTime;
+            
+            // Apply friction to external velocity
+            const friction = 0.98; // Much less friction for stronger push
+            this.vx *= friction;
+            this.vy *= friction;
+            
+            // Reset very small velocities
+            if (Math.abs(this.vx) < 1) this.vx = 0;
+            if (Math.abs(this.vy) < 1) this.vy = 0;
+        }
+        
         // Limites de la piste
         this.x = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_WIDTH - GAME_CONFIG.KART_SIZE, this.x));
         this.y = Math.max(GAME_CONFIG.KART_SIZE, Math.min(GAME_CONFIG.TRACK_HEIGHT - GAME_CONFIG.KART_SIZE, this.y));
@@ -1373,6 +1437,7 @@ class Room {
         this.rematchTimer = null; // Timer pour le rematch
         this.selectedMap = 'random'; // Map sélectionnée par l'hôte - random par défaut
         this.actualMapId = null; // Map réellement chargée quand random est sélectionné
+        this.gracePeriodEndTime = null; // No damage until this time
         
         // NOUVEAU : Système d'objets
         this.itemBoxes = [];
@@ -1722,6 +1787,8 @@ class Room {
         // Démarrer le timer après 3 secondes (temps du countdown)
         setTimeout(() => {
             this.gameStartTime = Date.now();
+            // Grace period ends 2 seconds after "GO!"
+            this.gracePeriodEndTime = Date.now() + 2000;
         }, 8800);
         
         return true;
@@ -1766,7 +1833,7 @@ class Room {
             // Mettre à jour seulement les positions des joueurs
             for (let player of this.players.values()) {
                 if (!player.finished && !player.isDead) {
-                    const poisonDamageResult = player.update(deltaTime);
+                    const poisonDamageResult = player.update(deltaTime, this.gracePeriodEndTime);
                     player.raceTime = 0; // Garder à 0 tant que le timer n'a pas démarré
                     
                     // Check if poison damage occurred (even before race start)
@@ -1848,7 +1915,7 @@ class Room {
         
         // Mettre à jour les ice beams
         for (const [id, beam] of this.iceBeams) {
-            beam.update(deltaTime, this.players, trackData.continuousCurves);
+            beam.update(deltaTime, this.players, trackData.continuousCurves, this.gracePeriodEndTime);
             
             if (!beam.active) {
                 this.iceBeams.delete(id);
@@ -1861,6 +1928,18 @@ class Room {
                     endX: beam.endX,
                     endY: beam.endY
                 });
+                
+                // Check for shield blocks
+                if (beam.shieldBlockedPlayers) {
+                    for (const playerId of beam.shieldBlockedPlayers) {
+                        io.to(this.id).emit('shieldBlocked', {
+                            playerId: playerId,
+                            blockedType: 'icebeam',
+                            position: { x: this.players.get(playerId).x, y: this.players.get(playerId).y }
+                        });
+                    }
+                    beam.shieldBlockedPlayers.clear();
+                }
                 
                 // Emit frozen events for newly frozen players
                 for (const playerId of beam.hitPlayers) {
@@ -1909,14 +1988,24 @@ class Room {
                         if (now - lastAffected > 1000) { // Réappliquer après 1 seconde
                             slick.affectedPlayers.set(playerId, now);
                             
-                            // Appliquer l'effet de poison
-                            player.isPoisoned = true;
-                            player.poisonEndTime = now + 1000; // 1 second of poison after leaving
-                            
-                            io.to(this.id).emit('playerPoisoned', {
-                                playerId: playerId,
-                                slickId: id
-                            });
+                            // Check if shield blocks poison
+                            if (player.hasShield) {
+                                player.hasShield = false;
+                                io.to(this.id).emit('shieldBlocked', {
+                                    playerId: playerId,
+                                    blockedType: 'poison',
+                                    position: { x: player.x, y: player.y }
+                                });
+                            } else {
+                                // Appliquer l'effet de poison
+                                player.isPoisoned = true;
+                                player.poisonEndTime = now + 1000; // 1 second of poison after leaving
+                                
+                                io.to(this.id).emit('playerPoisoned', {
+                                    playerId: playerId,
+                                    slickId: id
+                                });
+                            }
                         }
                     }
                 }
@@ -1972,7 +2061,7 @@ class Room {
             
             // Mettre à jour seulement si pas mort
             if (!player.finished && !player.isDead) {
-                const poisonDamageResult = player.update(deltaTime);
+                const poisonDamageResult = player.update(deltaTime, this.gracePeriodEndTime);
                 player.raceTime = now - this.gameStartTime;
                 
                 // Check if poison damage occurred
@@ -2042,25 +2131,73 @@ class Room {
             if (distance < playerRadius + boxRadius) {
                 box.collect();
                 
-                // Déterminer l'objet aléatoire
+                // Déterminer l'objet aléatoire basé sur la position
                 const rand = Math.random();
                 let itemType;
                 
-                // TESTING: Mostly ice beam (80% ice beam for testing)
-                if (rand < 0.80) {
-                    itemType = 'icebeam';  // 80% chance for testing
-                } else if (rand < 0.84) {
-                    itemType = 'healthpack';  // 4% chance
-                } else if (rand < 0.88) {
-                    itemType = 'bomb';  // 4% chance
-                } else if (rand < 0.90) {
-                    itemType = 'rocket';  // 2% chance
-                } else if (rand < 0.92) {
-                    itemType = 'superboost';  // 2% chance
-                } else if (rand < 0.96) {
-                    itemType = 'lightning';  // 4% chance
+                // Get player's position and total number of active players
+                const playerPosition = player.position;
+                const activePlayers = Array.from(this.players.values()).filter(p => !p.isDead && !p.finished).length;
+                
+                // Position-based item distribution
+                if (playerPosition === activePlayers && activePlayers >= 3) {
+                    // Last place (6/6) - can get superboost
+                    if (rand < 0.30) {
+                        itemType = 'bomb';  // 30%
+                    } else if (rand < 0.50) {
+                        itemType = 'poisonslick';  // 20%
+                    } else if (rand < 0.65) {
+                        itemType = 'rocket';  // 15%
+                    } else if (rand < 0.75) {
+                        itemType = 'healthpack';  // 10%
+                    } else if (rand < 0.82) {
+                        itemType = 'sideforce';  // 7%
+                    } else if (rand < 0.88) {
+                        itemType = 'icebeam';  // 6%
+                    } else if (rand < 0.93) {
+                        itemType = 'rotorshield';  // 5%
+                    } else if (rand < 0.97) {
+                        itemType = 'lightning';  // 4%
+                    } else {
+                        itemType = 'superboost';  // 3% - VERY RARE
+                    }
+                } else if ((playerPosition === activePlayers || playerPosition === activePlayers - 1) && activePlayers >= 4) {
+                    // 5th or 6th place (5-6/6) - can get lightning
+                    if (rand < 0.30) {
+                        itemType = 'bomb';  // 30%
+                    } else if (rand < 0.50) {
+                        itemType = 'poisonslick';  // 20%
+                    } else if (rand < 0.65) {
+                        itemType = 'rocket';  // 15%
+                    } else if (rand < 0.75) {
+                        itemType = 'healthpack';  // 10%
+                    } else if (rand < 0.83) {
+                        itemType = 'sideforce';  // 8%
+                    } else if (rand < 0.90) {
+                        itemType = 'icebeam';  // 7%
+                    } else if (rand < 0.95) {
+                        itemType = 'rotorshield';  // 5%
+                    } else {
+                        itemType = 'lightning';  // 5%
+                    }
                 } else {
-                    itemType = 'poisonslick';  // 4% chance
+                    // Everyone else (1st-4th place or when not enough players)
+                    if (rand < 0.35) {
+                        itemType = 'bomb';  // 35% - MOST COMMON
+                    } else if (rand < 0.65) {
+                        itemType = 'poisonslick';  // 30% - MOST COMMON
+                    } else if (rand < 0.80) {
+                        itemType = 'rocket';  // 15% - 2ND MOST COMMON
+                    } else if (rand < 0.90) {
+                        itemType = 'healthpack';  // 10% - 2ND MOST COMMON
+                    } else if (rand < 0.94) {
+                        itemType = 'sideforce';  // 4% - LESS COMMON
+                    } else if (rand < 0.97) {
+                        itemType = 'icebeam';  // 3% - LESS COMMON
+                    } else {
+                        itemType = 'rotorshield';  // 3% - LESS COMMON
+                    }
+                    // NO LIGHTNING OR SUPERBOOST for top positions
                 }
                 
                 // Donner l'objet au joueur
@@ -2140,6 +2277,14 @@ class Room {
                 
             case 'icebeam':
                 this.useIceBeam(player);
+                break;
+                
+            case 'sideforce':
+                this.useSideForce(player);
+                break;
+                
+            case 'rotorshield':
+                this.useRotorShield(player);
                 break;
         }
         
@@ -2257,13 +2402,26 @@ class Room {
             
             // Only affect players with better position (lower number = ahead)
             if (targetPlayer.position < player.position) {
-                // Apply stun effect (1 second)
-                targetPlayer.isStunned = true;
-                targetPlayer.stunnedUntil = Date.now() + 1000;
-                
-                // Apply speed reduction (50% for 7 seconds)
-                targetPlayer.speedReductionFactor = 0.5;
-                targetPlayer.speedReductionEndTime = Date.now() + 7000;
+                // Check if shield blocks lightning
+                if (targetPlayer.hasShield) {
+                    targetPlayer.hasShield = false;
+                    io.to(this.id).emit('shieldBlocked', {
+                        playerId: targetPlayer.id,
+                        blockedType: 'lightning',
+                        position: { x: targetPlayer.x, y: targetPlayer.y }
+                    });
+                } else {
+                    // Check grace period before applying effects
+                    if (!this.gracePeriodEndTime || Date.now() >= this.gracePeriodEndTime) {
+                        // Apply stun effect (1 second)
+                        targetPlayer.isStunned = true;
+                        targetPlayer.stunnedUntil = Date.now() + 1000;
+                        
+                        // Apply speed reduction (50% for 7 seconds)
+                        targetPlayer.speedReductionFactor = 0.5;
+                        targetPlayer.speedReductionEndTime = Date.now() + 7000;
+                    }
+                }
                 
                 affectedPlayers.push({
                     playerId: targetPlayer.id,
@@ -2295,8 +2453,103 @@ class Room {
         });
     }
     
+    useSideForce(player) {
+        const affectedPlayers = [];
+        const SIDE_DETECTION_ANGLE = Math.PI / 6; // 30 degrees cone on each side
+        const SIDE_DETECTION_RANGE = 250; // Detection range increased
+        const PUSH_FORCE = 500; // MUCH stronger lateral force
+        
+        for (const [id, otherPlayer] of this.players) {
+            if (id === player.id || otherPlayer.isDead || otherPlayer.finished) continue;
+            
+            // Calculate relative position
+            const dx = otherPlayer.x - player.x;
+            const dy = otherPlayer.y - player.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > SIDE_DETECTION_RANGE) continue;
+            
+            // Calculate angle relative to player's facing direction
+            const angleToOther = Math.atan2(dy, dx);
+            let angleDiff = angleToOther - player.angle;
+            
+            // Normalize angle difference to [-PI, PI]
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            // Check if player is on the left side (around -90 degrees)
+            const isLeftSide = Math.abs(angleDiff + Math.PI/2) < SIDE_DETECTION_ANGLE;
+            // Check if player is on the right side (around +90 degrees)
+            const isRightSide = Math.abs(angleDiff - Math.PI/2) < SIDE_DETECTION_ANGLE;
+            
+            if (isLeftSide || isRightSide) {
+                // Check if shield blocks push
+                if (otherPlayer.hasShield) {
+                    otherPlayer.hasShield = false;
+                    io.to(this.id).emit('shieldBlocked', {
+                        playerId: otherPlayer.id,
+                        blockedType: 'sideforce',
+                        position: { x: otherPlayer.x, y: otherPlayer.y }
+                    });
+                } else {
+                    // Check grace period before applying push
+                    if (!this.gracePeriodEndTime || Date.now() >= this.gracePeriodEndTime) {
+                        // Calculate push direction (perpendicular to player's facing direction)
+                        const pushAngle = isLeftSide ? player.angle - Math.PI/2 : player.angle + Math.PI/2;
+                        
+                        // Apply the push force
+                        otherPlayer.vx = Math.cos(pushAngle) * PUSH_FORCE; // Set velocity directly instead of adding
+                        otherPlayer.vy = Math.sin(pushAngle) * PUSH_FORCE;
+                        
+                        // Also apply immediate position change for instant effect
+                        const instantPush = 20; // Immediate push distance
+                        otherPlayer.x += Math.cos(pushAngle) * instantPush;
+                        otherPlayer.y += Math.sin(pushAngle) * instantPush;
+                        
+                        // Mark player as being pushed for wall collision detection
+                        otherPlayer.sideForcePushed = true;
+                        otherPlayer.sideForcePushTime = Date.now();
+                        
+                        // NO STUN during push - only stun if they hit a wall
+                        
+                        affectedPlayers.push({
+                            playerId: id,
+                            pushDirection: isLeftSide ? 'left' : 'right',
+                            pushAngle: pushAngle
+                        });
+                    }
+                }
+            }
+        }
+        
+        // Emit side force event
+        io.to(this.id).emit('sideForceUsed', {
+            casterId: player.id,
+            casterX: player.x,
+            casterY: player.y,
+            casterAngle: player.angle,
+            affectedPlayers: affectedPlayers
+        });
+    }
+    
+    useRotorShield(player) {
+        // Activate the shield
+        player.hasShield = true;
+        player.shieldActivatedTime = Date.now();
+        
+        // Emit shield activation event
+        io.to(this.id).emit('shieldActivated', {
+            playerId: player.id
+        });
+    }
+    
     // Gérer l'explosion d'un projectile
     handleProjectileExplosion(projectile) {
+        // Track if the explosion should be shown (at least one player was affected)
+        let showExplosion = true;
+        let playersInRadius = 0;
+        let shieldsBlocked = 0;
+        
         // Vérifier les joueurs dans le rayon
         for (const [_, player] of this.players) {
             if (player.isDead) continue;
@@ -2306,41 +2559,68 @@ class Room {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < projectile.radius) {
+                playersInRadius++;
+                
                 // Infliger les dégâts
-                const result = player.takeDamage(projectile.damage, projectile.type);
+                const result = player.takeDamage(projectile.damage, projectile.type, this.gracePeriodEndTime);
                 
-                // Stun si pas mort
-                if (result !== 'death') {
-                    const stunDuration = projectile.type === 'bomb' ? 2000 : 3000;
-                    player.stun(stunDuration);
-                }
-                
-                // Envoyer l'événement de dégâts
-                io.to(this.id).emit('projectileHit', {
-                    projectileId: projectile.id,
-                    projectileType: projectile.type,
-                    playerId: player.id,
-                    damage: projectile.damage,
-                    position: { x: projectile.x, y: projectile.y }
-                });
-                
-                if (result === 'death') {
-                    io.to(this.id).emit('playerDeath', {
+                if (result === 'shield_blocked') {
+                    shieldsBlocked++;
+                    // Shield blocked the damage
+                    io.to(this.id).emit('shieldBlocked', {
                         playerId: player.id,
+                        blockedType: projectile.type,
                         position: { x: player.x, y: player.y }
                     });
+                } else {
+                    // Stun si pas mort et pas bloqué par le shield
+                    if (result !== 'death') {
+                        const stunDuration = projectile.type === 'bomb' ? 2000 : 3000;
+                        const stunResult = player.stun(stunDuration, true, this.gracePeriodEndTime);
+                        if (stunResult === 'shield_blocked') {
+                            // Shield blocked the stun effect
+                            io.to(this.id).emit('shieldBlocked', {
+                                playerId: player.id,
+                                blockedType: 'stun',
+                                position: { x: player.x, y: player.y }
+                            });
+                        }
+                    }
+                    
+                    // Envoyer l'événement de dégâts
+                    io.to(this.id).emit('projectileHit', {
+                        projectileId: projectile.id,
+                        projectileType: projectile.type,
+                        playerId: player.id,
+                        damage: result === 'shield_blocked' ? 0 : projectile.damage,
+                        position: { x: projectile.x, y: projectile.y }
+                    });
+                    
+                    if (result === 'death') {
+                        io.to(this.id).emit('playerDeath', {
+                            playerId: player.id,
+                            position: { x: player.x, y: player.y }
+                        });
+                    }
                 }
             }
         }
         
-        // Envoyer l'événement d'explosion
-        io.to(this.id).emit('projectileExploded', {
-            id: projectile.id,
-            type: projectile.type,
-            x: projectile.x,
-            y: projectile.y,
-            radius: projectile.radius
-        });
+        // Only show explosion if no players were in radius OR at least one player was actually hit
+        if (playersInRadius > 0 && playersInRadius === shieldsBlocked) {
+            showExplosion = false;
+        }
+        
+        // Envoyer l'événement d'explosion only if it should be shown
+        if (showExplosion) {
+            io.to(this.id).emit('projectileExploded', {
+                id: projectile.id,
+                type: projectile.type,
+                x: projectile.x,
+                y: projectile.y,
+                radius: projectile.radius
+            });
+        }
     }
 
     // Nouvelle méthode pour gérer les collisions avec les boosters
@@ -3088,8 +3368,8 @@ class Room {
         if (impactSpeed > GAME_CONFIG.MAX_SPEED * 0.15) {
             const damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 15);
             
-            const result1 = player1.takeDamage(damage, 'player_collision');
-            const result2 = player2.takeDamage(damage, 'player_collision');
+            const result1 = player1.takeDamage(damage, 'player_collision', this.gracePeriodEndTime);
+            const result2 = player2.takeDamage(damage, 'player_collision', this.gracePeriodEndTime);
             
             // Émettre les événements de collision
             io.to(this.id).emit('playersCollided', {
@@ -3185,8 +3465,20 @@ class Room {
                     let damage = 0;
                     let damageType = 'scrape';
 
-                    // Déterminer le type de collision basé sur l'angle d'approche
-                    if (dot < -0.1 && angleRatio > 0.7) {
+                    // Check if player was pushed by Side Force
+                    if (player.sideForcePushed && Date.now() - player.sideForcePushTime < 1000) {
+                        // Player was pushed by Side Force - instant 50 damage and stun
+                        damage = 50;
+                        damageType = 'sideforce_wall';
+                        player.speed = 0; // Stop completely
+                        player.vx = 0; // Clear any remaining push velocity
+                        player.vy = 0;
+                        player.sideForcePushed = false; // Reset the flag
+                        
+                        // Apply stun
+                        player.stun(1500, false, this.gracePeriodEndTime); // 1.5 seconds stun
+                        
+                    } else if (dot < -0.1 && angleRatio > 0.7) {
                         // Collision frontale : on fonce vers le mur avec un angle > 45°
                         damage = Math.floor(5 + (impactSpeed / GAME_CONFIG.MAX_SPEED) * 10);
                         damageType = 'crash';
@@ -3242,7 +3534,7 @@ class Room {
                     
                     // Appliquer les dégâts
                     if (damage > 0 && !player.isSuperBoosting) {
-                        const result = player.takeDamage(damage, damageType);
+                        const result = player.takeDamage(damage, damageType, this.gracePeriodEndTime);
                         
                         // Émettre l'événement de dégâts
                         io.to(this.id).emit('playerDamaged', {
@@ -3334,7 +3626,9 @@ class Room {
                 // Racing line tracking
                 trackProgress: p.trackProgress,
                 currentSegment: p.currentSegment,
-                segmentProgress: p.segmentProgress
+                segmentProgress: p.segmentProgress,
+                // Shield state
+                hasShield: p.hasShield
             })),
             gameTime: this.gameStartTime ? Date.now() - this.gameStartTime : 0,
             totalLaps: this.raceSettings ? this.raceSettings.laps : 3,

@@ -251,3 +251,86 @@ When starting a new session, ask these questions to quickly understand the proje
 ### Bomb Size Update
 - **Visual Size**: Increased by 15% (now 46x46 pixels, was 40x40)
 - **Explosion Radius**: Increased by 15% (now 57.5 pixels, was 50)
+
+### Side Force Item (New)
+- **Effect**: Violently pushes all players on the sides with a curved lateral magnetic field
+- **Detection**: 30-degree cone on each side, 250 pixel range
+- **Push Force**: Very strong lateral force (500 units) perpendicular to caster's direction
+- **Wall Collision**: Players pushed into walls take instant 50 damage and 1.5s stun
+- **Visual Effects**: 
+  - Purple curved magnetic waves expanding from both sides
+  - Push motion lines on affected players
+  - Purple screen flash for affected players
+- **Drop Rate**: Currently 3% (was 80% for testing)
+- **Sprite Location**: Bottom-right position in items_icons.png (row 2, col 2)
+- **Audio**: sideforce.mp3 when used
+
+### Rotor Shield Item (New)
+- **Effect**: Creates a rotating shield orb that blocks 1 instance of damage/effect from items
+- **Blocks**: All item damage and effects (bombs, rockets, ice beam freeze, lightning stun, poison, side force push)
+- **Does NOT Block**: Kart collisions and wall collision damage
+- **Duration**: Permanent until it blocks something
+- **Visual Effects**:
+  - Small shield orb rotating around the kart
+  - Glowing trail effect as it orbits
+  - Shield shatter particles when destroyed
+  - "X BLOCKED!" text appears when blocking
+- **Shield Mechanics**:
+  - Only blocks damage/effects from items, not environmental hazards
+  - Destroyed immediately after blocking one effect
+  - Shows blue burst effect when destroyed
+- **Drop Rate**: 3-5% depending on position (see Position-Based Item System)
+- **Sprite Location**: Top-right position in items_icons.png (row 0, col 2)
+- **Sound Effects**: 
+  - Activation: shield.mp3
+  - Block: shieldblock.mp3
+
+### Position-Based Item Drop System (New)
+- **Item distribution now depends on player position in the race**:
+  
+  **Last Place (6/6 with 3+ players):**
+  - Bomb: 30%
+  - Poison Slick: 20%
+  - Rocket: 15%
+  - Health Pack: 10%
+  - Side Force: 7%
+  - Ice Beam: 6%
+  - Rotor Shield: 5%
+  - Lightning: 4%
+  - Super Boost: 3% (VERY RARE - Last place exclusive)
+  
+  **5th-6th Place (with 4+ players):**
+  - Bomb: 30%
+  - Poison Slick: 20%
+  - Rocket: 15%
+  - Health Pack: 10%
+  - Side Force: 8%
+  - Ice Beam: 7%
+  - Rotor Shield: 5%
+  - Lightning: 5% (Catchup item)
+  - Super Boost: 0% (Not available)
+  
+  **1st-4th Place (or when not enough players):**
+  - Bomb: 35% (MOST COMMON)
+  - Poison Slick: 30% (MOST COMMON)
+  - Rocket: 15% (2ND MOST COMMON)
+  - Health Pack: 10% (2ND MOST COMMON)
+  - Side Force: 4% (LESS COMMON)
+  - Ice Beam: 3% (LESS COMMON)
+  - Rotor Shield: 3% (LESS COMMON)
+  - Lightning: 0% (Not available)
+  - Super Boost: 0% (Not available)
+
+- **Catchup items** (Lightning & Super Boost) are only available to players in back positions
+- **Super Boost** is exclusive to last place and extremely rare (3% chance)
+- **Lightning** is available to 5th and 6th place players only
+
+### Grace Period at Race Start (New)
+- **2-second damage immunity** after "GO!" appears
+- During grace period:
+  - No damage from any source (projectiles, collisions, items)
+  - No stun, freeze, or push effects
+  - No speed reduction effects
+  - Players can still collect and use items
+  - Shields can still be consumed if they block something
+- Prevents unfair damage in crowded starting area

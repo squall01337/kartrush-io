@@ -35,7 +35,10 @@ class SoundManager {
             wrongDirection: 0.1,
             falling: 0.7,
             iceBeamFire: 0.8,
-            iceBeamHit: 0.7
+            iceBeamHit: 0.7,
+            sideforce: 0.8,
+            shieldActivate: 0.7,
+            shieldBlock: 0.8
 
         };
         
@@ -79,6 +82,7 @@ class SoundManager {
         this.sounds.rocketLaunch = new Audio('assets/audio/rocket_launch.mp3');
         this.sounds.rocketExplode = new Audio('assets/audio/rocket_explode.mp3');
         this.sounds.superboost = new Audio('assets/audio/superboost.mp3');
+        this.sounds.superboost.loop = false; // Ensure it doesn't loop
         this.sounds.slickDropping = new Audio('assets/audio/slick_dropping.mp3');
         this.sounds.slickCrossing = new Audio('assets/audio/slick_crossing.mp3');
         this.sounds.lightningStrike = new Audio('assets/audio/lightningstrike.mp3');
@@ -89,6 +93,13 @@ class SoundManager {
         // Ice beam sounds
         this.sounds.iceBeamFire = new Audio('assets/audio/icebeam.mp3');
         this.sounds.iceBeamHit = new Audio('assets/audio/frozen.mp3');
+        
+        // Side force sound
+        this.sounds.sideforce = new Audio('assets/audio/sideforce.mp3');
+        
+        // Shield sounds
+        this.sounds.shieldActivate = new Audio('assets/audio/shield.mp3');
+        this.sounds.shieldBlock = new Audio('assets/audio/shieldblock.mp3');
 
     }
     
@@ -363,6 +374,33 @@ class SoundManager {
         }
     }
     
+    playSideForce() {
+        const sideforce = this.sounds.sideforce;
+        if (sideforce) {
+            sideforce.volume = this.getEffectiveVolume() * this.volumeMultipliers.sideforce;
+            sideforce.currentTime = 0;
+            sideforce.play().catch(e => console.log('Erreur lecture sideforce:', e));
+        }
+    }
+    
+    playShieldActivate() {
+        const shield = this.sounds.shieldActivate;
+        if (shield) {
+            shield.volume = this.getEffectiveVolume() * this.volumeMultipliers.shieldActivate;
+            shield.currentTime = 0;
+            shield.play().catch(e => console.log('Erreur lecture shield:', e));
+        }
+    }
+    
+    playShieldBlock() {
+        const shieldBlock = this.sounds.shieldBlock;
+        if (shieldBlock) {
+            shieldBlock.volume = this.getEffectiveVolume() * this.volumeMultipliers.shieldBlock;
+            shieldBlock.currentTime = 0;
+            shieldBlock.play().catch(e => console.log('Erreur lecture shieldblock:', e));
+        }
+    }
+    
     playWrongDirection() {
         const wrongDirection = this.sounds.wrongDirection;
         if (wrongDirection && wrongDirection.paused) {
@@ -380,6 +418,22 @@ class SoundManager {
             wrongDirection.currentTime = 0;
             this.activeAudios.delete('wrongDirection');
         }
+    }
+    
+    stopSuperBoost() {
+        const superboost = this.sounds.superboost;
+        if (superboost && !superboost.paused) {
+            superboost.pause();
+            superboost.currentTime = 0;
+        }
+    }
+    
+    stopAllEffectSounds() {
+        // Stop superboost sound
+        this.stopSuperBoost();
+        // Stop wrong direction sound
+        this.stopWrongDirection();
+        // Add any other effect sounds that need to be stopped on death
     }
     
     

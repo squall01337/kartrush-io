@@ -1244,6 +1244,8 @@ class GameClient {
             // Notification de mort
             if (data.playerId === this.playerId) {
                 this.showDeathNotification();
+                // Stop all effect sounds when player dies
+                soundManager.stopAllEffectSounds();
             }
         });
 
@@ -1382,6 +1384,26 @@ class GameClient {
             }
         });
         
+        this.socket.on('sideForceUsed', (data) => {
+            // Play side force sound
+            soundManager.playSideForce();
+            
+            // Create side force visual effect
+            if (this.gameEngine) {
+                this.gameEngine.createSideForceEffect(data.casterX, data.casterY, data.casterAngle);
+                
+                // Create push effects for affected players
+                data.affectedPlayers.forEach((player) => {
+                    this.gameEngine.createPushEffect(player.playerId, player.pushDirection, player.pushAngle);
+                    
+                    // If we're one of the affected players, show push effect
+                    if (player.playerId === this.playerId) {
+                        this.showScreenFlash('#9400d3', 300); // Purple flash for side force
+                    }
+                });
+            }
+        });
+        
         this.socket.on('wrongDirectionAlert', (data) => {
             if (this.gameEngine) {
                 if (data.show) {
@@ -1389,6 +1411,21 @@ class GameClient {
                 } else {
                     this.gameEngine.hideWrongWayAlert();
                 }
+            }
+        });
+        
+        this.socket.on('shieldActivated', (data) => {
+            // Shield activation is handled by game state update
+            // Play activation sound
+            soundManager.playShieldActivate();
+        });
+        
+        this.socket.on('shieldBlocked', (data) => {
+            // Play shield block sound
+            soundManager.playShieldBlock();
+            // Create visual effect
+            if (this.gameEngine) {
+                this.gameEngine.createShieldBlockEffect(data.playerId, data.blockedType);
             }
         });
         
